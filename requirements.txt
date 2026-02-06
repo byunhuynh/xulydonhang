@@ -1,0 +1,13 @@
+PySide6
+pygetwindow
+pyautogui
+psutil
+requests
+PyMuPDF
+openpyxl
+fuzzywuzzy
+python-Levenshtein
+pandas
+pytesseract
+Pillow
+playwright

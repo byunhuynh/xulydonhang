@@ -1,0 +1,28 @@
+# ===== Python =====
+__pycache__/
+*.py[cod]
+*.pyo
+
+# ===== windows =====
+*.exe 
+
+# ===== Virtual Environment =====
+.venv/
+venv/
+env/
+
+# ===== Environment variables =====
+.env
+.env.*
+
+# ===== Ignore folder =====
+**/đơn hàng/
+
+
+# ===== OS =====
+.DS_Store
+Thumbs.db
+
+# ===== IDE =====
+.vscode/
+.idea/

@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ui version="4.0">
+ <class>SettingsForm</class>
+ <widget class="QWidget" name="SettingsForm">
+  <property name="geometry">
+   <rect>
+    <x>0</x>
+    <y>0</y>
+    <width>385</width>
+    <height>236</height>
+   </rect>
+  </property>
+  <property name="windowTitle">
+   <string>Cài Đặt</string>
+  </property>
+  <property name="autoFillBackground">
+   <bool>false</bool>
+  </property>
+  <property name="locale">
+   <locale language="Vietnamese" country="Vietnam"/>
+  </property>
+ </widget>
+ <resources/>
+ <connections/>
+</ui>

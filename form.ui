@@ -1,0 +1,699 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ui version="4.0">
+ <class>MainWindow</class>
+ <widget class="QMainWindow" name="MainWindow">
+  <property name="geometry">
+   <rect>
+    <x>0</x>
+    <y>0</y>
+    <width>780</width>
+    <height>750</height>
+   </rect>
+  </property>
+  <property name="minimumSize">
+   <size>
+    <width>780</width>
+    <height>750</height>
+   </size>
+  </property>
+  <property name="maximumSize">
+   <size>
+    <width>780</width>
+    <height>750</height>
+   </size>
+  </property>
+  <property name="windowTitle">
+   <string>Xử lý đơn hàng - Blue Hà Thành</string>
+  </property>
+  <property name="windowIcon">
+   <iconset>
+    <normaloff>blue.ico</normaloff>blue.ico</iconset>
+  </property>
+  <property name="layoutDirection">
+   <enum>Qt::LayoutDirection::LeftToRight</enum>
+  </property>
+  <property name="styleSheet">
+   <string notr="true"/>
+  </property>
+  <property name="locale">
+   <locale language="Vietnamese" country="Vietnam"/>
+  </property>
+  <property name="unifiedTitleAndToolBarOnMac">
+   <bool>false</bool>
+  </property>
+  <widget class="QWidget" name="centralwidget">
+   <widget class="QGroupBox" name="groupBox_6">
+    <property name="geometry">
+     <rect>
+      <x>740</x>
+      <y>660</y>
+      <width>721</width>
+      <height>101</height>
+     </rect>
+    </property>
+    <property name="title">
+     <string>Trả hàng</string>
+    </property>
+    <widget class="QTableWidget" name="traHang">
+     <property name="geometry">
+      <rect>
+       <x>640</x>
+       <y>20</y>
+       <width>71</width>
+       <height>31</height>
+      </rect>
+     </property>
+    </widget>
+    <widget class="QPushButton" name="pushMisa">
+     <property name="geometry">
+      <rect>
+       <x>620</x>
+       <y>20</y>
+       <width>91</width>
+       <height>41</height>
+      </rect>
+     </property>
+     <property name="text">
+      <string>Đẩy đơn Misa</string>
+     </property>
+     <property name="autoDefault">
+      <bool>true</bool>
+     </property>
+     <property name="default">
+      <bool>false</bool>
+     </property>
+     <property name="flat">
+      <bool>false</bool>
+     </property>
+    </widget>
+   </widget>
+   <widget class="QTabWidget" name="tabWidget">
+    <property name="geometry">
+     <rect>
+      <x>0</x>
+      <y>0</y>
+      <width>771</width>
+      <height>701</height>
+     </rect>
+    </property>
+    <property name="currentIndex">
+     <number>0</number>
+    </property>
+    <widget class="QWidget" name="tab">
+     <attribute name="title">
+      <string>Xử lý Đơn hàng</string>
+     </attribute>
+     <widget class="QGroupBox" name="groupBox_7">
+      <property name="geometry">
+       <rect>
+        <x>10</x>
+        <y>0</y>
+        <width>741</width>
+        <height>671</height>
+       </rect>
+      </property>
+      <property name="styleSheet">
+       <string notr="true">QGroupBox {
+        border: 2px solid rgb(134, 134, 134);
+        border-radius: 10px;
+        margin-top: 0px;
+        padding: 0px;
+    }
+    QGroupBox::title {
+        subcontrol-origin: margin;
+        left: 0px;
+        padding: 0px;
+    }</string>
+      </property>
+      <property name="locale">
+       <locale language="Vietnamese" country="Vietnam"/>
+      </property>
+      <property name="title">
+       <string/>
+      </property>
+      <property name="flat">
+       <bool>false</bool>
+      </property>
+      <property name="checkable">
+       <bool>false</bool>
+      </property>
+      <widget class="QGroupBox" name="groupBox_9">
+       <property name="geometry">
+        <rect>
+         <x>10</x>
+         <y>220</y>
+         <width>721</width>
+         <height>211</height>
+        </rect>
+       </property>
+       <property name="title">
+        <string>Nhật ký Xử lý</string>
+       </property>
+       <widget class="QTextEdit" name="log">
+        <property name="enabled">
+         <bool>true</bool>
+        </property>
+        <property name="geometry">
+         <rect>
+          <x>10</x>
+          <y>20</y>
+          <width>701</width>
+          <height>181</height>
+         </rect>
+        </property>
+        <property name="styleSheet">
+         <string notr="true"> QTextEdit {
+        border: 2px solid #607D8B;
+        border-radius: 10px;
+        background-color: #ECEFF1;
+        padding: 8px;
+        font-family: Consolas, monospace;
+        font-size: 13px;
+        color: #263238;
+    }</string>
+        </property>
+        <property name="undoRedoEnabled">
+         <bool>false</bool>
+        </property>
+        <property name="readOnly">
+         <bool>true</bool>
+        </property>
+       </widget>
+      </widget>
+      <widget class="QGroupBox" name="groupBox_5">
+       <property name="geometry">
+        <rect>
+         <x>10</x>
+         <y>440</y>
+         <width>721</width>
+         <height>221</height>
+        </rect>
+       </property>
+       <property name="title">
+        <string>Tình trạng Đơn hàng</string>
+       </property>
+       <widget class="QTableWidget" name="tableStatus">
+        <property name="geometry">
+         <rect>
+          <x>10</x>
+          <y>20</y>
+          <width>701</width>
+          <height>191</height>
+         </rect>
+        </property>
+        <property name="styleSheet">
+         <string notr="true">
+    QTableWidget {
+        border: 2px solid #2196F3;
+        border-radius: 10px;
+        background-color: #f0f0f0;
+        padding: 5px;
+    }
+    
+    QTableWidget::item {
+        padding: 5px;
+        border-bottom: 1px solid #ccc;
+    }
+
+    QTableWidget::item:selected {
+        background-color: #cce5ff;
+        color: black;
+    }
+
+</string>
+        </property>
+        <property name="editTriggers">
+         <set>QAbstractItemView::EditTrigger::NoEditTriggers</set>
+        </property>
+       </widget>
+      </widget>
+      <widget class="QTabWidget" name="tabWidget_2">
+       <property name="geometry">
+        <rect>
+         <x>10</x>
+         <y>10</y>
+         <width>721</width>
+         <height>211</height>
+        </rect>
+       </property>
+       <property name="currentIndex">
+        <number>0</number>
+       </property>
+       <widget class="QWidget" name="tab_3">
+        <attribute name="title">
+         <string>Xử lý</string>
+        </attribute>
+        <widget class="QGroupBox" name="groupBox_8">
+         <property name="geometry">
+          <rect>
+           <x>0</x>
+           <y>0</y>
+           <width>711</width>
+           <height>181</height>
+          </rect>
+         </property>
+         <property name="title">
+          <string>Thông tin và Xử lý đơn hàng</string>
+         </property>
+         <widget class="QGroupBox" name="groupBox">
+          <property name="geometry">
+           <rect>
+            <x>10</x>
+            <y>20</y>
+            <width>531</width>
+            <height>151</height>
+           </rect>
+          </property>
+          <property name="title">
+           <string>Danh sách File</string>
+          </property>
+          <widget class="QListView" name="listdanhsach">
+           <property name="geometry">
+            <rect>
+             <x>10</x>
+             <y>20</y>
+             <width>511</width>
+             <height>91</height>
+            </rect>
+           </property>
+           <property name="styleSheet">
+            <string notr="true">
+    QListView {
+        border: 2px solid #2196F3;
+        border-radius: 10px;
+        background-color: #f0f0f0;
+        padding: 5px;
+    }
+    
+    QListView::item {
+        padding: 5px;
+        border-bottom: 1px solid #ccc;
+    }
+
+    QListView::item:selected {
+        background-color: #cce5ff;
+        color: black;
+    }
+
+</string>
+           </property>
+          </widget>
+          <widget class="QPushButton" name="loadfile">
+           <property name="geometry">
+            <rect>
+             <x>190</x>
+             <y>115</y>
+             <width>161</width>
+             <height>31</height>
+            </rect>
+           </property>
+           <property name="styleSheet">
+            <string notr="true">  QPushButton {
+        background-color: #FF9800;
+        color: white;
+        border: none;
+        border-radius: 20px;
+        padding: 0 20px;
+        font-size: 14px;
+        font-weight: bold;
+    }
+
+    QPushButton:hover {
+        background-color: #FB8C00;
+    }
+
+    QPushButton:pressed {
+        background-color: #EF6C00;
+    }</string>
+           </property>
+           <property name="text">
+            <string>Tải lại đơn hàng</string>
+           </property>
+           <property name="icon">
+            <iconset>
+             <normaloff>icons8_synchronize_2.ico</normaloff>icons8_synchronize_2.ico</iconset>
+           </property>
+          </widget>
+         </widget>
+         <widget class="QGroupBox" name="groupBox_3">
+          <property name="geometry">
+           <rect>
+            <x>550</x>
+            <y>10</y>
+            <width>151</width>
+            <height>81</height>
+           </rect>
+          </property>
+          <property name="title">
+           <string>Số thứ tự đơn hàng</string>
+          </property>
+          <widget class="QLineEdit" name="stt">
+           <property name="geometry">
+            <rect>
+             <x>10</x>
+             <y>20</y>
+             <width>131</width>
+             <height>51</height>
+            </rect>
+           </property>
+           <property name="styleSheet">
+            <string notr="true">QLineEdit {
+        border: 2px solid #9C27B0;
+        border-radius: 12px;
+        padding: 8px;
+        background-color: #fff;
+        color: #333;
+        font-size: 14px;
+    }</string>
+           </property>
+          </widget>
+         </widget>
+         <widget class="QPushButton" name="xacnhan">
+          <property name="geometry">
+           <rect>
+            <x>550</x>
+            <y>100</y>
+            <width>151</width>
+            <height>71</height>
+           </rect>
+          </property>
+          <property name="font">
+           <font>
+            <family>Arial</family>
+            <pointsize>-1</pointsize>
+            <italic>true</italic>
+            <bold>true</bold>
+           </font>
+          </property>
+          <property name="styleSheet">
+           <string notr="true"> QPushButton {
+        background-color: #4CAF50;
+        color: white;
+        border: none;
+        border-radius: 20px;
+        padding: 0 20px;
+        font-size: 14px;
+        font-weight: bold;
+        letter-spacing: 1px;
+    }
+
+    QPushButton:hover {
+        background-color: #43A047;
+    }
+
+    QPushButton:pressed {
+        background-color: #388E3C;
+    }</string>
+          </property>
+          <property name="text">
+           <string>Xử lý
+Đơn hàng</string>
+          </property>
+          <property name="icon">
+           <iconset>
+            <normaloff>icons8_edit.ico</normaloff>icons8_edit.ico</iconset>
+          </property>
+          <property name="iconSize">
+           <size>
+            <width>30</width>
+            <height>30</height>
+           </size>
+          </property>
+         </widget>
+        </widget>
+       </widget>
+       <widget class="QWidget" name="tab_4">
+        <attribute name="title">
+         <string>Gửi Zalo</string>
+        </attribute>
+        <widget class="QGroupBox" name="groupBox_15">
+         <property name="geometry">
+          <rect>
+           <x>0</x>
+           <y>0</y>
+           <width>711</width>
+           <height>181</height>
+          </rect>
+         </property>
+         <property name="title">
+          <string>Gửi Thông báo Zalo</string>
+         </property>
+         <widget class="QPushButton" name="zalo_btn">
+          <property name="geometry">
+           <rect>
+            <x>200</x>
+            <y>60</y>
+            <width>231</width>
+            <height>71</height>
+           </rect>
+          </property>
+          <property name="font">
+           <font>
+            <family>Arial</family>
+            <pointsize>-1</pointsize>
+            <italic>true</italic>
+            <bold>true</bold>
+           </font>
+          </property>
+          <property name="styleSheet">
+           <string notr="true"> QPushButton {
+        background-color: #4CAF50;
+        color: white;
+        border: none;
+        border-radius: 22px;
+        padding: 0 25px;
+        font-size: 16px;
+        font-weight: bold;
+        letter-spacing: 1px;
+    }
+
+    QPushButton:hover {
+        background-color: #43A047;
+    }
+
+    QPushButton:pressed {
+        background-color: #388E3C;
+    }</string>
+          </property>
+          <property name="text">
+           <string>Gửi Thông Báo
+ZALO</string>
+          </property>
+          <property name="icon">
+           <iconset theme="QIcon::ThemeIcon::MailSend"/>
+          </property>
+          <property name="iconSize">
+           <size>
+            <width>30</width>
+            <height>30</height>
+           </size>
+          </property>
+         </widget>
+        </widget>
+       </widget>
+      </widget>
+     </widget>
+    </widget>
+    <widget class="QWidget" name="tab_2">
+     <attribute name="title">
+      <string>Thông tin</string>
+     </attribute>
+     <widget class="QGroupBox" name="groupBox_10">
+      <property name="geometry">
+       <rect>
+        <x>10</x>
+        <y>0</y>
+        <width>741</width>
+        <height>671</height>
+       </rect>
+      </property>
+      <property name="styleSheet">
+       <string notr="true">QGroupBox {
+        border: 2px solid rgb(134, 134, 134);
+        border-radius: 10px;
+        margin-top: 0px;
+        padding: 0px;
+    }
+    QGroupBox::title {
+        subcontrol-origin: margin;
+        left: 0px;
+        padding: 0px;
+    }</string>
+      </property>
+      <property name="locale">
+       <locale language="Vietnamese" country="Vietnam"/>
+      </property>
+      <property name="title">
+       <string/>
+      </property>
+      <property name="flat">
+       <bool>false</bool>
+      </property>
+      <property name="checkable">
+       <bool>false</bool>
+      </property>
+      <widget class="QGroupBox" name="groupBox_11">
+       <property name="geometry">
+        <rect>
+         <x>10</x>
+         <y>10</y>
+         <width>721</width>
+         <height>351</height>
+        </rect>
+       </property>
+       <property name="title">
+        <string>Thông tin</string>
+       </property>
+       <widget class="QGroupBox" name="groupBox_2">
+        <property name="geometry">
+         <rect>
+          <x>10</x>
+          <y>20</y>
+          <width>701</width>
+          <height>121</height>
+         </rect>
+        </property>
+        <property name="styleSheet">
+         <string notr="true"/>
+        </property>
+        <property name="title">
+         <string>PHẦN MỀM XỬ LÝ ĐƠN HÀNG – AUTOMATED ORDER PROCESSING SYSTEM</string>
+        </property>
+        <widget class="QLabel" name="label">
+         <property name="geometry">
+          <rect>
+           <x>10</x>
+           <y>20</y>
+           <width>471</width>
+           <height>101</height>
+          </rect>
+         </property>
+         <property name="styleSheet">
+          <string notr="true"/>
+         </property>
+         <property name="text">
+          <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Phần mềm hỗ trợ xử lý toàn bộ đơn hàng từ nhiều hệ thống:&lt;/p&gt;&lt;p&gt;• MT (Modern Trade): Big C / GO!, Lotte Mart, Satra, Kingfood, Winmart, Fujimart, …&lt;/p&gt;&lt;p&gt;• TMĐT (E-commerce): Shopee, TikTok Shop, …&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
+         </property>
+        </widget>
+       </widget>
+       <widget class="QGroupBox" name="groupBox_4">
+        <property name="geometry">
+         <rect>
+          <x>10</x>
+          <y>150</y>
+          <width>701</width>
+          <height>191</height>
+         </rect>
+        </property>
+        <property name="title">
+         <string>Chức năng bao gồm: </string>
+        </property>
+        <widget class="QLabel" name="label_2">
+         <property name="geometry">
+          <rect>
+           <x>10</x>
+           <y>20</y>
+           <width>641</width>
+           <height>161</height>
+          </rect>
+         </property>
+         <property name="text">
+          <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;• Tự động đọc &amp;amp; phân tích đơn hàng theo nhiều định dạng: PDF, TXT, XLSX&lt;/p&gt;&lt;p&gt;• Tự check giá bán, chương trình khuyến mãi, sai giá, sai sản phẩm&lt;/p&gt;&lt;p&gt;• Tổng hợp dữ liệu – xuất báo cáo&lt;/p&gt;&lt;p&gt;• Gửi thông báo đơn đã xử lý, cảnh báo sai giá qua Zalo&lt;/p&gt;&lt;p&gt;• Tự động hóa luồng xử lý hàng ngày nhằm giảm thao tác thủ công và tăng độ chính xác&lt;/p&gt;&lt;p&gt;Phần mềm được phát triển và tối ưu riêng cho nhu cầu vận hành thực tế.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
+         </property>
+        </widget>
+       </widget>
+      </widget>
+      <widget class="QGroupBox" name="groupBox_13">
+       <property name="geometry">
+        <rect>
+         <x>10</x>
+         <y>370</y>
+         <width>721</width>
+         <height>291</height>
+        </rect>
+       </property>
+       <property name="title">
+        <string>Tình trạng Đơn hàng</string>
+       </property>
+       <widget class="QGroupBox" name="groupBox_12">
+        <property name="geometry">
+         <rect>
+          <x>10</x>
+          <y>20</y>
+          <width>271</width>
+          <height>261</height>
+         </rect>
+        </property>
+        <property name="title">
+         <string>Thông tin tác giả:</string>
+        </property>
+        <widget class="QLabel" name="label_3">
+         <property name="geometry">
+          <rect>
+           <x>10</x>
+           <y>30</y>
+           <width>201</width>
+           <height>171</height>
+          </rect>
+         </property>
+         <property name="text">
+          <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Tác giả &amp;amp; sở hữu bản quyền:&lt;/p&gt;&lt;p&gt;HUỲNH ĐẠT THÀNH&lt;/p&gt;&lt;p&gt;&lt;br/&gt;&lt;/p&gt;&lt;p&gt;Điện thoại: 0947.940.391&lt;/p&gt;&lt;p&gt;Email: byun.huynh@gmail.com&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
+         </property>
+        </widget>
+       </widget>
+       <widget class="QGroupBox" name="groupBox_14">
+        <property name="geometry">
+         <rect>
+          <x>290</x>
+          <y>20</y>
+          <width>421</width>
+          <height>261</height>
+         </rect>
+        </property>
+        <property name="title">
+         <string>Zalo</string>
+        </property>
+        <widget class="QLabel" name="label_5">
+         <property name="geometry">
+          <rect>
+           <x>20</x>
+           <y>20</y>
+           <width>381</width>
+           <height>231</height>
+          </rect>
+         </property>
+         <property name="text">
+          <string/>
+         </property>
+         <property name="pixmap">
+          <pixmap>qr.jpg</pixmap>
+         </property>
+         <property name="scaledContents">
+          <bool>true</bool>
+         </property>
+        </widget>
+       </widget>
+      </widget>
+     </widget>
+    </widget>
+   </widget>
+   <widget class="QLabel" name="label_6">
+    <property name="geometry">
+     <rect>
+      <x>240</x>
+      <y>710</y>
+      <width>261</width>
+      <height>16</height>
+     </rect>
+    </property>
+    <property name="text">
+     <string>©2025 HUỲNH ĐẠT THÀNH. All rights reserved.
+</string>
+    </property>
+   </widget>
+  </widget>
+  <widget class="QStatusBar" name="statusbar"/>
+ </widget>
+ <resources/>
+ <connections/>
+</ui>
