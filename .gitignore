@@ -18,7 +18,8 @@ env/
 # ===== Ignore folder =====
 **/đơn hàng/
 
-
+build/
+dist/
 # ===== OS =====
 .DS_Store
 Thumbs.db

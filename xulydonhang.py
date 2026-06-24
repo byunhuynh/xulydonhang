@@ -29,7 +29,8 @@ import base64, mimetypes
 # Đọc thông tin từ file setting.ini
 CONFIG_FILE = "settings.ini"
 config = configparser.ConfigParser()
-
+songayno_TMDT = 15
+songayno_MT = 60    
 
 class ProcessHandler(QObject):
     table_signal = Signal(str, str, str,str, str, str,str)  # Tín hiệu mới để cập nhật bảng
@@ -95,10 +96,13 @@ class ProcessHandler(QObject):
         if re.search(r"3005382", cleaned_text) or re.search(r"CTY TNHH DV EB", cleaned_text, re.IGNORECASE):
             return "BigC"
         
-        if re.search(r"0107889783\s*009333", cleaned_text):
+        if re.search(r"0107889783\s*009333", cleaned_text) or re.search(r"1102018142\s*010544", cleaned_text):
             return "Lotte"
         
         if re.search(r"VD-00002345", cleaned_text):
+            return "Satra"
+        
+        if re.search(r"VD-00002547", cleaned_text):
             return "Satra"
         
         if re.search(r"CONG TY TNHH TMDV XNK HA THANH \(101017\)", cleaned_text) or re.search(r"THISO RETAIL COMPANY LIMITED", cleaned_text):
@@ -118,7 +122,7 @@ class ProcessHandler(QObject):
         if re.search(r"VN_CÔNG TY TNHH TMDV XNK HÀ THÀNH_CONSIGNMENT_C2M", cleaned_text):
             return "SHOPEE-CHOICE"
         
-        if re.search(r"254000001538", cleaned_text):
+        if re.search(r"251000000161", cleaned_text):
             return "FujiMart"
         
         if re.search(r"TIKTOK PTE", cleaned_text):
@@ -514,36 +518,33 @@ class ProcessHandler(QObject):
         lines = [line.strip() for line in text.strip().splitlines() if line.strip()]
         result = []
         i = 0
-        
+        common_units = {"Thùng", "Hộp", "Chai", "Lon", "Gói", "Cái", "kg", "Túi", "Can"}
+
         while i < len(lines):
-            if lines[i].isdigit() and i + 6 < len(lines):
-                # Xác định cấu trúc sản phẩm
-                common_units = ["Thùng", "Hộp", "Chai", "Lon", "Gói", "Cái","kg"]
-                
-                if any(unit in lines[i+3] for unit in common_units):
-                    # Tên 1 dòng
+            if lines[i].isdigit():
+                # Quét động để tìm dòng Đơn vị tính (match chính xác)
+                unit_idx = None
+                for j in range(i + 2, min(i + 10, len(lines))):
+                    if lines[j] in common_units:
+                        unit_idx = j
+                        break
+
+                if unit_idx is not None and unit_idx + 1 < len(lines):
                     item = {
-                        "Mã hàng": lines[i+1],
-                        "Tên sản phẩm": lines[i+2],
-                        "Đơn vị tính": lines[i+3],
-                        "Số lượng": lines[i+4],
-                        "Đơn giá": lines[i+7],
-                        "Thành tiền": lines[i+8]
+                        "Mã hàng": lines[i + 1],
+                        "Tên sản phẩm": " ".join(lines[i + 2:unit_idx]),
+                        "Đơn vị tính": lines[unit_idx],
+                        "Số lượng": lines[unit_idx + 1],
+                        "Đơn giá": 0
                     }
-                    i += 7
+                    # Bỏ qua sub-unit và sub-qty nếu có
+                    next_i = unit_idx + 2
+                    if next_i < len(lines) and lines[next_i] in common_units:
+                        next_i += 2
+                    i = next_i
+                    result.append(item)
                 else:
-                    # Tên 2 dòng
-                    item = {
-                        "Mã hàng": lines[i+1],
-                        "Tên sản phẩm": lines[i+2] + " " + lines[i+3],
-                        "Đơn vị tính": lines[i+4],
-                        "Số lượng": lines[i+5],
-                        "Đơn giá": lines[i+8],
-                        "Thành tiền": lines[i+9]
-                    }
-                    i += 8
-                
-                result.append(item)
+                    i += 1
             else:
                 i += 1
 
@@ -984,9 +985,9 @@ class ProcessHandler(QObject):
 
 
 
-        hethong = 'COOP'
+        
         sheet[f"A{current_row}"] = entry_date
-    
+        sheet[f"AV{current_row}"] = songayno_MT
         sheet[f"B{current_row}"] = f'ĐĐH{vendor}{STT_donhang_str}'
 
         sheet[f"C{current_row}"] = "Chưa thực hiện"
@@ -1009,6 +1010,7 @@ class ProcessHandler(QObject):
             
         for product in products:
             sheet[f"A{current_row}"] = entry_date
+            sheet[f"AV{current_row}"] = songayno_MT
 
             sheet[f"B{current_row}"] = f'ĐĐH{vendor}{STT_donhang_str}'
 
@@ -1073,6 +1075,7 @@ class ProcessHandler(QObject):
             for col, value in results:
                 print(f'🧪 Thử CTKM: {col} → {value}')
                 print(f"🔹 Khuyến mãi gốc: {value}")
+                print(f"🔹 Hệ thống: {hethong}")
                 value = ProcessHandler.tachkhuyenmai_coop(value, hethong)
                 khuyenmai = value
                 print(f"🔹 Đã tách nội dung: {value}")
@@ -1166,7 +1169,10 @@ class ProcessHandler(QObject):
             nhieuCtkm = khuyenmai.split('|')
 
             for i, hangkm in enumerate(nhieuCtkm):
+                print("Chương trình khuyến mãi tách được:")
+                
                 print(hangkm)
+
                 kiemtra = ProcessHandler.check_value_in_sanpham(hangkm)
                 match = re.search(r"(\d+)\s*\+\s*1", hangkm)  # Tìm số đầu tiên trong biểu thức X+1
                 sheet[f"AQ{current_row}"] = khuyenmai
@@ -1214,7 +1220,7 @@ class ProcessHandler(QObject):
         )
                     current_row += 1
                     sheet[f"A{current_row}"] = entry_date
-
+                    sheet[f"AV{current_row}"] = songayno_MT
                     sheet[f"B{current_row}"] = f'ĐĐH{vendor}{STT_donhang_str}'
                     sheet[f"C{current_row}"] = "Chưa thực hiện"
                     sheet[f"D{current_row}"] = cancle_date
@@ -1251,6 +1257,7 @@ class ProcessHandler(QObject):
             sheet[f"B{current_row}"] = f'ĐĐH{vendor}{STT_donhang_str}'
             soluongkm = math.floor(tongtien / ProcessHandler.tachtien_khuyenmai(kmhoadon))
             sheet[f"A{current_row}"] = entry_date
+            sheet[f"AV{current_row}"] = songayno_MT
             sheet[f"C{current_row}"] = "Chưa thực hiện"
             sheet[f"D{current_row}"] = cancle_date
             sheet[f"E{current_row}"] = shipto
@@ -1360,6 +1367,7 @@ class ProcessHandler(QObject):
         for product in products:
             
             sheet[f"A{current_row}"] = entry_date
+            sheet[f"AV{current_row}"] = songayno_TMDT
 
             sheet[f"B{current_row}"] = f'ĐĐH{vendor}{STT_donhang_str}'
             
@@ -1467,7 +1475,7 @@ class ProcessHandler(QObject):
         for product in products:
             
             sheet[f"A{current_row}"] = entry_date
-
+            sheet[f"AV{current_row}"] = songayno_TMDT
             sheet[f"B{current_row}"] = f'ĐĐH{vendor}{STT_donhang_str}'
             
             sheet[f"C{current_row}"] = "Chưa thực hiện"
@@ -1572,7 +1580,7 @@ class ProcessHandler(QObject):
         for product in products:
             
             sheet[f"A{current_row}"] = entry_date
-
+            sheet[f"AV{current_row}"] = songayno_TMDT
             sheet[f"B{current_row}"] = f'ĐĐH{STT_donhang_str}'
             
             sheet[f"C{current_row}"] = "Chưa thực hiện"
@@ -1674,7 +1682,7 @@ class ProcessHandler(QObject):
         for product in products:
             
             sheet[f"A{current_row}"] = entry_date
-
+            sheet[f"AV{current_row}"] = songayno_TMDT
             sheet[f"B{current_row}"] = f'ĐĐH{vendor}{STT_donhang_str}'
                    
             sheet[f"C{current_row}"] = "Chưa thực hiện"
@@ -1803,6 +1811,7 @@ class ProcessHandler(QObject):
                     current_row = sheet.max_row + 1
 
                     sheet[f"A{current_row}"] = entry_date
+                    sheet[f"AV{current_row}"] = songayno_TMDT
                     sheet[f"B{current_row}"] = f"ĐĐH{hethong}-{ma_donhang}"
                     sheet[f"C{current_row}"] = "Chưa thực hiện"
                     sheet[f"D{current_row}"] = cancle_date
@@ -1862,15 +1871,13 @@ class ProcessHandler(QObject):
         file_path = "dondathang.xlsx"
         sheet_name = "Don dat hang"
         
-        saigia = 0
-        
         wb = openpyxl.load_workbook(file_path)
         sheet = wb[sheet_name]
 
         start_row = sheet.max_row + 1
         current_row = start_row
         trongluong = 0
-        
+        songayno_GT = 30
         STT_donhang_str = f"-{po_number}"
         diengiai = f"{vendor} PO {po_number.replace("-", "/")}"
         if makhachhang[:2] == "MB":
@@ -1878,7 +1885,7 @@ class ProcessHandler(QObject):
             kho = "TP_HN_12"
             mien = "HN"
         else:
-            kho = "LA_KHO2026"
+            kho = "LA_TP"
             khuvuc = "Sỉ_MN"
             mien = "LA"
 
@@ -1887,6 +1894,7 @@ class ProcessHandler(QObject):
         for product in products:
 
             sheet[f"A{current_row}"] = entry_date
+            sheet[f"AV{current_row}"] = songayno_GT
 
             sheet[f"B{current_row}"] = f'ĐĐH{vendor}{STT_donhang_str}'
 
@@ -1906,101 +1914,16 @@ class ProcessHandler(QObject):
             sheet[f"S{current_row}"] = product["Tên sản phẩm"]
             sheet[f"Z{current_row}"] = f"=Y{current_row}*X{current_row}"
             sheet[f"X{current_row}"] = product["Số lượng"]
-            giahoadon = product["Đơn giá"].replace('.','')
-            print(product["Đơn vị tính"])
-            if product["Đơn vị tính"] == 'Thùng':
-                giathuctegoc = ProcessHandler.laygiathucte_CNHCM(product["Mã hàng"],vendor,1)
-            else:
-                giathuctegoc = ProcessHandler.laygiathucte_CNHCM(product["Mã hàng"],vendor)
-            giathucte = giathuctegoc
+            sheet[f"Y{current_row}"] = 0
             self.log_signal.emit(f'Đã thêm {product["Mã hàng"]} - {product["Tên sản phẩm"]} ')
-            khopgia = False
-            if giathuctegoc == 'Không tìm thấy SKU':
-                sheet[f"Y{current_row}"] = giahoadon
-                green_fill = PatternFill(start_color="00ff00", end_color="00ff00", fill_type="solid")
-                sheet[f"Y{current_row}"].fill = green_fill
-                comment_text = f"Nguyên vật liệu - Không nhập giá"
-                comment = Comment(comment_text, "System")
-                sheet[f"Y{current_row}"].comment = comment
-                self.log_signal.emit(
-                            f'✅ Mã hàng <b><span style="color: blue;">{product["Mã hàng"]}</span></b> '
-                            f'Nguyên vật liệu: <span style="color: green;"><b> Không thêm giá</b></span>'
-                        )
-                khopgia = True
 
-            else:
-                print(product["Mã hàng"])
-                giahoadon = float(giahoadon[0]) if isinstance(giahoadon, tuple) else float(giahoadon)
-                if isinstance(giathucte, str):
-                    giathucte = 0 if giathucte == 'Không có giá trị' else giathucte
-                    
-                    giathucte = float(giathucte) if giathucte else 0
-
-                if math.isclose(giahoadon, giathucte, rel_tol=1e-4):
-                        sheet[f"Y{current_row}"] = giathucte
-                        self.log_signal.emit(
-                            f'✅ Mã hàng <b><span style="color: blue;">{product["Mã hàng"]}</span></b> '
-                            f'có giá chính xác 🎯: <span style="color: green;"><b>{giahoadon}</b></span>'
-                        )
-
-                        khopgia = True
-
-                if khopgia == False:
-                    self.log_signal.emit(
-                    f"⚠️ Mã hàng <b>{product["Mã hàng"]}</b> sai giá! 🛑 "
-                    f"Hóa đơn: <b><span style='color: red;'>{giahoadon}</span></b> – "
-                    f"Giá hệ thống: <b><span style='color: green;'>{giathucte}</span></b>"
-                )
-                    saigia += 1
-
-            results = ProcessHandler.find_all_promotions_by_sku_and_time(product["Mã hàng"], entry_date,vendor)
-            if results:
-
-                sheet[f"AQ{current_row}"] = results[0][1]
-                match = re.search(r"(\d+)\s*\+\s*1", results[0][1])  # Tìm số đầu tiên trong biểu thức X+1
-                if match:
-                    x = int(match.group(1))  # Chuyển đổi thành số nguyên
-
-                    
-                    if x >= 2:  # Chỉ chia khi x >= 2, còn 1+1 thì giữ nguyên
-                        qty_ord_pcs = math.floor(int(product["Số lượng"]) / x)  # Chia rồi làm tròn xuống
-                        if qty_ord_pcs == 0:
-                            continue
-                    current_row += 1
-
-                    #THêm khuyến mãi
-                    sheet[f"A{current_row}"] = entry_date
             
-                    sheet[f"B{current_row}"] = f'ĐĐH{vendor}{STT_donhang_str}'
-                             
-                    sheet[f"C{current_row}"] = "Chưa thực hiện"
-                    sheet[f"D{current_row}"] = cancle_date
-                    sheet[f"G{current_row}"] = makhachhang
-                    sheet[f"L{current_row}"] = diengiai
-                    sheet[f"Q{current_row}"] = product["Mã hàng"]
-                    sheet[f"V{current_row}"] = kho
-                    sheet[f"AE{current_row}"] = 0
-                    sheet[f"AJ{current_row}"] = khuvuc
-                    sheet[f"AM{current_row}"] = mien
-                    sheet[f"U{current_row}"] = "Có"
-                    sheet[f"E{current_row}"] = diachigiaohang
-                    sheet[f"W{current_row}"] = product["Đơn vị tính"]
-                    sheet[f"T{current_row}"] = "Không"
-                    sheet[f"S{current_row}"] = product["Tên sản phẩm"]
-                    sheet[f"Z{current_row}"] = f"=Y{current_row}*X{current_row}"
-                    sheet[f"X{current_row}"] = qty_ord_pcs
-                    sheet[f"Y{current_row}"] = 0
-                    
-                    self.log_signal.emit(
-    f'🎁 Mã hàng <b><span style="color: blue;">{product["Mã hàng"]}</span></b> '
-    f'đã thêm hàng khuyến mãi <b><span style="color: green;">{product["Mã hàng"]}</span></b> tặng kèm! 🎉'
-)
 
             current_row += 1
 
         wb.save(file_path)
         print(f"✅ Đã ghi {len(products)} dòng vào '{file_path}', sheet '{sheet_name}'!")
-        return saigia
+        return 0
 
 
 
@@ -2034,7 +1957,7 @@ class ProcessHandler(QObject):
             kho = "TP_HN_12"
             mien = "HN"
         else:
-            kho = "LA_KHO2026"
+            kho = "LA_TP"
             khuvuc = "MT_MN"
             mien = "LA"
 
@@ -2051,6 +1974,7 @@ class ProcessHandler(QObject):
 
 
         sheet[f"A{current_row}"] = entry_date
+        sheet[f"AV{current_row}"] = songayno_MT
     
         sheet[f"B{current_row}"] = f'ĐĐH{vendor}{STT_donhang_str}'
         
@@ -2078,6 +2002,7 @@ class ProcessHandler(QObject):
         for product in products:
             
             sheet[f"A{current_row}"] = entry_date
+            sheet[f"AV{current_row}"] = songayno_MT
 
             sheet[f"B{current_row}"] = f'ĐĐH{vendor}{STT_donhang_str}'
 
@@ -2251,12 +2176,13 @@ class ProcessHandler(QObject):
                 else:
                     sheet[f"AO{current_row}"] = f'KM Giao Rời - Không Che Barcode'
                 current_row += 1
-                sheet[f"A{current_row}"] = entry_date
+               
                 self.log_signal.emit(
                     f'🎁 Mã hàng <b><span style="color: blue;">{product["Barcode"]}</span></b> '
                     f'đã thêm hàng khuyến mãi <b><span style="color: green;">{kiemtra}</span></b> tặng kèm! 🎉'
                 )
                 sheet[f"A{current_row}"] = entry_date
+                sheet[f"AV{current_row}"] = songayno_MT
                 sheet[f"B{current_row}"] = f'ĐĐH{vendor}{STT_donhang_str}'
 
                 sheet[f"C{current_row}"] = "Chưa thực hiện"
@@ -2299,6 +2225,7 @@ class ProcessHandler(QObject):
             print(ProcessHandler.tachtien_khuyenmai(kmhoadon))
             soluongkm = math.floor(tongtien / ProcessHandler.tachtien_khuyenmai(kmhoadon))
             sheet[f"A{current_row}"] = entry_date
+            sheet[f"AV{current_row}"] = songayno_MT
             sheet[f"C{current_row}"] = "Chưa thực hiện"
             sheet[f"D{current_row}"] = cancle_date
             sheet[f"E{current_row}"] = diachigiaohang
@@ -2396,7 +2323,7 @@ class ProcessHandler(QObject):
             kho = "TP_HN_12"
             mien = "HN"
         else:
-            kho = "LA_KHO2026"
+            kho = "LA_TP"
             khuvuc = "MT_MN"
             mien = "LA"
         khonggiaothu7 = ''
@@ -2407,6 +2334,7 @@ class ProcessHandler(QObject):
 
 
         sheet[f"A{current_row}"] = entry_date
+        sheet[f"AV{current_row}"] = songayno_MT
         sheet[f"B{current_row}"] = f'ĐĐH{vendor}{STT_donhang_str}'
 
         sheet[f"C{current_row}"] = "Chưa thực hiện"
@@ -2437,6 +2365,7 @@ class ProcessHandler(QObject):
             sku_mapping = ProcessHandler.load_sku_mapping()  # Load mapping SKU
             products = ProcessHandler.replace_sku_numbers(products, sku_mapping)  # Thay SKU
             sheet[f"A{current_row}"] = entry_date
+            sheet[f"AV{current_row}"] = songayno_MT
 
             sheet[f"B{current_row}"] = f'ĐĐH{vendor}{STT_donhang_str}'
             sheet[f"C{current_row}"] = "Chưa thực hiện"
@@ -2633,6 +2562,7 @@ class ProcessHandler(QObject):
         )
                     current_row += 1
                     sheet[f"A{current_row}"] = entry_date
+                    sheet[f"AV{current_row}"] = songayno_MT
 
                     sheet[f"B{current_row}"] = f'ĐĐH{vendor}{STT_donhang_str}'
                     sheet[f"C{current_row}"] = "Chưa thực hiện"
@@ -2671,6 +2601,7 @@ class ProcessHandler(QObject):
             sheet[f"B{current_row}"] = f'ĐĐH{vendor}{STT_donhang_str}'
             soluongkm = math.floor(tongtien / ProcessHandler.tachtien_khuyenmai(kmhoadon))
             sheet[f"A{current_row}"] = entry_date
+            sheet[f"AV{current_row}"] = songayno_MT
             sheet[f"C{current_row}"] = "Chưa thực hiện"
             sheet[f"D{current_row}"] = cancle_date
             sheet[f"E{current_row}"] = diachigiao
@@ -2768,6 +2699,7 @@ class ProcessHandler(QObject):
         diengiai = f"{vendor} PO{po_number}"
 
         sheet[f"A{current_row}"] = entry_date
+        sheet[f"AV{current_row}"] = songayno_MT
 
         sheet[f"B{current_row}"] = f'ĐĐH{vendor}{STT_donhang_str}'
         sheet[f"C{current_row}"] = "Chưa thực hiện"
@@ -2795,6 +2727,7 @@ class ProcessHandler(QObject):
            
             
             sheet[f"A{current_row}"] = entry_date
+            sheet[f"AV{current_row}"] = songayno_MT
         
             sheet[f"B{current_row}"] = f'ĐĐH{vendor}{STT_donhang_str}'
             sheet[f"C{current_row}"] = "Chưa thực hiện"
@@ -2963,6 +2896,7 @@ class ProcessHandler(QObject):
     f'đã thêm hàng khuyến mãi <b><span style="color: green;">{kiemtra}</span></b> tặng kèm! 🎉'
 )
                 sheet[f"A{current_row}"] = entry_date
+                sheet[f"AV{current_row}"] = songayno_MT
             
                 sheet[f"B{current_row}"] = f'ĐĐH{vendor}{STT_donhang_str}'
                 sheet[f"C{current_row}"] = "Chưa thực hiện"
@@ -2999,6 +2933,7 @@ class ProcessHandler(QObject):
             sheet[f"B{current_row}"] = f'ĐĐH{vendor}{STT_donhang_str}'
             soluongkm = math.floor(tongtien / ProcessHandler.tachtien_khuyenmai(kmhoadon))
             sheet[f"A{current_row}"] = entry_date
+            sheet[f"AV{current_row}"] = songayno_MT
             sheet[f"C{current_row}"] = "Chưa thực hiện"
             sheet[f"D{current_row}"] = cancle_date
             sheet[f"E{current_row}"] = diachigiao
@@ -3144,6 +3079,7 @@ class ProcessHandler(QObject):
 
 
         sheet[f"A{current_row}"] = entry_date
+        sheet[f"AV{current_row}"] = songayno_MT
        
         sheet[f"B{current_row}"] = f'ĐĐH{vendor}{STT_donhang_str}'
         sheet[f"C{current_row}"] = "Chưa thực hiện"
@@ -3171,7 +3107,7 @@ class ProcessHandler(QObject):
            
             
             sheet[f"A{current_row}"] = entry_date
-            
+            sheet[f"AV{current_row}"] = songayno_MT
             sheet[f"B{current_row}"] = f'ĐĐH{vendor}{STT_donhang_str}'
             sheet[f"C{current_row}"] = "Chưa thực hiện"
             sheet[f"D{current_row}"] = cancle_date
@@ -3255,7 +3191,7 @@ class ProcessHandler(QObject):
                         sheet[f"Y{current_row}"] = giathucte
                         self.log_signal.emit(
                         f'🎉 Mã hàng <b><span style="color: blue;">{product["Barcode"]}</span></b> '
-                        f'có CTKM <b><span style="color: green;">{value}</span></b> từ <i>{col}</i> 🛒')
+                        f'có CTKM <b><span style="color: green;">{value}</span></b> từ <i>col</i> 🛒')
                         self.log_signal.emit(
                             f'✅ Mã hàng <b><span style="color: blue;">{product["Barcode"]}</span></b> '
                             f'có giá chính xác 🎯: <span style="color: green;"><b>{giahoadon}</b></span>'
@@ -3275,7 +3211,7 @@ class ProcessHandler(QObject):
                     sheet[f"Y{current_row}"] = giathucte
                     self.log_signal.emit(
                     f'🎉 Mã hàng <b><span style="color: blue;">{product["Barcode"]}</span></b> '
-                    f'có CTKM <b><span style="color: green;">{khuyenmai}</span></b> từ <i>{col}</i> 🛒')
+                    f'có CTKM <b><span style="color: green;">{khuyenmai}</span></b> từ <i>col</i> 🛒')
                     self.log_signal.emit(
                         f'✅ Mã hàng <b><span style="color: blue;">{product["Barcode"]}</span></b> '
                         f'có giá chính xác 🎯: <span style="color: green;"><b>{giahoadon}</b></span>'
@@ -3336,6 +3272,7 @@ class ProcessHandler(QObject):
                     f'đã thêm hàng khuyến mãi <b><span style="color: green;">{kiemtra}</span></b> tặng kèm! 🎉'
                 )
                 sheet[f"A{current_row}"] = entry_date
+                sheet[f"AV{current_row}"] = songayno_MT
                 
                 sheet[f"B{current_row}"] = f'ĐĐH{vendor}{STT_donhang_str}'
                 sheet[f"C{current_row}"] = "Chưa thực hiện"
@@ -3371,6 +3308,7 @@ class ProcessHandler(QObject):
             sheet[f"B{current_row}"] = f'ĐĐH{vendor}{STT_donhang_str}'
             soluongkm = math.floor(tongtien / ProcessHandler.tachtien_khuyenmai(kmhoadon))
             sheet[f"A{current_row}"] = entry_date
+            sheet[f"AV{current_row}"] = songayno_MT
             sheet[f"C{current_row}"] = "Chưa thực hiện"
             sheet[f"D{current_row}"] = cancle_date
             sheet[f"E{current_row}"] = diachigiao
@@ -3466,6 +3404,7 @@ class ProcessHandler(QObject):
 
 
         sheet[f"A{current_row}"] = entry_date
+        sheet[f"AV{current_row}"] = songayno_MT
 
         sheet[f"B{current_row}"] = f'ĐĐH{vendor}{STT_donhang_str}'
         sheet[f"C{current_row}"] = "Chưa thực hiện"
@@ -3493,6 +3432,7 @@ class ProcessHandler(QObject):
            
             
             sheet[f"A{current_row}"] = entry_date
+            sheet[f"AV{current_row}"] = songayno_MT
             
             sheet[f"B{current_row}"] = f'ĐĐH{vendor}{STT_donhang_str}'
             sheet[f"C{current_row}"] = "Chưa thực hiện"
@@ -3659,6 +3599,7 @@ class ProcessHandler(QObject):
     f'đã thêm hàng khuyến mãi <b><span style="color: green;">{kiemtra}</span></b> tặng kèm! 🎉'
 )
                 sheet[f"A{current_row}"] = entry_date
+                sheet[f"AV{current_row}"] = songayno_MT
              
                 sheet[f"B{current_row}"] = f'ĐĐH{vendor}{STT_donhang_str}'
                 sheet[f"C{current_row}"] = "Chưa thực hiện"
@@ -3696,6 +3637,7 @@ class ProcessHandler(QObject):
             sheet[f"B{current_row}"] = f'ĐĐH{vendor}{STT_donhang_str}'
             soluongkm = math.floor(tongtien / ProcessHandler.tachtien_khuyenmai(kmhoadon))
             sheet[f"A{current_row}"] = entry_date
+            sheet[f"AV{current_row}"] = songayno_MT
             sheet[f"C{current_row}"] = "Chưa thực hiện"
             sheet[f"D{current_row}"] = cancle_date
             sheet[f"E{current_row}"] = diachigiao
@@ -3782,6 +3724,7 @@ class ProcessHandler(QObject):
 
         diengiai = f"{vendor} {po_number}"
         sheet[f"A{current_row}"] = entry_date
+        sheet[f"AV{current_row}"] = songayno_MT
 
         ProcessHandler.ghi_message(f"[PO: {po_number}")
         ProcessHandler.ghi_message(f"store: {delivery}")
@@ -3822,6 +3765,7 @@ class ProcessHandler(QObject):
             sku_mapping = ProcessHandler.load_sku_mapping()  # Load mapping SKU
             products = ProcessHandler.replace_sku_numbers(products, sku_mapping)  # Thay SKU
             sheet[f"A{current_row}"] = entry_date
+            sheet[f"AV{current_row}"] = songayno_MT
             
             sheet[f"B{current_row}"] = f'ĐĐH{vendor}{STT_donhang_str}'
             sheet[f"C{current_row}"] = "Chưa thực hiện"
@@ -3987,6 +3931,7 @@ class ProcessHandler(QObject):
     f'đã thêm hàng khuyến mãi <b><span style="color: green;">{kiemtra}</span></b> tặng kèm! 🎉'
 )
                 sheet[f"A{current_row}"] = entry_date
+                sheet[f"AV{current_row}"] = songayno_MT
                 
                 sheet[f"B{current_row}"] = f'ĐĐH{vendor}{STT_donhang_str}'
                 sheet[f"C{current_row}"] = "Chưa thực hiện"
@@ -4023,6 +3968,7 @@ class ProcessHandler(QObject):
             sheet[f"B{current_row}"] = f'ĐĐH{vendor}{STT_donhang_str}'
             soluongkm = math.floor(tongtien / ProcessHandler.tachtien_khuyenmai(kmhoadon))
             sheet[f"A{current_row}"] = entry_date
+            sheet[f"AV{current_row}"] = songayno_MT
             sheet[f"C{current_row}"] = "Chưa thực hiện"
             sheet[f"D{current_row}"] = cancle_date
 
@@ -4142,6 +4088,7 @@ class ProcessHandler(QObject):
 
 
         sheet[f"A{current_row}"] = entry_date
+        sheet[f"AV{current_row}"] = songayno_MT
        
         sheet[f"B{current_row}"] = f'ĐĐH{vendor}{STT_donhang_str}'
         sheet[f"C{current_row}"] = "Chưa thực hiện"
@@ -4188,6 +4135,7 @@ class ProcessHandler(QObject):
             sku_mapping = ProcessHandler.load_sku_mapping()  # Load mapping SKU
             products = ProcessHandler.replace_sku_numbers(products, sku_mapping)  # Thay SKU
             sheet[f"A{current_row}"] = entry_date
+            sheet[f"AV{current_row}"] = songayno_MT
  
             sheet[f"B{current_row}"] = f'ĐĐH{vendor}{STT_donhang_str}'
             sheet[f"C{current_row}"] = "Chưa thực hiện"
@@ -4363,6 +4311,7 @@ class ProcessHandler(QObject):
                     f'đã thêm hàng khuyến mãi <b><span style="color: green;">{kiemtra}</span></b> tặng kèm! 🎉'
                 )
                 sheet[f"A{current_row}"] = entry_date
+                sheet[f"AV{current_row}"] = songayno_MT
              
                 sheet[f"B{current_row}"] = f'ĐĐH{vendor}{STT_donhang_str}'
                 sheet[f"C{current_row}"] = "Chưa thực hiện"
@@ -4401,6 +4350,7 @@ class ProcessHandler(QObject):
             sheet[f"B{current_row}"] = f'ĐĐH{vendor}{STT_donhang_str}'
             soluongkm = math.floor(tongtien / ProcessHandler.tachtien_khuyenmai(kmhoadon))
             sheet[f"A{current_row}"] = entry_date
+            sheet[f"AV{current_row}"] = songayno_MT
             sheet[f"C{current_row}"] = "Chưa thực hiện"
             sheet[f"D{current_row}"] = cancle_date
             sheet[f"E{current_row}"] = diachigiaohang
@@ -4515,6 +4465,7 @@ class ProcessHandler(QObject):
             mien = "LA"
         if page_num == 1:
             sheet[f"A{current_row}"] = entry_date
+            sheet[f"AV{current_row}"] = songayno_MT
             sheet[f"B{current_row}"] = f'ĐĐH{vendor}{STT_donhang_str}'
             sheet[f"C{current_row}"] = "Chưa thực hiện"
             sheet[f"D{current_row}"] = cancle_date
@@ -4540,6 +4491,7 @@ class ProcessHandler(QObject):
                 
 
             sheet[f"A{current_row}"] = entry_date
+            sheet[f"AV{current_row}"] = songayno_MT
           
             sheet[f"B{current_row}"] = f'ĐĐH{vendor}{STT_donhang_str}'
             sheet[f"C{current_row}"] = "Chưa thực hiện"
@@ -4712,6 +4664,7 @@ f'🎁 Mã hàng <b><span style="color: blue;">{item["Barcode"]}</span></b> '
 f'đã thêm hàng khuyến mãi <b><span style="color: green;">{kiemtra}</span></b> tặng kèm! 🎉'
 )
                 sheet[f"A{current_row}"] = entry_date
+                sheet[f"AV{current_row}"] = songayno_MT
                 
                 sheet[f"B{current_row}"] = f'ĐĐH{vendor}{STT_donhang_str}'
                 sheet[f"C{current_row}"] = "Chưa thực hiện"
@@ -4747,6 +4700,7 @@ f'đã thêm hàng khuyến mãi <b><span style="color: green;">{kiemtra}</span>
             sheet[f"B{current_row}"] = f'ĐĐH{vendor}{STT_donhang_str}'
             soluongkm = math.floor(tongtien / ProcessHandler.tachtien_khuyenmai(kmhoadon))
             sheet[f"A{current_row}"] = entry_date
+            sheet[f"AV{current_row}"] = songayno_MT
             sheet[f"C{current_row}"] = "Chưa thực hiện"
             sheet[f"D{current_row}"] = cancle_date
             sheet[f"E{current_row}"] = diachigiao
@@ -4846,6 +4800,7 @@ f'đã thêm hàng khuyến mãi <b><span style="color: green;">{kiemtra}</span>
     "EMART PHI": "PHI",
     "EMART SALA": "SALA"
 }
+        
         congtrinh = mapping.get(congtrinh, congtrinh)
 
 
@@ -4877,7 +4832,7 @@ f'đã thêm hàng khuyến mãi <b><span style="color: green;">{kiemtra}</span>
 
 
         sheet[f"A{current_row}"] = entry_date
-      
+        sheet[f"AV{current_row}"] = songayno_MT
         sheet[f"B{current_row}"] = f'ĐĐH{vendor}{STT_donhang_str}'
         sheet[f"C{current_row}"] = "Chưa thực hiện"
         sheet[f"D{current_row}"] = cancle_date
@@ -4894,6 +4849,12 @@ f'đã thêm hàng khuyến mãi <b><span style="color: green;">{kiemtra}</span>
         sheet[f"X{current_row}"] = 0
         sheet[f"Y{current_row}"] = 0
         sheet[f"E{current_row}"] = diachigiaohang
+        if congtrinh == "PVT":
+            sheet[f"K{current_row}"] = "SIÊU THỊ EMART PHAN VĂN TRỊ"
+        elif congtrinh == "SALA":
+            sheet[f"K{current_row}"] = "SIÊU THỊ EMART SALA"
+        elif congtrinh == "PHI":
+            sheet[f"K{current_row}"] = "SIÊU THỊ EMART PHAN HUY ÍCH"
 
         
         sheet[f"AN{current_row}"] = 'PVT' #viết mã công trình
@@ -4902,6 +4863,7 @@ f'đã thêm hàng khuyến mãi <b><span style="color: green;">{kiemtra}</span>
         for item in items:
             
             sheet[f"A{current_row}"] = entry_date
+            sheet[f"AV{current_row}"] = songayno_MT
             
             sheet[f"B{current_row}"] = f'ĐĐH{vendor}{STT_donhang_str}'
             sheet[f"C{current_row}"] = "Chưa thực hiện"
@@ -4956,9 +4918,10 @@ f'đã thêm hàng khuyến mãi <b><span style="color: green;">{kiemtra}</span>
 
             for col, value in results:
                 print(f'🧪 Thử CTKM: {col} → {value}')
-                
+
                 if value:
                     khuyenmai = value
+                    giathucte = giathuctegoc  # Reset về giá gốc trước mỗi lần thử CTKM
                     discount = ProcessHandler.extract_discount(value)
                     print(f'🔻 Giảm giá: {discount} ({type(discount)})')
 
@@ -4967,15 +4930,11 @@ f'đã thêm hàng khuyến mãi <b><span style="color: green;">{kiemtra}</span>
                             discount = discount.replace("%", "").strip()
                             discount = float(discount) if discount else 0
 
-                        if isinstance(giathuctegoc, str):
-                            giathucte = giathuctegoc.replace(",", "").strip()
+                        if isinstance(giathucte, str):
+                            giathucte = giathucte.replace(",", "").strip()
                             giathucte = float(giathucte) if giathucte else 0
 
                         giathucte = giathucte - (giathucte * float(discount) / 100)
-                    else:
-                        giathucte = giathucte
-
-
 
                     giahoadon = float(giahoadon[0]) if isinstance(giahoadon, tuple) else float(giahoadon)
                     if isinstance(giathucte, str):
@@ -4991,7 +4950,7 @@ f'đã thêm hàng khuyến mãi <b><span style="color: green;">{kiemtra}</span>
                             f'✅ Mã hàng <b><span style="color: blue;">{item["Barcode"]}</span></b> '
                             f'có giá chính xác 🎯: <span style="color: green;"><b>{giahoadon}</b></span>'
                         )
-                        
+
                         giakhop = True
                         break  # ✅ THOÁT VÒNG LẶP khi đã khớp giá
 
@@ -5029,13 +4988,13 @@ f'đã thêm hàng khuyến mãi <b><span style="color: green;">{kiemtra}</span>
                     f"Hóa đơn: <b><span style='color: red;'>{giahoadon}</span></b> – "
                     f"Giá hệ thống: <b><span style='color: green;'>{giathucte}</span></b>"
                 )
-                
+
                 ProcessHandler.ghi_message(f"text: Mã hàng {item["Barcode"]} - {ProcessHandler.timten_sanpham(item["Barcode"])}, Giá trên PO {giahoadon:,}, Giá đúng: {giathucte:,}. Chênh lệch {(giahoadon - giathucte):,.0f}")
 
                 saigia += 1
 
             tongtien += giathucte * qty_ord_pcs
-                
+
 
             # 🔍 Kiểm tra SKU có trong 'SanPham'
 
@@ -5062,8 +5021,6 @@ f'đã thêm hàng khuyến mãi <b><span style="color: green;">{kiemtra}</span>
                     if i > 0:
                         if cachbokem:
                             sheet[f"AO{current_row + 1}"] = cachbokem
-                            if i == 0:
-                                sheet[f"AO{current_row + 2}"] = cachbokem
                             cachbokem_lower = cachbokem.lower()
                             if "bó kèm" in cachbokem_lower or "quấn kèm" in cachbokem_lower:
                                 sheet[f"AP{current_row + 1}"] = f'{ProcessHandler.layduoi_mahang(item["Barcode"])}_{ProcessHandler.layduoi_mahang(kiemtra)}_1'
@@ -5073,11 +5030,10 @@ f'đã thêm hàng khuyến mãi <b><span style="color: green;">{kiemtra}</span>
                     else:
                         if cachbokem:
                             sheet[f"AO{current_row}"] = cachbokem
-                            if i == 0:
-                                sheet[f"AO{current_row + 1}"] = cachbokem
+                            sheet[f"AO{current_row + 1}"] = cachbokem
                             cachbokem_lower = cachbokem.lower()
                             if "bó kèm" in cachbokem_lower or "quấn kèm" in cachbokem_lower:
-                                sheet[f"AP{current_row }"] = f'{ProcessHandler.layduoi_mahang(item["Barcode"])}_{ProcessHandler.layduoi_mahang(kiemtra)}_1'
+                                sheet[f"AP{current_row}"] = f'{ProcessHandler.layduoi_mahang(item["Barcode"])}_{ProcessHandler.layduoi_mahang(kiemtra)}_1'
                                 sheet[f"AP{current_row + 1}"] = f'{ProcessHandler.layduoi_mahang(item["Barcode"])}_{ProcessHandler.layduoi_mahang(kiemtra)}_1'
                         else:
                             sheet[f"AO{current_row}"] = f'KM Rời - Không Che Barcode'
@@ -5088,6 +5044,7 @@ f'đã thêm hàng khuyến mãi <b><span style="color: green;">{kiemtra}</span>
         )
                     current_row += 1
                     sheet[f"A{current_row}"] = entry_date
+                    sheet[f"AV{current_row}"] = songayno_MT
                    
                     sheet[f"B{current_row}"] = f'ĐĐH{vendor}{STT_donhang_str}'
                     sheet[f"C{current_row}"] = "Chưa thực hiện"
@@ -5113,16 +5070,17 @@ f'đã thêm hàng khuyến mãi <b><span style="color: green;">{kiemtra}</span>
 
             current_row += 1
         sheet["G1"] = STT_donhang
-        kmhoadon = ProcessHandler.find_all_promotions_by_sku_and_time("Hóa Đơn", entry_date)
+        kmhoadon = ProcessHandler.find_all_promotions_by_sku_and_time("Hóa Đơn", entry_date, vendor)
         if kmhoadon:
             kmhoadon = str(kmhoadon[0][1])
-            kiemtra = ProcessHandler.check_value_in_sanpham(kmhoadon) 
+            kiemtra = ProcessHandler.check_value_in_sanpham(kmhoadon)
             sheet[f"AQ{current_row}"] = kmhoadon
-            
-            
+
+
             sheet[f"B{current_row}"] = f'ĐĐH{vendor}{STT_donhang_str}'
             soluongkm = math.floor(tongtien / ProcessHandler.tachtien_khuyenmai(kmhoadon))
             sheet[f"A{current_row}"] = entry_date
+            sheet[f"AV{current_row}"] = songayno_MT
             sheet[f"C{current_row}"] = "Chưa thực hiện"
             sheet[f"D{current_row}"] = cancle_date
             sheet[f"E{current_row}"] = diachigiaohang
@@ -6535,52 +6493,66 @@ f'đã thêm hàng khuyến mãi <b><span style="color: green;">{kiemtra}</span>
         print(text)
         print('kết thúc')
         # Pattern linh hoạt hơn cho tên sản phẩm nhiều dòng
-        pattern = re.compile(r"""
-    (?P<stt>\d+)\s*\n                         # STT
-    (?P<barcode>\d{13})\s*\n                  # Barcode
-    
-    (?P<name>(?:.+\n)+?)                      # Product name (1–3 dòng)
-    
-    (?P<unit>HỘP|TÚI|CHAI|LON|GÓI)\s*\n       # Unit
-    
-    (?P<quantity>\d+)\s*\n                    # Quantity
-    \d+\s*\n                                  # Inner qty (bỏ)
-    .+\s*\n                                   # Packing (bỏ)
-    (?:.*\n){4}                           # ⬅️ BỎ QUA THÊM 5 DÒNG SAU PACKING
-    (?P<price>[0-9.,]+)                       # PRICE = dòng kế sau packing
-""", re.VERBOSE)
+        
 
+        pattern = re.compile(r"""
+    (?P<stt>\d+)\s*\n
+    (?P<barcode>\d{13})\s*\n
+
+    (?P<name>(?:.+\n)+?)
+
+    (?P<unit>HỘP|TÚI|CHAI|LON|GÓI)\s*\n
+
+    (?P<quantity>[\d.]+)\s*\n     # <-- cho phép 1.464
+
+    \d+\s*\n
+    .+\s*\n
+
+    (?:.*\n){4}
+
+    (?P<price>[0-9.,]+)
+
+    """, re.VERBOSE)
 
         products = []
-        matches = pattern.finditer(text)
-        
-        for i, match in enumerate(matches, 1):
-            barcode = match.group("barcode")
-            name = re.sub(r'\s+', ' ', match.group("name")).strip()
-            unit = match.group("unit")
-            quantity = match.group("quantity")
-            price_str = match.group("price")
-            
-            try:
-                price = float(price_str.replace('.', '').replace(',', '.'))
-                
-                print(f"[MATCH {i}] Barcode: {barcode}, Name: {name}, Unit: {unit}, Qty: {quantity}, Price: {price}")
-                
-                if price > 0:
-                    products.append({
-                        "Barcode": barcode,
-                        "Product Name": name,
-                        "Unit": unit,
-                        "OU Qty": quantity,
-                        "Total Price": price
-                    })
-                else:
-                    print(f"⚠️ Bỏ qua: quantity={quantity}, price={price}")
-                    
-            except ValueError as e:
-                print(f"❌ Lỗi chuyển đổi giá: {price_str} -> {e}")
 
-        print(f"\n✅ Tổng số sản phẩm tìm được: {len(products)}")
+        matches = pattern.finditer(text)
+
+        for i, match in enumerate(matches, 1):
+
+            barcode = match.group("barcode")
+
+            name = re.sub(r'\s+', ' ', match.group("name")).strip()
+
+            unit = match.group("unit")
+
+            quantity = match.group("quantity").replace('.', '')
+
+            price_str = match.group("price")
+
+            try:
+
+                price = float(price_str.replace('.', '').replace(',', '.'))
+
+                print(f"[MATCH {i}] Barcode: {barcode}")
+                print(f"Name: {name}")
+                print(f"Qty: {quantity}")
+                print(f"Price: {price}")
+                print("-" * 50)
+
+                products.append({
+                    "Barcode": barcode,
+                    "Product Name": name,
+                    "Unit": unit,
+                    "OU Qty": int(quantity),
+                    "Total Price": price
+                })
+
+            except Exception as e:
+                print("Lỗi:", e)
+
+        print(f"\n✅ Tổng số sản phẩm: {len(products)}")
+
         return products
     
 
@@ -6757,51 +6729,37 @@ f'đã thêm hàng khuyến mãi <b><span style="color: green;">{kiemtra}</span>
 
 
     def tachsanpham_JMart(text: str):
-        # 1) Ghép trường hợp 26,836.3 xuống dòng 60 -> 26,836.360
-        text = re.sub(
-            r'(\d+,\d+)\.(\d)\s*\n\s*([0-9]{2})',
-            r'\1.\2\3',
-            text
-        )
 
-        # 2) Ghép trường hợp 133,805. xuống dòng 700 -> 133,805.700
-        text = re.sub(
-            r'(\d+,\d+)\.\s*\n\s*([0-9]+)',
-            r'\1.\2',
-            text
-        )
+        text = re.sub(r'(\d+,\d+)\.(\d)\s*\n\s*([0-9]{2})', r'\1.\2\3', text)
+        text = re.sub(r'(\d+,\d+)\.\s*\n\s*([0-9]+)', r'\1.\2', text)
 
-        lines = text.splitlines()
+        lines = [l.strip() for l in text.splitlines()]
         result = []
 
-        for idx, raw_line in enumerate(lines):
-            line = raw_line.strip()
+        price_pattern = r'\d{1,3}(?:,\d{3})+\.\d{3}'
 
-            # Tìm barcode: đúng 13 chữ số
+        for idx, line in enumerate(lines):
+
             if not re.fullmatch(r'\d{13}', line):
                 continue
-            barcode = line
 
+            barcode = line
             ou_qty = None
             total_price = None
 
-            # Tìm OU Qty (xx.000) gần nhất PHÍA TRÊN barcode, bỏ qua 0.000
-            cand_idx = [
-                i for i in range(max(0, idx - 30), idx + 1)
-                if re.fullmatch(r'[1-9]\d*\.000', lines[i].strip())
-            ]
+            # ===== tìm OU Qty đúng block =====
+            for i in range(idx - 1, max(idx - 20, 0), -1):
 
-            if cand_idx:
-                # lấy OU Qty gần nhất phía trên barcode
-                ou_idx = max(cand_idx)
-                ou_qty = lines[ou_idx].strip().split('.')[0]
+                if lines[i] == "1.00":
+                    if re.fullmatch(r'[1-9]\d*\.000', lines[i - 1]):
+                        ou_qty = lines[i - 1].split('.')[0]
+                    break
 
-                # Dòng số ngay phía trên OU Qty là đơn giá (Total Price)
-                for j in range(ou_idx - 1, -1, -1):
-                    s = lines[j].strip()
-                    if re.fullmatch(r'[\d,]+\.\d+', s):  # ví dụ 133,805.700 / 26,836.360
-                        total_price = s.replace(",", "")
-                        break
+            # ===== tìm giá tiền =====
+            for j in range(idx - 1, -1, -1):
+                if re.fullmatch(price_pattern, lines[j]):
+                    total_price = lines[j].replace(",", "")
+                    break
 
             result.append({
                 "Barcode": barcode,
@@ -7230,8 +7188,14 @@ f'đã thêm hàng khuyến mãi <b><span style="color: green;">{kiemtra}</span>
                             products = ProcessHandler.tach_sanpham_JIT_airway(products)
 
 
-
-                        po_number = text.splitlines()[text.splitlines().index(next(l for l in text.splitlines() if "Mã đơn hàng:" in l)) + 2].strip()
+                        try:
+                            po_number = text.splitlines()[text.splitlines().index(next(l for l in text.splitlines() if "Mã đơn hàng:" in l)) + 2].strip()
+                        except StopIteration:
+                            # xử lý riêng file thiếu chữ "Mã đơn hàng:"
+                            for line in text.splitlines():
+                                if line.strip() == "2603157B6CWHCS":
+                                    po_number = line.strip()
+                                    break                                           
                         # ✅ Kiểm tra 6 ký tự đầu có phải số không
                         if not po_number[:6].isdigit():
                             po_number = text.splitlines()[text.splitlines().index(next(l for l in text.splitlines() if "Mã đơn hàng:" in l)) - 1].strip()
@@ -7967,8 +7931,11 @@ f'đã thêm hàng khuyến mãi <b><span style="color: green;">{kiemtra}</span>
                     m = re.search(r"Địa chỉ giao hàng\s*:\s*(.+?)\s*SĐT nhận hàng\s*:", text, re.S)
                     delivery_address = m.group(1).strip() if m else None
                     print(delivery_address)
+                    print("Tách sản phẩm")
                     products = ProcessHandler.cat_giua_theo_dong(text,"Mã vật tư","Tổng:")
+                    print(products)
                     products = ProcessHandler.tachsanpham_JMart(products)
+                    print("--------------")
                     #print(ProcessHandler.debug_structure(products))
                     print(products)
                     if products:
@@ -8063,7 +8030,7 @@ f'đã thêm hàng khuyến mãi <b><span style="color: green;">{kiemtra}</span>
 
 
 
-                    products = ProcessHandler.lamsachdonhang(text,"VAT/GST No. 0107889783","Subtotal VATABLE  :")
+                    products = ProcessHandler.lamsachdonhang(text,"VAT/GST No. 1102018142","Subtotal VATABLE  :")
 
                     products = ProcessHandler.tach_san_pham_DIY(products)
                     delivery_address = "14 Phan Đăng Lưu, Khu phố 7, Biên Hòa, Đồng Nai"
@@ -8796,30 +8763,68 @@ f'đã thêm hàng khuyến mãi <b><span style="color: green;">{kiemtra}</span>
 
                 elif vendor == "Winmart":
                     print(text)
-                    
+
                     lines = text.split("\n")
+
                     idx = next((i for i, line in enumerate(lines) if "Ngày đặt hàng (PO date)" in line), -1)
                     entry_date = lines[idx + 1].strip() if idx != -1 and idx + 1 < len(lines) else None
-                    entry_date = entry_date.replace('.','/')
-                    
+                    entry_date = entry_date.replace('.', '/')
 
-                    ghichu = "\n".join(text.split("Ghi chú")[1].split("Nhà cung cấp (Supplier): 0002011398")[0].strip().splitlines()[:-1])
-                    ghichu = ghichu.replace('\n',' ')
-                    
-                    
-                    
-                    
+
+                    ghichu = "\n".join(
+                        text.split("Ghi chú")[1]
+                        .split("Nhà cung cấp (Supplier): 0002011398")[0]
+                        .strip()
+                        .splitlines()[:-1]
+                    )
+                    ghichu = ghichu.replace('\n', ' ')
+
 
                     idx = next((i for i, line in enumerate(lines) if "Số đơn hàng (PO No.)" in line), -1)
                     po_number = lines[idx + 1].strip() if idx != -1 and idx + 1 < len(lines) else None
 
                     idx = next((i for i, line in enumerate(lines) if "Ngày giao (Delivery Date)" in line), -1)
                     cancel_date = lines[idx + 1].strip() if idx != -1 and idx + 1 < len(lines) else None
-                    cancel_date = cancel_date.replace('.','/')
+                    cancel_date = cancel_date.replace('.', '/')
 
-                    idx = next((i for i, line in enumerate(lines) if "Địa chỉ giao hàng (Delivery Address)" in line), -1)
-                    diachigiaohang = lines[idx + 1].strip() if idx != -1 and idx + 1 < len(lines) else None
-                    diachigiaohang = diachigiaohang.replace('.','/')
+
+                    # ===== ĐỊA CHỈ GIAO HÀNG =====
+
+                    idx = next(
+                        (i for i, line in enumerate(lines)
+                        if "Địa chỉ giao hàng (Delivery Address)" in line),
+                        -1
+                    )
+
+                    if idx != -1:
+                        ma_kho = lines[idx + 1].strip()
+
+                        # lấy phần từ sau mã kho đến trước "Thông tin đơn hàng"
+                        address_lines = []
+
+                        for line in lines[idx + 2:]:
+                            if "Thông tin đơn hàng (Information)" in line:
+                                break
+
+                            line = line.strip()
+
+                            # bỏ dòng trùng kiểu: 6863 - WM+ HCM 60 Liên khu 10-11
+                            if "WM+" in line:
+                                continue
+
+                            if line:
+                                address_lines.append(line)
+
+                        diachi = " ".join(address_lines)
+
+                        diachigiaohang = f"{ma_kho} - {diachi}"
+
+                    else:
+                        diachigiaohang = None
+
+                    print(diachigiaohang)
+                    
+                    
                     
                 
                     
@@ -8860,6 +8865,8 @@ f'đã thêm hàng khuyến mãi <b><span style="color: green;">{kiemtra}</span>
                         diachi = " ".join(diachi)
                     else:
                         diachi = None
+
+                    print("Địa chỉ giao hàng:", diachigiaohang)
                     
                     
 
@@ -8886,7 +8893,7 @@ f'đã thêm hàng khuyến mãi <b><span style="color: green;">{kiemtra}</span>
                             print('')
                             result  = ProcessHandler.upload_file_to_drive(file_path, po_number)
                             print(result )
-                            file_url = result.get("url")
+                            file_url =  result.get("url")
                         else:
                             print(page_label)
                             print(page_num)

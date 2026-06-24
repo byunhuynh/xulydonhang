@@ -1,8 +1,48 @@
-from playwright.sync_api import sync_playwright
+from playwright.sync_api import sync_playwright, Browser, BrowserContext, Page
 import os
 import re
 import time as t
+import json
 STATE_FILE = "zalo_state.json"
+
+
+
+
+CHROME_PATHS = [
+    r"C:\Program Files\Google\Chrome\Application\chrome.exe",
+    r"C:\Program Files (x86)\Google\Chrome\Application\chrome.exe",
+]
+
+def find_chrome():
+    for path in CHROME_PATHS:
+        if os.path.exists(path):
+            return path
+    raise RuntimeError("❌ Máy chưa cài Google Chrome")
+
+
+
+
+NUMBER_EMOJI = {
+    '0': '0️⃣', '1': '1️⃣', '2': '2️⃣', '3': '3️⃣', '4': '4️⃣',
+    '5': '5️⃣', '6': '6️⃣', '7': '7️⃣', '8': '8️⃣', '9': '9️⃣'
+}
+
+def number_to_emoji(n):
+    return ''.join(NUMBER_EMOJI.get(d, d) for d in str(n))
+
+
+def format_sai_gia_list(text):
+    lines = text.splitlines()
+    new_lines = []
+
+    for i, line in enumerate(lines, 1):
+        # xoá số thứ tự cũ nếu có: 1. / 1)
+        clean_line = re.sub(r'^\d+[\.\)]\s*', '', line)
+
+        emoji_index = number_to_emoji(i)
+        new_lines.append(f"{emoji_index} {clean_line}")
+
+    return "\n".join(new_lines)
 
 
 # ==========================
@@ -110,33 +150,94 @@ def remove_processed_block(raw_block, filename="message.txt"):
 # ==========================
 # 2️⃣ HÀM MỞ ZALO + LOAD COOKIE
 # ==========================
-def open_zalo(headless = True):
-    playwright = sync_playwright().start()
-    browser = playwright.chromium.launch(headless=headless)
+def open_zalo(p, chrome_path, headless=True) -> tuple[Browser, BrowserContext, Page]:
+    browser = p.chromium.launch(
+        executable_path=chrome_path,
+        headless=headless,
+        args=["--disable-blink-features=AutomationControlled"]
+    )
 
-    # Nếu có sẵn cookie
+    context = None
+
     if os.path.exists(STATE_FILE):
-        print("🔐 Đã có trạng thái đăng nhập → mở Zalo...")
+        try:
+            with open(STATE_FILE, "r", encoding="utf-8") as f:
+                json.load(f)
+        except (json.JSONDecodeError, ValueError):
+            print("⚠️ File state JSON bị lỗi → xóa và login lại")
+            os.remove(STATE_FILE)
+
+    if os.path.exists(STATE_FILE):
+        print("🔐 Có storage_state → thử login...")
+
         context = browser.new_context(storage_state=STATE_FILE)
         page = context.new_page()
         page.goto("https://chat.zalo.me/")
-        page.wait_for_selector("#contact-search-input")
-        print("✅ Login OK – không cần quét QR")
-        return page
 
-    # Nếu chưa có cookie → yêu cầu login lần đầu
-    print("🔓 Chưa có login. Vui lòng quét QR...")
+        try:
+            # nếu thấy QR login → cookie hết hạn
+            page.wait_for_selector("text=Đăng nhập qua mã QR", timeout=5000)
+
+            print("⚠️ Cookie hết hạn → cần login lại")
+            context.close()
+            browser.close()
+
+            # Mở lại với headless=False để user quét QR
+            browser = p.chromium.launch(
+                executable_path=chrome_path,
+                headless=False,
+                args=["--disable-blink-features=AutomationControlled"]
+            )
+
+        except:
+            # không thấy QR → login OK
+            page.wait_for_selector("#contact-search-input")
+            print("✅ Login OK – không cần quét QR")
+            return browser, context, page
+
+    print("🔓 Chưa login. Vui lòng quét QR...")
+
+    browser.close()
+    browser = p.chromium.launch(
+        executable_path=chrome_path,
+        headless=False,
+        args=["--disable-blink-features=AutomationControlled"]
+    )
+
     context = browser.new_context()
     page = context.new_page()
-    page.goto("https://id.zalo.me/account?continue=https%3A%2F%2Fchat.zalo.me%2F")
+    page.goto("https://id.zalo.me/account?continue=https://chat.zalo.me/")
 
-    input("⏳ Đăng nhập xong, nhấn ENTER để lưu trạng thái... ")
+    # đợi login thành công
+    page.wait_for_selector("#contact-search-input")
 
     context.storage_state(path=STATE_FILE)
-    print("💾 Đã lưu cookie → tự động login lần sau.")
+    print("💾 Đã lưu cookie → lần sau auto login")
 
-    return page
+    return browser, context, page
 
+
+# ==========================
+# KEEP-ALIVE: làm mới cookie
+# ==========================
+def refresh_zalo_session():
+    """
+    Mở Zalo nền, kiểm tra session còn sống không.
+    Nếu còn → lưu lại cookie mới nhất rồi đóng.
+    Nếu hết hạn → mở cửa sổ để user quét QR.
+    """
+    chrome_path = find_chrome()
+
+    with sync_playwright() as p:
+        browser, context, page = open_zalo(p, chrome_path, headless=True)
+
+        # Lưu lại cookie mới nhất (Zalo có thể cấp token mới trong session)
+        context.storage_state(path=STATE_FILE)
+        print("🔄 Đã làm mới và lưu cookie.")
+
+        page.close()
+        context.close()
+        browser.close()
 
 # ==========================
 # 3️⃣ HÀM TÌM KIẾM TRONG ZALO
@@ -185,8 +286,7 @@ def search_in_zalo(page, text):
         print("❌ Không thể click kết quả đầu tiên:", e)
 
 
-
-def send_message(page, tinnhan):
+def send_message(page: Page, tinnhan: str):
     if not tinnhan:
         print("⚠️ Không có nội dung → bỏ qua gửi.")
         return
@@ -230,10 +330,45 @@ def send_message(page, tinnhan):
     page.keyboard.press("V")
     page.keyboard.up("Control")
 
-    # 6) Nhấn nút gửi
+    # 6) Đếm số tin nhắn hiện có trước khi gửi
+    msg_info = page.evaluate("""
+        () => {
+            const selectors = ['[class*="message-item"]', '[class*="msg-item"]', '[class*="chat-msg"]'];
+            for (const sel of selectors) {
+                const items = document.querySelectorAll(sel);
+                if (items.length > 0) return {count: items.length, sel: sel};
+            }
+            return {count: -1, sel: null};
+        }
+    """)
+
+    # 7) Nhấn nút gửi
     send_btn = page.locator('xpath=//*[@id="chat-input-container-id"]/div[2]/div[2]/div[2]/i')
     send_btn.wait_for(timeout=5000)
     send_btn.click()
+
+    # Bước 1: Chờ richInput trống → Zalo đã nhận lệnh gửi phía UI
+    try:
+        page.wait_for_function(
+            "() => { const el = document.querySelector('#richInput'); return el && el.innerText.trim() === ''; }",
+            timeout=5000
+        )
+    except Exception:
+        page.wait_for_timeout(1000)
+
+    # Bước 2: Chờ tin mới xuất hiện trong chat → server đã xác nhận qua WebSocket
+    count = msg_info.get("count", -1)
+    sel = msg_info.get("sel")
+    if count > 0 and sel:
+        try:
+            page.wait_for_function(
+                f"() => document.querySelectorAll('{sel}').length > {count}",
+                timeout=10000
+            )
+        except Exception:
+            page.wait_for_timeout(3000)
+    else:
+        page.wait_for_timeout(3000)
 
     print("✅ Đã gửi tin nhắn — KHÔNG LỖI CHỮ, KHÔNG MẤT KÝ TỰ.")
 
@@ -262,142 +397,167 @@ def get_zalo_value_auto(ma_khach_hang, vendor, filename="settings.ini"):
 
 
 
+def is_correct_chat(page, expected_name, timeout=5000):
+
+    try:
+        title = page.locator(
+            '//*[@id="header"]/div[1]/div[2]/div[1]/div/div-b18'
+        )
+
+        title.wait_for(timeout=timeout)
+
+        current_name = " ".join(title.inner_text().split())
+        expected_name = " ".join(expected_name.split())
+
+        print("👉 Current chat:", current_name)
+
+        return expected_name.lower() in current_name.lower()
+
+    except:
+        return False
 
 def gui_tinnhan():
-    # 👉 Mở Zalo
     groups = read_message_groups_with_raw("message.txt")
-    print(groups)
     if not groups:
-        return
+        return []
 
-    
-    
-    page = open_zalo()
-    prev = None
-    
+    chrome_path = find_chrome()
+    summary = []
 
-    for g in groups:
-        raw = g["raw"]
-        data = g["data"]
+    with sync_playwright() as p:
 
+        browser, context, page = open_zalo(p, chrome_path)
 
-        po              = data.get("PO")
-        vendor          = data.get("vendor")
-        ma_kh           = data.get("Mã Khách hàng")
-        start_time      = data.get("start_time")
-        text            = data.get("text")              # ĐÃ GỘP TẤT CẢ TEXT
-        tong_tien       = data.get("tong_tien")
-        tong_trongluong = data.get("tong_trongluong")
-        tong_kienhang = data.get("tong_kienhang")
-        sai_gia         = data.get("sai_gia")
-        end_time        = data.get("end_time")
-        time            = data.get("time")
-        store           = data.get("store")
-        tong_don        = data.get("tong_don")
-        khu_vuc         = data.get("khu_vuc")
-        url         = data.get("url")
-        khung_gio   = data.get("khung_gio") 
+        prev = None
 
+        for g in groups:
+            raw = g["raw"]
+            data = g["data"]
 
-        print("PO:", po)
-        print("Vendor:", vendor)
-        print("Mã KH:", ma_kh)
-        print("Start:", start_time)
-        print("Text:\n", text)
-        print("Tổng tiền:", tong_tien)
-        print("Tổng trọng lượng:", tong_trongluong)
-        print("Sai giá:", sai_gia)
-        print("End:", end_time)
-        print("Time:", time)
-        print("url:", url)
-        print("khung_gio:", khung_gio)
-        print("-----")
+            po = data.get("PO")
+            vendor = data.get("vendor")
+            ma_kh = data.get("Mã Khách hàng")
+            start_time = data.get("start_time")
+            text = data.get("text")
+            tong_tien = data.get("tong_tien")
+            tong_trongluong = data.get("tong_trongluong")
+            tong_kienhang = data.get("tong_kienhang")
+            sai_gia = data.get("sai_gia") or "0"
+            time_ = data.get("time")
+            store = data.get("store")
+            tong_don = data.get("tong_don")
+            khu_vuc = data.get("khu_vuc")
+            url = (data.get("url") or "").replace("/view?usp=drivesdk", "")
+            khung_gio = data.get("khung_gio")
 
-        zalo_key_value = get_zalo_value_auto(ma_kh, vendor)
-        print(f"zalo key: {zalo_key_value}")
-        
+            zalo_key_value = get_zalo_value_auto(ma_kh, vendor)
 
-        if not zalo_key_value:
-            print("⚠️ Không tìm thấy group Zalo → bỏ qua nhóm này")
-            continue
-        
-
-        if vendor == 'JV-Mart':
-            
-            message = (
-        f"🔔 TIN NHẮN TỰ ĐỘNG\n"
-        f"🏬 Hệ thống: JupViec\n"
-        f"⏱️ Xử lý lúc: {start_time} (Thời gian: {time})\n"
-        f"📍 Khu vực: {khu_vuc}\n"
-        f"📦 Tổng số đơn: {tong_don}\n"
-        f"📝 Danh sách đơn hàng:\n{text}"
-    )
-
-
-        elif vendor == 'JIT':
-            message = (
-        f"🔔 TIN NHẮN TỰ ĐỘNG\n"
-        f"🏬 Hệ thống: TopValue - JIT\n"
-        f"⏱️ Xử lý lúc: {start_time} (Thời gian: {time})\n"
-        f"📍 Khu vực: {khu_vuc}\n"
-        f"🌅 Buổi: {khung_gio}\n"
-        f"📦 Tổng số đơn: {tong_don}\n"
-    )
-
-
-    
-
-        else:
-            lines = ["🔔 TIN NHẮN TỰ ĐỘNG"]
-
-            if po:
-                lines.append(f"🎫 Đơn hàng: {po}")
-            if store:
-                lines.append(f"🏪 Store: {store}")
-            if start_time:
-                lines.append(f"⏱️ Xử lý lúc: {start_time}" + (f" (Thời gian: {time})" if time else ""))
-            if vendor:
-                lines.append(f"🏬 Hệ thống: {vendor}")
-            if url:
-                lines.append(f"🔗‍️ Link đơn hàng: {url}")
-                lines.append("⏳ Link chỉ tồn tại trong 90 ngày")
-            if tong_tien:
-                lines.append(f"💰 Tổng tiền: {tong_tien}")
-            if tong_kienhang:
-                lines.append(f"📦 Tổng số kiện: {tong_kienhang} kiện")
-            if tong_trongluong:
-                lines.append(f"⚖️ Tổng trọng lượng: {tong_trongluong}")
-
-            message = "\n".join(lines)
-
-            
-
-
-
-            if int(sai_gia) > 0:
-                message += (
-                    f"\n\n❗ Số mã sai giá: {sai_gia}\n"
-                    f"📝 Danh sách mã sai giá:\n{text}"
+            # ===== BUILD MESSAGE =====
+            message = ""
+            if vendor == 'JV-Mart':
+                message = (
+                    f"🔔 TIN NHẮN TỰ ĐỘNG\n"
+                    f"🏬 Hệ thống: JupViec\n"
+                    f"⏱️ Xử lý lúc: {start_time} (Thời gian: {time_})\n"
+                    f"📍 Khu vực: {khu_vuc}\n"
+                    f"📦 Tổng số đơn: {tong_don}\n"
+                    f"📝 Danh sách đơn hàng:\n{text}"
                 )
 
+            elif vendor == 'JIT':
+                message = (
+                    f"🔔 TIN NHẮN TỰ ĐỘNG\n"
+                    f"🏬 Hệ thống: TopValue - JIT\n"
+                    f"⏱️ Xử lý lúc: {start_time} (Thời gian: {time_})\n"
+                    f"📍 Khu vực: {khu_vuc}\n"
+                    f"🌅 Buổi: {khung_gio}\n"
+                    f"📦 Tổng số đơn: {tong_don}\n"
+                )
 
-        if prev != zalo_key_value:
-            search_in_zalo(page, zalo_key_value)
-            t.sleep(1)
-            
-        print(message)
-        send_message(page, message)
+            else:
+                lines = ["🔔 TIN NHẮN TỰ ĐỘNG"]
 
-        remove_processed_block(raw, "message.txt")
-        prev = zalo_key_value
+                if po: lines.append(f"🎫 Đơn hàng: {po}")
+                if store: lines.append(f"🏪 Store: {store}")
+                if start_time: lines.append(f"⏱️ Xử lý lúc: {start_time}")
+                if vendor: lines.append(f"🏬 Hệ thống: {vendor}")
+                if url:
+                    lines.append(f"🔗 Link đơn hàng: {url}")
+                    lines.append("⏳ Link chỉ tồn tại trong 90 ngày")
+                if tong_tien: lines.append(f"💰 Tổng tiền: {tong_tien}")
+                if tong_kienhang: lines.append(f"📦 Tổng số kiện: {tong_kienhang}")
+                if tong_trongluong: lines.append(f"⚖️ Tổng trọng lượng: {tong_trongluong}")
 
+                message = "\n".join(lines)
 
+                if int(sai_gia) > 0:
+                    formatted_text = format_sai_gia_list(text)
+                    message += (
+                        f"\n\n❗ Số mã sai giá: {number_to_emoji(sai_gia)}\n"
+                        f"📝 Danh sách mã sai giá:\n{formatted_text}"
+                    )
 
+            # ===== KHÔNG CÓ NHÓM =====
+            if not zalo_key_value:
+                summary.append({
+                    "zalo": None,
+                    "message": message,
+                    "status": "no_group"
+                })
+                continue
 
+            # ===== VÀO ĐÚNG CHAT =====
+            if prev != zalo_key_value and not is_correct_chat(page, zalo_key_value):
 
+                for _ in range(3):
+                    search_in_zalo(page, zalo_key_value)
+                    page.wait_for_timeout(1200)
 
-    t.sleep(3)
-    page.close()
+                    if is_correct_chat(page, zalo_key_value):
+                        prev = zalo_key_value
+                        break
+                else:
+                    summary.append({
+                        "zalo": zalo_key_value,
+                        "message": message,
+                        "status": "wrong_chat"
+                    })
+                    continue
+
+            # ===== GỬI TIN =====
+            try:
+                t.sleep(0.3)  # nghỉ 1s trước khi gửi
+                send_message(page, message)
+                remove_processed_block(raw)
+                t.sleep(0.3)
+
+                summary.append({
+                    "zalo": zalo_key_value,
+                    "message": message,
+                    "status": "success"
+                })
+
+            except Exception as e:
+                summary.append({
+                    "zalo": zalo_key_value,
+                    "message": message,
+                    "status": f"error: {str(e)}"
+                })
+
+            prev = zalo_key_value
+        # Lưu lại cookie mới nhất sau mỗi phiên gửi
+        try:
+            context.storage_state(path=STATE_FILE)
+            print("💾 Đã cập nhật cookie sau phiên gửi.")
+        except Exception as e:
+            print(f"⚠️ Không lưu được cookie: {e}")
+
+        t.sleep(2)
+        page.close()
+        context.close()
+        browser.close()
+
+    return summary
 
 
 # ==========================

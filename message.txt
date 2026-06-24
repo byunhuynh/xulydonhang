@@ -1,0 +1,8 @@
+[PO: 0000021183
+store: 14 Phan Đăng Lưu, Khu phố 7, Biên Hòa, Đồng Nai
+vendor: MR.DIY
+Mã Khách hàng: MN_MT_MRDIY
+start_time: 24/06/2026 08:40:34
+url: https://drive.google.com/file/d/1NwLGO4zlvGpeeBg3Zu5dBHmomztvIvwH/view?usp=drivesdk
+text: Mã hàng TP30671 - Bột tẩy lồng Smile Mom 450g ( 20 túi /1 thùng), Giá trên PO 22,996.0, Giá đúng: 37,091.0. Chênh lệch -14,095
+text: Mã hàng HH00213 - Chai tẩy vệ sinh toilet Chung Blue Hương Đào (QC*24)(Cốc thả màu cam, màu vàng), Giá trên PO 23,870.0, Giá đúng: 38,500.0. Chênh lệch -14,630

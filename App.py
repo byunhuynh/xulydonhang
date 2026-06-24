@@ -15,7 +15,6 @@ import requests
 import re
 from datetime import datetime
 import json
-import requests
 import send_zalo
 
 url = "https://script.google.com/macros/s/AKfycbyeg7Mu72mWOIEv5gYDsiGSY9FB7d-OiPdzM-PdAdBapTp4sUhb7ly1_N2ZtvqUrW8wBA/exec"
@@ -23,7 +22,7 @@ FOLDER_PATH = os.path.abspath("đơn hàng")  # Chuyển "đơn hàng" sang đư
 ALLOWED_EXTENSIONS = {".pdf", ".xlsx", ".txt"}  # Chỉ nhận các file có định dạng này
 
 
-window_title = "Xử lý đơn hàng - Blue Hà Thành"
+window_title = "Blue Hà Thành - Order System v2.0"
 def bring_window_to_top(window_title):
     """Đưa cửa sổ có tiêu đề window_title lên top"""
     windows = gw.getWindowsWithTitle(window_title)
@@ -113,6 +112,13 @@ class MyApp(QMainWindow):
         #self.ui.groupBox_6.setHidden(True)
         #self.ui.groupBox_5.setGeometry(10, 259, 531, 220)
         #self.ui.tableStatus.setGeometry(10, 20, 511, 190)
+        STATE_FILE = "zalo_state.json"
+
+        if not os.path.exists(STATE_FILE):
+            self.ui.zalo_btn.hide()   # Ẩn nút
+        else:
+            self.ui.zalo_btn.show()  # (không bắt buộc, nhưng rõ ràng)
+            
 
         #groupBox_6
         self.ui.groupBox_6.setHidden(True)
@@ -139,12 +145,30 @@ class MyApp(QMainWindow):
         self.ui.xacnhan.clicked.connect(self.xu_ly_don_hang)  # Xử lý khi nhấn nút
         self.ui.loadfile.clicked.connect(self.xoanhatky)  # Xử lý khi nhấn nút
         self.ui.loadfile.clicked.connect(self.load_files_from_folder)  # Xử lý khi nhấn nút
+        self.ui.zalo_btn.clicked.connect(self.gui_zalo)
         
 
         
 
         self.ui.listdanhsach.keyPressEvent = self.xoa_file  # Nhấn Delete để xóa file khỏi danh sách
-        noidunglock = self.check_lock()
+       
+        active, message = self.check_lock("https://script.googleusercontent.com/macros/echo?user_content_key=AehSKLgV3aPK8-f8VNJwzP90ajqVHPrVA79EFXzEXNYwrl9a54FprnPC1zi38wV1DWN784FxkOHL4WsuQDLudGj0fIXRb9OuiA_fPs4ywbl7c0HTNt1SE2tpqk6RBRfJqv0xZh4N9LVKeKO6EB7SZS3cIWMyIfzzFKpgEArXcuzS-Uy0lmzhpAr5lKU-Ty7m8LNEyNW9a5Z_IN464LDfEpQLEMpvt7cpiS8dxCxSAz_d778KpxTAnNj5uQtViioM2bAtD9bfrWbfMf7Xod-idEFvoEKouvTLTcqBLmNJetxr&lib=MqsGBAay818OJ-NUt2Er7nVZX_pgFzBjH")
+         
+
+        # ❌ KHÓA APP nếu KHÔNG active
+        if active != 1:
+            self.ui.log.clear()
+
+            for line in message.split('\n'):
+                self.ui.log.append(line)
+
+            self.setEnabled(False)  # khóa toàn bộ app
+            return
+
+
+
+
+        '''
 
         if noidunglock:
             if noidunglock == "Không kết nối":
@@ -160,7 +184,7 @@ class MyApp(QMainWindow):
                         self.ui.log.append(line)
                     self.setEnabled(False)  # ✅ Đúng
 
-
+'''
 
 
 
@@ -173,6 +197,21 @@ class MyApp(QMainWindow):
 
 
 
+    def gui_zalo(self):
+        try:
+            result = send_zalo.gui_tinnhan()
+
+            for item in result:
+                self.ui.log.append(item["zalo"] or "KHÔNG CÓ NHÓM")
+                self.ui.log.append("nội dung:")
+                self.ui.log.append(item["message"])
+                self.ui.log.append(f"trạng thái: {item['status']}")
+                self.ui.log.append("-----")
+
+            self.ui.log.append("✅ Đã gửi Zalo thành công")
+
+        except Exception as e:
+            self.ui.log.append(f"❌ Lỗi gửi Zalo: {e}")
 
     def ensure_monthly_order_folder(self):
         """
@@ -324,21 +363,34 @@ class MyApp(QMainWindow):
 
 
 
-    def check_lock(self):
-        
-        
+    def check_lock(self, url: str):
+        """
+        Chỉ cho phép chạy khi active == 1
+        Mọi lỗi khác → coi như bị khóa
+        """
+        try:
+            resp = requests.get(url, timeout=5)
+            resp.raise_for_status()
 
-        file_id = "1DzXXxrR3eHN4KpofNvY6XAV9p3bqFLPRmF0wP8kX1Sg"
-        url = f"https://docs.google.com/document/d/{file_id}/export?format=txt"
-       
+            data = resp.json()
 
-        response = requests.get(url)
-        if response.status_code == 200:
-            content = response.text
-            return content
-        else:
-            print(f"Không thể tải file. Mã lỗi HTTP: {response.status_code}")
-            return "Không kết nối"
+            active = int(data.get("active", 0))
+            message = data.get("text", "Không có nội dung")
+
+            return active, message
+
+        except requests.exceptions.Timeout:
+            return 0, "❌ Không kết nối được server (timeout)"
+
+        except requests.exceptions.ConnectionError:
+            return 0, "❌ Không thể kết nối server"
+
+        except ValueError:
+            return 0, "❌ Dữ liệu trả về không hợp lệ (JSON lỗi)"
+
+        except Exception as e:
+            return 0, f"❌ Lỗi không xác định:\n{str(e)}"
+
         
     def xoanhatky(self):
         self.ui.log.clear()
