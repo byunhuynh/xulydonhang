@@ -5573,7 +5573,15 @@ f'đã thêm hàng khuyến mãi <b><span style="color: green;">{kiemtra}</span>
             if match:
                 start_date, end_date = match.groups()
                 try:
+                    # Xóa phần năm, xử lý cả M/D/YYYY (6/22/2026) lẫn D/M/YYYY (22/6/2026)
+                    year_match = re.search(r"/(\d{4})$", time_to_check)
                     time_to_check = re.sub(r"/\d{4}$", "", time_to_check)
+                    parts = time_to_check.split("/")
+                    if len(parts) == 2:
+                        p1, p2 = int(parts[0]), int(parts[1])
+                        # Nếu phần đầu > 12 thì là D/M, nếu phần sau > 12 thì là M/D → đổi lại
+                        if p1 <= 12 and p2 > 12:
+                            time_to_check = f"{p2}/{p1}"
                     start_date = normalize_date(start_date)
                     end_date = normalize_date(end_date)
                     current_year = datetime.now().year

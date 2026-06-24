@@ -10213,3 +10213,13 @@ Tên file                        | Trang | Hệ thống | Mã khách hàng | PO 
 Tên file                        | Trang | Hệ thống | Mã khách hàng | PO         | Đơn giá         | Trạng thái  
 (AV091_HTLA1) PO_0000021183.PDF | 1/1   | MR.DIY   | MN_MT_MRDIY   | 0000021183 | Có 4 mã sai giá | ⚠️Hoàn Thành
 ----- Kết thúc bảng -----
+
+----- BẢNG STATUS lúc 08:42:51 24/06/2026 -----
+Tên file                        | Trang | Hệ thống | Mã khách hàng | PO         | Đơn giá         | Trạng thái  
+(AV091_HTLA1) PO_0000021183.PDF | 1/1   | MR.DIY   | MN_MT_MRDIY   | 0000021183 | Có 4 mã sai giá | ⚠️Hoàn Thành
+----- Kết thúc bảng -----
+
+----- BẢNG STATUS lúc 08:46:48 24/06/2026 -----
+Tên file                        | Trang | Hệ thống | Mã khách hàng | PO         | Đơn giá  | Trạng thái 
+(AV091_HTLA1) PO_0000021183.PDF | 1/1   | MR.DIY   | MN_MT_MRDIY   | 0000021183 | Đúng giá | ✅Hoàn Thành
+----- Kết thúc bảng -----
