@@ -79,9 +79,12 @@ class FileProcessorThread(QThread):
     def run(self):
         """Chạy lần lượt từng file"""
         for file in self.file_list:
-            xulydonhang.process_handler.process_file(file, self.stt)  # Truyền STT vào xử lý
+            try:
+                xulydonhang.process_handler.process_file(file, self.stt)  # Truyền STT vào xử lý
+            except Exception as e:
+                self.log_signal.emit(f"❌ Lỗi khi xử lý file <b>{file}</b>: {e}")
             kiemtragia = 0
-            
+
             self.stt = self.stt + 1
             self.stt_signal.emit(self.stt)  # 🚀 Gửi STT mới về giao diện
             
@@ -298,13 +301,21 @@ class MyApp(QMainWindow):
 
             # Gửi POST
             url = "https://script.google.com/macros/s/AKfycbyeg7Mu72mWOIEv5gYDsiGSY9FB7d-OiPdzM-PdAdBapTp4sUhb7ly1_N2ZtvqUrW8wBA/exec"
-            response = requests.post(url, data=json.dumps(payload), headers={'Content-Type': 'application/json'})
+            response = None
+            response_data = None
+            try:
+                response = requests.post(url, data=json.dumps(payload), headers={'Content-Type': 'application/json'}, timeout=15)
+                response.raise_for_status()
+                response_data = response.json()
+            except requests.exceptions.RequestException as e:
+                print("⚠️ Lỗi gửi dữ liệu lên Google Sheets:", e)
+                f.write(f"⚠️ Lỗi gửi dữ liệu lên Google Sheets: {e}\n")
+            except json.JSONDecodeError:
+                raw_text = response.text if response is not None else ''
+                print("⚠️ Phản hồi từ Google Sheets không phải JSON hợp lệ:", raw_text)
+                f.write(f"⚠️ Phản hồi từ Google Sheets không phải JSON hợp lệ: {raw_text}\n")
 
-
-
-            # 📥 Nhận phản hồi từ GAS API
-            response_data = response.json()
-            duplicated_pos = response_data.get("duplicatedPOs", [])
+            duplicated_pos = response_data.get("duplicatedPOs", []) if response_data else []
 
             print("📥 duplicated_pos =", duplicated_pos)
 
@@ -348,13 +359,12 @@ class MyApp(QMainWindow):
                 else:
                     print(f"✅ Dòng {row} PO không trùng: '{po_text}'")
 
+            if response is not None:
+                print("Status Code:", response.status_code)
+                print("Response:", response.text)
 
-            print("Status Code:", response.status_code)
-            print("Response:", response.text)
-
-
-
-        self.ui.log.append(response.text)
+        if response is not None:
+            self.ui.log.append(response.text)
         self.ui.log.append("✅ Đã xuất tableStatus vào log.log (cột đã căn đều)")
 
         
@@ -554,8 +564,9 @@ class MyApp(QMainWindow):
 
 
 
-        # 2) Copy file nếu trạng thái hoàn thành
-        if "✅Hoàn Thành" in status or "⚠️Hoàn Thành" in status:
+        # 2) Copy file nếu trạng thái hoàn thành (bỏ qua hệ thống JIT-CHOICE)
+        is_done = "✅Hoàn Thành" in status or "⚠️Hoàn Thành" in status
+        if is_done and system.strip() != "JIT-CHOICE":
             import shutil, datetime, os
 
             # Lấy PO và strip whitespace/newline

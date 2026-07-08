@@ -22,6 +22,9 @@ import json
 from collections import defaultdict
 from zoneinfo import ZoneInfo  # Python 3.9+
 import base64, mimetypes
+import time
+import threading
+import urllib.parse
 
 
 
@@ -1335,17 +1338,17 @@ class ProcessHandler(QObject):
         
         print(f"📍 PO Number {po_number} ")
         print(f"📍 ")
-        STT_donhang_str = f"-{po_number}-{shipto}"     
+        STT_donhang_str = f"-{po_number}-{shipto}"
         hethong = 'JIT-CHOICE'
         trongluong = 0
         sokienhang = 0
-        
-        
+
+
 
 
 
         saigia = 0
-        tongtien = current_row
+        tongtien = 0
         diengiai = f"{hethong} Ngày đổ {po_number} {shipto}" 
         
 
@@ -1365,12 +1368,12 @@ class ProcessHandler(QObject):
         
             
         for product in products:
-            
+
             sheet[f"A{current_row}"] = entry_date
             sheet[f"AV{current_row}"] = songayno_TMDT
 
             sheet[f"B{current_row}"] = f'ĐĐH{vendor}{STT_donhang_str}'
-            
+
             sheet[f"C{current_row}"] = "Chưa thực hiện"
             sheet[f"D{current_row}"] = cancle_date
             sheet[f"AO{current_row}"] = po
@@ -1406,6 +1409,10 @@ class ProcessHandler(QObject):
             qty_ord_pcs = int(qty_ord_pcs) if qty_ord_pcs.is_integer() else qty_ord_pcs
             sheet[f"X{current_row}"] = qty_ord_pcs
 
+            self.log_signal.emit(f'📦 Đã thêm mã hàng {product["Barcode"]} - SL: {qty_ord_pcs} - Đơn giá: {giathucte:,.0f}')
+
+            tongtien += giathucte * qty_ord_pcs
+
             trongluong += (ProcessHandler.timtrongluong_sanpham(product["Barcode"]) * qty_ord_pcs)
             sokienhang += math.ceil(qty_ord_pcs / ProcessHandler.timquycach_sanpham(product["Barcode"]))
 
@@ -1419,9 +1426,9 @@ class ProcessHandler(QObject):
         sheet[f"L{start_row}"] = f'{diengiai}'   #f'{diengiai} (Tổng trọng lượng: {ProcessHandler.format_weight_kg(trongluong)})'
         wb.save(file_path)
         print(f"✅ Đã ghi {len(products)} dòng vào '{file_path}', sheet '{sheet_name}'!")
-        
-        return saigia
-    
+
+        return saigia, tongtien
+
 
 
 
@@ -2991,9 +2998,15 @@ class ProcessHandler(QObject):
         path: đường dẫn file gốc
         output_name: tên file muốn đặt trên Drive (KHÔNG cần đuôi)
                     nếu None -> dùng tên gốc
+
+        Đọc file ngay (đồng bộ) rồi đẩy phần gọi mạng (POST + retry) chạy nền,
+        để việc upload chậm/lỗi tạm thời không chặn các bước xử lý tiếp theo.
+        Luôn trả về ngay link mặc định dạng ".../exec?po=<PO>" (không phụ thuộc
+        vào kết quả upload thật); kết quả upload thật sự được ghi vào message.txt khi hoàn tất.
         """
 
         script_url = "https://script.google.com/macros/s/AKfycbx2ZJhdxEAZq_79ibt3g5UeqccNqLT2ScOtRldnwlgRQB2JdquUPSnSebMQoYESNSv2/exec"
+        view_url_base = "https://script.google.com/macros/s/AKfycby9fc3IaX1-EwIb26g34WLs8TbQXNkdxeqpVSYSWddwwxRAFaz9kjsS9yFhypezIaF2/exec?po="
 
         # Detect mime
         mime, _ = mimetypes.guess_type(path)
@@ -3009,7 +3022,7 @@ class ProcessHandler(QObject):
         else:
             filename = os.path.splitext(os.path.basename(path))[0]
 
-        # Encode file
+        # Encode file ngay (đồng bộ) vì file gốc có thể bị xóa ngay sau khi hàm này return
         with open(path, "rb") as f:
             b64 = base64.b64encode(f.read()).decode("ascii")
 
@@ -3020,15 +3033,30 @@ class ProcessHandler(QObject):
             "file_b64": b64
         }
 
-        r = requests.post(
-            script_url,
-            data=json.dumps(payload),
-            headers={"Content-Type": "application/json"},
-            timeout=60
-        )
+        def _upload_in_background():
+            max_retries = 3
+            last_error = None
+            for attempt in range(1, max_retries + 1):
+                try:
+                    r = requests.post(
+                        script_url,
+                        data=json.dumps(payload),
+                        headers={"Content-Type": "application/json"},
+                        timeout=60
+                    )
+                    r.raise_for_status()
+                    print(f"✅ Upload Drive OK: {filename}")
+                    return
+                except (requests.exceptions.HTTPError, requests.exceptions.ConnectionError, requests.exceptions.Timeout) as e:
+                    last_error = e
+                    print(f"⚠️ Upload Drive lỗi (lần {attempt}/{max_retries}): {e}")
+                    if attempt < max_retries:
+                        time.sleep(2 * attempt)
 
-        r.raise_for_status()
-        return r.json()
+            print(f"❌ Upload Drive thất bại sau {max_retries} lần thử: {last_error}")
+
+        threading.Thread(target=_upload_in_background, daemon=True).start()
+        return {"url": view_url_base + urllib.parse.quote(str(filename))}
 
 
 
@@ -7083,9 +7111,10 @@ f'đã thêm hàng khuyến mãi <b><span style="color: green;">{kiemtra}</span>
         if file_path.lower().endswith(".pdf"):
             doc = fitz.open(file_path)
             kiemtrapo = ""
-            
+            tong_tien_pdf = 0
+
             full_text = "\n".join(page.get_text("text") for page in doc)
-        
+
 
             for page_num in range(len(doc)):
                 text = doc[page_num].get_text("text")
@@ -7137,7 +7166,7 @@ f'đã thêm hàng khuyến mãi <b><span style="color: green;">{kiemtra}</span>
 
 
                         # Gửi từng nhóm sang JIT
-                        ProcessHandler.write_to_dondathang_JIT(
+                        _, tongtien_po = ProcessHandler.write_to_dondathang_JIT(
                             self,
                             products,
                             'MN_JIT_01512',
@@ -7149,8 +7178,12 @@ f'đã thêm hàng khuyến mãi <b><span style="color: green;">{kiemtra}</span>
                             wh,
                             po_number # warehouse
                         )
+                        tong_tien_pdf += tongtien_po
 
                         self.table_signal.emit(file_name, page_label, 'JIT-CHOICE', wh, po_number, '', "✅Hoàn Thành")
+
+                        if page_num == len(doc) - 1:
+                            ProcessHandler.ghi_message(f"tong_tien: {tong_tien_pdf:,.0f}")
 
                     #JIT air_waybill
                     match = re.match(r"air_waybill_(.+?)_(\d+)\.pdf", file_name)
@@ -7226,7 +7259,7 @@ f'đã thêm hàng khuyến mãi <b><span style="color: green;">{kiemtra}</span>
 
 
                         # Gửi từng nhóm sang JIT
-                        ProcessHandler.write_to_dondathang_JIT(
+                        _, tongtien_po = ProcessHandler.write_to_dondathang_JIT(
                             self,
                             products,
                             'MN_JIT_01512',
@@ -7238,12 +7271,14 @@ f'đã thêm hàng khuyến mãi <b><span style="color: green;">{kiemtra}</span>
                             wh,
                             po_number # warehouse
                         )
+                        tong_tien_pdf += tongtien_po
 
                         self.table_signal.emit(file_name, page_label, 'JIT-CHOICE', wh, po_number, '', "✅Hoàn Thành")
-                        
+
                         if page_num == len(doc) - 1:
                             print('Trang cuối')
                             ProcessHandler.ghi_message(f"tong_don: {len(doc)}")
+                            ProcessHandler.ghi_message(f"tong_tien: {tong_tien_pdf:,.0f}")
                             now2 = datetime.now()
                             now_str = now2.strftime("%d/%m/%Y %H:%M:%S")
                             ProcessHandler.ghi_message(f"end_time: {now_str}")

@@ -473,6 +473,8 @@ def gui_tinnhan():
                     f"🌅 Buổi: {khung_gio}\n"
                     f"📦 Tổng số đơn: {tong_don}\n"
                 )
+                if tong_tien:
+                    message += f"💰 Tổng tiền: {tong_tien}\n"
 
             else:
                 lines = ["🔔 TIN NHẮN TỰ ĐỘNG"]
