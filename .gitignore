@@ -5,7 +5,7 @@ __pycache__/
 
 # ===== windows =====
 *.exe 
-
+log.log
 # ===== Virtual Environment =====
 .venv/
 venv/

@@ -14389,3 +14389,10 @@ air_waybill_WH6_HCM_06072026.pdf | 9/11  | JIT-CHOICE | WH6_HCM       | 2607060W
 air_waybill_WH6_HCM_06072026.pdf | 10/11 | JIT-CHOICE | WH6_HCM       | 2607060YD3VTX6 |         | ✅Hoàn Thành
 air_waybill_WH6_HCM_06072026.pdf | 11/11 | JIT-CHOICE | WH6_HCM       | 2607060YD3T409 |         | ✅Hoàn Thành
 ----- Kết thúc bảng -----
+
+----- BẢNG STATUS lúc 15:39:57 08/07/2026 -----
+Tên file             | Trang | Hệ thống | Mã khách hàng | PO         | Đơn giá         | Trạng thái  
+PO20260708095247.pdf | 1/1   | Winmart  | MB_MT_WIM1331 | 4192588618 | Đúng giá        | ✅Hoàn Thành 
+PO20260708095239.pdf | 1/2   | Winmart  | MB_MT_WIM1331 | 4192616987 | Có 1 mã sai giá | ⚠️Hoàn Thành
+----- Kết thúc bảng -----
+⚠️ Lỗi gửi dữ liệu lên Google Sheets: HTTPSConnectionPool(host='script.googleusercontent.com', port=443): Read timed out. (read timeout=15)
