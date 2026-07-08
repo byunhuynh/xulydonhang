@@ -447,7 +447,7 @@ def gui_tinnhan():
             store = data.get("store")
             tong_don = data.get("tong_don")
             khu_vuc = data.get("khu_vuc")
-            url = (data.get("url") or "").replace("/view?usp=drivesdk", "")
+            url = f"https://bluedonhang.pages.dev/?po={po}" if po else ""
             khung_gio = data.get("khung_gio")
 
             zalo_key_value = get_zalo_value_auto(ma_kh, vendor)
@@ -485,7 +485,6 @@ def gui_tinnhan():
                 if vendor: lines.append(f"🏬 Hệ thống: {vendor}")
                 if url:
                     lines.append(f"🔗 Link đơn hàng: {url}")
-                    lines.append("⏳ Link chỉ tồn tại trong 90 ngày")
                 if tong_tien: lines.append(f"💰 Tổng tiền: {tong_tien}")
                 if tong_kienhang: lines.append(f"📦 Tổng số kiện: {tong_kienhang}")
                 if tong_trongluong: lines.append(f"⚖️ Tổng trọng lượng: {tong_trongluong}")
