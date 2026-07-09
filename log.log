@@ -14396,3 +14396,388 @@ PO20260708095247.pdf | 1/1   | Winmart  | MB_MT_WIM1331 | 4192588618 | Đúng gi
 PO20260708095239.pdf | 1/2   | Winmart  | MB_MT_WIM1331 | 4192616987 | Có 1 mã sai giá | ⚠️Hoàn Thành
 ----- Kết thúc bảng -----
 ⚠️ Lỗi gửi dữ liệu lên Google Sheets: HTTPSConnectionPool(host='script.googleusercontent.com', port=443): Read timed out. (read timeout=15)
+
+----- BẢNG STATUS lúc 16:46:30 08/07/2026 -----
+Tên file                                             | Trang | Hệ thống | Mã khách hàng | PO           | Đơn giá         | Trạng thái  
+222-CONG TY CP HA THANH LONG AN 1  CFMB 8.7.2026.txt | 1/1   | COOPFOOD | MB_MT_CF9124  | 102592446-00 | Có 2 mã sai giá | ⚠️Hoàn Thành
+----- Kết thúc bảng -----
+
+----- BẢNG STATUS lúc 16:55:57 08/07/2026 -----
+Tên file                                             | Trang | Hệ thống | Mã khách hàng | PO           | Đơn giá         | Trạng thái  
+HA THANH VD-2547 P-5482543.pdf                       | 1/1   | Satra    | MN_MT_STF1142 | P-005482543  | Đúng giá        | ✅Hoàn Thành 
+5482675 - HA THANH.pdf                               | 1/1   | Satra    | MN_MT_STF1109 | P-005482675  | Đúng giá        | ✅Hoàn Thành 
+222-CONG TY CP HA THANH LONG AN 1  CFMB 8.7.2026.txt | 1/1   | COOPFOOD | MB_MT_CF9124  | 102592446-00 | Có 2 mã sai giá | ⚠️Hoàn Thành
+----- Kết thúc bảng -----
+⚠️ Lỗi gửi dữ liệu lên Google Sheets: HTTPSConnectionPool(host='script.googleusercontent.com', port=443): Read timed out. (read timeout=15)
+
+----- BẢNG STATUS lúc 17:02:40 08/07/2026 -----
+Tên file                                  | Trang | Hệ thống | Mã khách hàng       | PO            | Đơn giá         | Trạng thái  
+806_SOUTHDC_Q06_3005382_2627057198233.pdf | 2/35  | BigC     | CTY TNHH DV EB      | 2627057198233 | Đúng giá        | ✅Hoàn Thành 
+806_SOUTHDC_Q06_3005382_2627057198233.pdf | 3/35  | BigC     | GO! AN LAC          | 2627057198233 | Có 1 mã sai giá | ⚠️Hoàn Thành
+806_SOUTHDC_Q06_3005382_2627057198233.pdf | 4/35  | BigC     | GO! DA NANG         | 2627057198233 | Đúng giá        | ✅Hoàn Thành 
+806_SOUTHDC_Q06_3005382_2627057198233.pdf | 5/35  | BigC     | GO! HUE             | 2627057198233 | Đúng giá        | ✅Hoàn Thành 
+806_SOUTHDC_Q06_3005382_2627057198233.pdf | 6/35  | BigC     | GO! HUE             | 2627057198233 | Đúng giá        | ✅Hoàn Thành 
+806_SOUTHDC_Q06_3005382_2627057198233.pdf | 7/35  | BigC     | GO! PHU THANH       | 2627057198233 | Đúng giá        | ✅Hoàn Thành 
+806_SOUTHDC_Q06_3005382_2627057198233.pdf | 8/35  | BigC     | GO! PHU THANH       | 2627057198233 | Đúng giá        | ✅Hoàn Thành 
+806_SOUTHDC_Q06_3005382_2627057198233.pdf | 9/35  | BigC     | GO! TAN HIEP        | 2627057198233 | Đúng giá        | ✅Hoàn Thành 
+806_SOUTHDC_Q06_3005382_2627057198233.pdf | 10/35 | BigC     | GO! TAN HIEP        | 2627057198233 | Đúng giá        | ✅Hoàn Thành 
+806_SOUTHDC_Q06_3005382_2627057198233.pdf | 11/35 | BigC     | GO! CAN THO         | 2627057198233 | Đúng giá        | ✅Hoàn Thành 
+806_SOUTHDC_Q06_3005382_2627057198233.pdf | 12/35 | BigC     | GO! CAN THO         | 2627057198233 | Đúng giá        | ✅Hoàn Thành 
+806_SOUTHDC_Q06_3005382_2627057198233.pdf | 13/35 | BigC     | GO! BINH DUONG      | 2627057198233 | Đúng giá        | ✅Hoàn Thành 
+806_SOUTHDC_Q06_3005382_2627057198233.pdf | 14/35 | BigC     | GO! TRUONG CHINH    | 2627057198233 | Đúng giá        | ✅Hoàn Thành 
+806_SOUTHDC_Q06_3005382_2627057198233.pdf | 15/35 | BigC     | GO! DA LAT          | 2627057198233 | Đúng giá        | ✅Hoàn Thành 
+806_SOUTHDC_Q06_3005382_2627057198233.pdf | 16/35 | BigC     | GO! DA LAT          | 2627057198233 | Đúng giá        | ✅Hoàn Thành 
+806_SOUTHDC_Q06_3005382_2627057198233.pdf | 17/35 | BigC     | TOPS MARKET AN PHU  | 2627057198233 | Đúng giá        | ✅Hoàn Thành 
+806_SOUTHDC_Q06_3005382_2627057198233.pdf | 18/35 | BigC     | GO! NGUYEN THI THAP | 2627057198233 | Đúng giá        | ✅Hoàn Thành 
+806_SOUTHDC_Q06_3005382_2627057198233.pdf | 19/35 | BigC     | TOPS MARKET AU CO   | 2627057198233 | Đúng giá        | ✅Hoàn Thành 
+806_SOUTHDC_Q06_3005382_2627057198233.pdf | 20/35 | BigC     | GO! QUANG NGAI      | 2627057198233 | Đúng giá        | ✅Hoàn Thành 
+806_SOUTHDC_Q06_3005382_2627057198233.pdf | 21/35 | BigC     | GO! QUANG NGAI      | 2627057198233 | Đúng giá        | ✅Hoàn Thành 
+806_SOUTHDC_Q06_3005382_2627057198233.pdf | 22/35 | BigC     | GO! BUON MA THUOT   | 2627057198233 | Đúng giá        | ✅Hoàn Thành 
+806_SOUTHDC_Q06_3005382_2627057198233.pdf | 23/35 | BigC     | GO! BA RIA          | 2627057198233 | Đúng giá        | ✅Hoàn Thành 
+806_SOUTHDC_Q06_3005382_2627057198233.pdf | 24/35 | BigC     | GO! NINH THUAN      | 2627057198233 | Đúng giá        | ✅Hoàn Thành 
+806_SOUTHDC_Q06_3005382_2627057198233.pdf | 25/35 | BigC     | GO! TAM KY          | 2627057198233 | Đúng giá        | ✅Hoàn Thành 
+806_SOUTHDC_Q06_3005382_2627057198233.pdf | 26/35 | BigC     | GO! PHU MY          | 2627057198233 | Đúng giá        | ✅Hoàn Thành 
+806_SOUTHDC_Q06_3005382_2627057198233.pdf | 27/35 | BigC     | GO! NHON TRACH      | 2627057198233 | Đúng giá        | ✅Hoàn Thành 
+806_SOUTHDC_Q06_3005382_2627057198233.pdf | 28/35 | BigC     | GO! TAN UYEN        | 2627057198233 | Đúng giá        | ✅Hoàn Thành 
+806_SOUTHDC_Q06_3005382_2627057198233.pdf | 29/35 | BigC     | GO! DIEN BAN        | 2627057198233 | Đúng giá        | ✅Hoàn Thành 
+806_SOUTHDC_Q06_3005382_2627057198233.pdf | 30/35 | BigC     | GO! HOA THANH       | 2627057198233 | Đúng giá        | ✅Hoàn Thành 
+806_SOUTHDC_Q06_3005382_2627057198233.pdf | 31/35 | BigC     | GO! RACH GIA        | 2627057198233 | Đúng giá        | ✅Hoàn Thành 
+806_SOUTHDC_Q06_3005382_2627057198233.pdf | 32/35 | BigC     | GO! HONG NGU        | 2627057198233 | Đúng giá        | ✅Hoàn Thành 
+806_SOUTHDC_Q06_3005382_2627057198233.pdf | 33/35 | BigC     | GO! THANH BINH      | 2627057198233 | Đúng giá        | ✅Hoàn Thành 
+806_SOUTHDC_Q06_3005382_2627057198233.pdf | 34/35 | BigC     | GO! AN NHON         | 2627057198233 | Đúng giá        | ✅Hoàn Thành 
+806_SOUTHDC_Q06_3005382_2627057198233.pdf | 35/35 | BigC     | GO! CU CHI          | 2627057198233 | Đúng giá        | ✅Hoàn Thành 
+----- Kết thúc bảng -----
+⚠️ Lỗi gửi dữ liệu lên Google Sheets: HTTPSConnectionPool(host='script.google.com', port=443): Read timed out. (read timeout=15)
+
+----- BẢNG STATUS lúc 08:18:02 09/07/2026 -----
+Tên file                                  | Trang | Hệ thống | Mã khách hàng         | PO            | Đơn giá  | Trạng thái 
+802_NORTHDC_Q06_3005382_2627057198126.pdf | 2/13  | BigC     | GO! THANG LONG        | 2627057198126 | Đúng giá | ✅Hoàn Thành
+802_NORTHDC_Q06_3005382_2627057198126.pdf | 3/13  | BigC     | GO! VINH              | 2627057198126 | Đúng giá | ✅Hoàn Thành
+802_NORTHDC_Q06_3005382_2627057198126.pdf | 4/13  | BigC     | GO! VINH PHUC         | 2627057198126 | Đúng giá | ✅Hoàn Thành
+802_NORTHDC_Q06_3005382_2627057198126.pdf | 5/13  | BigC     | GO! NAM DINH          | 2627057198126 | Đúng giá | ✅Hoàn Thành
+802_NORTHDC_Q06_3005382_2627057198126.pdf | 6/13  | BigC     | GO! LONG BIEN         | 2627057198126 | Đúng giá | ✅Hoàn Thành
+802_NORTHDC_Q06_3005382_2627057198126.pdf | 7/13  | BigC     | BIG C ME LINH         | 2627057198126 | Đúng giá | ✅Hoàn Thành
+802_NORTHDC_Q06_3005382_2627057198126.pdf | 8/13  | BigC     | GO! HA LONG           | 2627057198126 | Đúng giá | ✅Hoàn Thành
+802_NORTHDC_Q06_3005382_2627057198126.pdf | 9/13  | BigC     | TOPS MARKET ECO GREEN | 2627057198126 | Đúng giá | ✅Hoàn Thành
+802_NORTHDC_Q06_3005382_2627057198126.pdf | 10/13 | BigC     | GO! THAI NGUYEN       | 2627057198126 | Đúng giá | ✅Hoàn Thành
+802_NORTHDC_Q06_3005382_2627057198126.pdf | 11/13 | BigC     | TOPS MARKET PARKCITY  | 2627057198126 | Đúng giá | ✅Hoàn Thành
+802_NORTHDC_Q06_3005382_2627057198126.pdf | 12/13 | BigC     | GO! HA NAM            | 2627057198126 | Đúng giá | ✅Hoàn Thành
+802_NORTHDC_Q06_3005382_2627057198126.pdf | 13/13 | BigC     | GO! YEN BAI           | 2627057198126 | Đúng giá | ✅Hoàn Thành
+----- Kết thúc bảng -----
+
+----- BẢNG STATUS lúc 08:21:24 09/07/2026 -----
+Tên file                                  | Trang | Hệ thống       | Mã khách hàng  | PO            | Đơn giá  | Trạng thái 
+802_NORTHDC_QP0_3006900_2627057198195.pdf | 2/8   | BigC           | GO! THANG LONG | 2627057198195 | Đúng giá | ✅Hoàn Thành
+802_NORTHDC_QP0_3006900_2627057198195.pdf | 3/8   | BigC           | GO! HAI PHONG  | 2627057198195 | Đúng giá | ✅Hoàn Thành
+802_NORTHDC_QP0_3006900_2627057198195.pdf | 4/8   | BigC           | GO! VINH PHUC  | 2627057198195 | Đúng giá | ✅Hoàn Thành
+802_NORTHDC_QP0_3006900_2627057198195.pdf | 5/8   | BigC           | GO! HAI DUONG  | 2627057198195 | Đúng giá | ✅Hoàn Thành
+802_NORTHDC_QP0_3006900_2627057198195.pdf | 6/8   | BigC           | GO! NINH BINH  | 2627057198195 | Đúng giá | ✅Hoàn Thành
+802_NORTHDC_QP0_3006900_2627057198195.pdf | 7/8   | BigC           | GO! BAC GIANG  | 2627057198195 | Đúng giá | ✅Hoàn Thành
+802_NORTHDC_QP0_3006900_2627057198195.pdf | 8/8   | BigC           | GO! HA NAM     | 2627057198195 | Đúng giá | ✅Hoàn Thành
+806_SOUTHDC_QP0_3006900_2627057198290.pdf | 2/9   | BigC           | GO! AN LAC     | 2627057198290 | Đúng giá | ✅Hoàn Thành
+806_SOUTHDC_QP0_3006900_2627057198290.pdf | 3/9   | BigC           | GO! MIEN DONG  | 2627057198290 | Đúng giá | ✅Hoàn Thành
+806_SOUTHDC_QP0_3006900_2627057198290.pdf | 4/9   | BigC           | GO! GO VAP     | 2627057198290 | Đúng giá | ✅Hoàn Thành
+806_SOUTHDC_QP0_3006900_2627057198290.pdf | 5/9   | BigC           | GO! HUE        | 2627057198290 | Đúng giá | ✅Hoàn Thành
+806_SOUTHDC_QP0_3006900_2627057198290.pdf | 6/9   | BigC           | GO! TAN HIEP   | 2627057198290 | Đúng giá | ✅Hoàn Thành
+806_SOUTHDC_QP0_3006900_2627057198290.pdf | 7/9   | BigC           | GO! BINH DUONG | 2627057198290 | Đúng giá | ✅Hoàn Thành
+806_SOUTHDC_QP0_3006900_2627057198290.pdf | 8/9   | BigC           | GO! DA LAT     | 2627057198290 | Đúng giá | ✅Hoàn Thành
+806_SOUTHDC_QP0_3006900_2627057198290.pdf | 9/9   | BigC           | GO! MY THO     | 2627057198290 | Đúng giá | ✅Hoàn Thành
+Tam kỳ 8.pdf                              | 1/1   | COOP           | MN_MT_cop132   | 102553950-00  | Đúng giá | ✅Hoàn Thành
+bạc liêu 8.pdf                            | 1/1   | COOP           | MN_MT_COP142   | 102580737-00  | Đúng giá | ✅Hoàn Thành
+HÀ THÀNH VD2547 231021.pdf                | 1/1   | Không xác định |                |               |          | ❌Thất bại  
+Thắng lợi - Trường Chinh 8.pdf            | 1/1   | COOP           | MN_MT_COP570   | 102605329-00  | Đúng giá | ✅Hoàn Thành
+----- Kết thúc bảng -----
+
+----- BẢNG STATUS lúc 08:34:52 09/07/2026 -----
+Tên file                         | Trang | Hệ thống   | Mã khách hàng | PO             | Đơn giá | Trạng thái 
+air_waybill_WH6_HCM_08072026.pdf | 1/32  | JIT-CHOICE | WH6_HCM       | 2607085PY5T23A |         | ✅Hoàn Thành
+air_waybill_WH6_HCM_08072026.pdf | 2/32  | JIT-CHOICE | WH6_HCM       | 2607085QM72585 |         | ✅Hoàn Thành
+air_waybill_WH6_HCM_08072026.pdf | 3/32  | JIT-CHOICE | WH6_HCM       | 2607085QMT467C |         | ✅Hoàn Thành
+air_waybill_WH6_HCM_08072026.pdf | 4/32  | JIT-CHOICE | WH6_HCM       | 2607085QYS3765 |         | ✅Hoàn Thành
+air_waybill_WH6_HCM_08072026.pdf | 5/32  | JIT-CHOICE | WH6_HCM       | 2607085RNWM3BA |         | ✅Hoàn Thành
+air_waybill_WH6_HCM_08072026.pdf | 6/32  | JIT-CHOICE | WH6_HCM       | 2607085RSTJ261 |         | ✅Hoàn Thành
+air_waybill_WH6_HCM_08072026.pdf | 7/32  | JIT-CHOICE | WH6_HCM       | 2607085S9BDRU8 |         | ✅Hoàn Thành
+air_waybill_WH6_HCM_08072026.pdf | 8/32  | JIT-CHOICE | WH6_HCM       | 2607085T8G2AJT |         | ✅Hoàn Thành
+air_waybill_WH6_HCM_08072026.pdf | 9/32  | JIT-CHOICE | WH6_HCM       | 2607085T926XNV |         | ✅Hoàn Thành
+air_waybill_WH6_HCM_08072026.pdf | 10/32 | JIT-CHOICE | WH6_HCM       | 2607085UEE1S3E |         | ✅Hoàn Thành
+air_waybill_WH6_HCM_08072026.pdf | 11/32 | JIT-CHOICE | WH6_HCM       | 2607085UGQGRKM |         | ✅Hoàn Thành
+air_waybill_WH6_HCM_08072026.pdf | 12/32 | JIT-CHOICE | WH6_HCM       | 2607085UNSM2S9 |         | ✅Hoàn Thành
+air_waybill_WH6_HCM_08072026.pdf | 13/32 | JIT-CHOICE | WH6_HCM       | 2607085VX140BM |         | ✅Hoàn Thành
+air_waybill_WH6_HCM_08072026.pdf | 14/32 | JIT-CHOICE | WH6_HCM       | 2607085VX140BM |         | ✅Hoàn Thành
+air_waybill_WH6_HCM_08072026.pdf | 15/32 | JIT-CHOICE | WH6_HCM       | 2607085WBRPQ0C |         | ✅Hoàn Thành
+air_waybill_WH6_HCM_08072026.pdf | 16/32 | JIT-CHOICE | WH6_HCM       | 2607085XH3Q2QJ |         | ✅Hoàn Thành
+air_waybill_WH6_HCM_08072026.pdf | 17/32 | JIT-CHOICE | WH6_HCM       | 2607085Y7KP9EU |         | ✅Hoàn Thành
+air_waybill_WH6_HCM_08072026.pdf | 18/32 | JIT-CHOICE | WH6_HCM       | 2607085YAUPVHM |         | ✅Hoàn Thành
+air_waybill_WH6_HCM_08072026.pdf | 19/32 | JIT-CHOICE | WH6_HCM       | 2607085YBMETR2 |         | ✅Hoàn Thành
+air_waybill_WH6_HCM_08072026.pdf | 20/32 | JIT-CHOICE | WH6_HCM       | 2607085YKK4P43 |         | ✅Hoàn Thành
+air_waybill_WH6_HCM_08072026.pdf | 21/32 | JIT-CHOICE | WH6_HCM       | 2607085YU0JXYT |         | ✅Hoàn Thành
+air_waybill_WH6_HCM_08072026.pdf | 22/32 | JIT-CHOICE | WH6_HCM       | 2607085YU69H52 |         | ✅Hoàn Thành
+air_waybill_WH6_HCM_08072026.pdf | 23/32 | JIT-CHOICE | WH6_HCM       | 260708603P21JU |         | ✅Hoàn Thành
+air_waybill_WH6_HCM_08072026.pdf | 24/32 | JIT-CHOICE | WH6_HCM       | 2607086179R1Q9 |         | ✅Hoàn Thành
+air_waybill_WH6_HCM_08072026.pdf | 25/32 | JIT-CHOICE | WH6_HCM       | 260708619DE3JC |         | ✅Hoàn Thành
+air_waybill_WH6_HCM_08072026.pdf | 26/32 | JIT-CHOICE | WH6_HCM       | 26070861M9FHSR |         | ✅Hoàn Thành
+air_waybill_WH6_HCM_08072026.pdf | 27/32 | JIT-CHOICE | WH6_HCM       | 260708624FBEU2 |         | ✅Hoàn Thành
+air_waybill_WH6_HCM_08072026.pdf | 28/32 | JIT-CHOICE | WH6_HCM       | 26070862E0K04U |         | ✅Hoàn Thành
+air_waybill_WH6_HCM_08072026.pdf | 29/32 | JIT-CHOICE | WH6_HCM       | 26070862PDG5X6 |         | ✅Hoàn Thành
+air_waybill_WH6_HCM_08072026.pdf | 30/32 | JIT-CHOICE | WH6_HCM       | 2607086349VCHY |         | ✅Hoàn Thành
+air_waybill_WH6_HCM_08072026.pdf | 31/32 | JIT-CHOICE | WH6_HCM       | 260708637MNF4S |         | ✅Hoàn Thành
+air_waybill_WH6_HCM_08072026.pdf | 32/32 | JIT-CHOICE | WH6_HCM       | 26070863RCNPGQ |         | ✅Hoàn Thành
+air_waybill_WH6_HN_08072026.pdf  | 1/25  | JIT-CHOICE | WH6_HN        | 2607085HE8QBT5 |         | ✅Hoàn Thành
+air_waybill_WH6_HN_08072026.pdf  | 2/25  | JIT-CHOICE | WH6_HN        | 2607085KGW72SR |         | ✅Hoàn Thành
+air_waybill_WH6_HN_08072026.pdf  | 3/25  | JIT-CHOICE | WH6_HN        | 2607085Q3RMBUR |         | ✅Hoàn Thành
+air_waybill_WH6_HN_08072026.pdf  | 4/25  | JIT-CHOICE | WH6_HN        | 2607085Q6GAWBT |         | ✅Hoàn Thành
+air_waybill_WH6_HN_08072026.pdf  | 5/25  | JIT-CHOICE | WH6_HN        | 2607085QNKU8A6 |         | ✅Hoàn Thành
+air_waybill_WH6_HN_08072026.pdf  | 6/25  | JIT-CHOICE | WH6_HN        | 2607085SFHUG4P |         | ✅Hoàn Thành
+air_waybill_WH6_HN_08072026.pdf  | 7/25  | JIT-CHOICE | WH6_HN        | 2607085SHSA632 |         | ✅Hoàn Thành
+air_waybill_WH6_HN_08072026.pdf  | 8/25  | JIT-CHOICE | WH6_HN        | 2607085SQ9T7RN |         | ✅Hoàn Thành
+air_waybill_WH6_HN_08072026.pdf  | 9/25  | JIT-CHOICE | WH6_HN        | 2607085T5917QJ |         | ✅Hoàn Thành
+air_waybill_WH6_HN_08072026.pdf  | 10/25 | JIT-CHOICE | WH6_HN        | 2607085T9EHYP1 |         | ✅Hoàn Thành
+air_waybill_WH6_HN_08072026.pdf  | 11/25 | JIT-CHOICE | WH6_HN        | 2607085T9TYPPC |         | ✅Hoàn Thành
+air_waybill_WH6_HN_08072026.pdf  | 12/25 | JIT-CHOICE | WH6_HN        | 2607085TGWY04T |         | ✅Hoàn Thành
+air_waybill_WH6_HN_08072026.pdf  | 13/25 | JIT-CHOICE | WH6_HN        | 2607085UC3NSSS |         | ✅Hoàn Thành
+air_waybill_WH6_HN_08072026.pdf  | 14/25 | JIT-CHOICE | WH6_HN        | 2607085WQ6W1NE |         | ✅Hoàn Thành
+air_waybill_WH6_HN_08072026.pdf  | 15/25 | JIT-CHOICE | WH6_HN        | 2607085Y281XSV |         | ✅Hoàn Thành
+air_waybill_WH6_HN_08072026.pdf  | 16/25 | JIT-CHOICE | WH6_HN        | 2607085YQWBNR9 |         | ✅Hoàn Thành
+air_waybill_WH6_HN_08072026.pdf  | 17/25 | JIT-CHOICE | WH6_HN        | 26070860FAWUEB |         | ✅Hoàn Thành
+air_waybill_WH6_HN_08072026.pdf  | 18/25 | JIT-CHOICE | WH6_HN        | 26070860FYYD2X |         | ✅Hoàn Thành
+air_waybill_WH6_HN_08072026.pdf  | 19/25 | JIT-CHOICE | WH6_HN        | 26070862W50AT7 |         | ✅Hoàn Thành
+air_waybill_WH6_HN_08072026.pdf  | 20/25 | JIT-CHOICE | WH6_HN        | 2607086305A90W |         | ✅Hoàn Thành
+air_waybill_WH6_HN_08072026.pdf  | 21/25 | JIT-CHOICE | WH6_HN        | 2607086321EHYJ |         | ✅Hoàn Thành
+air_waybill_WH6_HN_08072026.pdf  | 22/25 | JIT-CHOICE | WH6_HN        | 26070863HEEKSE |         | ✅Hoàn Thành
+air_waybill_WH6_HN_08072026.pdf  | 23/25 | JIT-CHOICE | WH6_HN        | 260708641U0DY0 |         | ✅Hoàn Thành
+air_waybill_WH6_HN_08072026.pdf  | 24/25 | JIT-CHOICE | WH6_HN        | 260708642TF46C |         | ✅Hoàn Thành
+air_waybill_WH6_HN_08072026.pdf  | 25/25 | JIT-CHOICE | WH6_HN        | 2607085QRCKS9H |         | ✅Hoàn Thành
+----- Kết thúc bảng -----
+⚠️ Lỗi gửi dữ liệu lên Google Sheets: HTTPSConnectionPool(host='script.google.com', port=443): Read timed out. (read timeout=15)
+
+----- BẢNG STATUS lúc 08:54:07 09/07/2026 -----
+Tên file                         | Trang | Hệ thống   | Mã khách hàng | PO             | Đơn giá | Trạng thái 
+air_waybill_WH6_HN_09072026.pdf  | 1/65  | JIT-CHOICE | WH6_HN        | 2607085YT8R3CQ |         | ✅Hoàn Thành
+air_waybill_WH6_HN_09072026.pdf  | 2/65  | JIT-CHOICE | WH6_HN        | 260708644B3VFK |         | ✅Hoàn Thành
+air_waybill_WH6_HN_09072026.pdf  | 3/65  | JIT-CHOICE | WH6_HN        | 260708648287KJ |         | ✅Hoàn Thành
+air_waybill_WH6_HN_09072026.pdf  | 4/65  | JIT-CHOICE | WH6_HN        | 26070864AN818G |         | ✅Hoàn Thành
+air_waybill_WH6_HN_09072026.pdf  | 5/65  | JIT-CHOICE | WH6_HN        | 260708656E2TK5 |         | ✅Hoàn Thành
+air_waybill_WH6_HN_09072026.pdf  | 6/65  | JIT-CHOICE | WH6_HN        | 26070865AGRXX2 |         | ✅Hoàn Thành
+air_waybill_WH6_HN_09072026.pdf  | 7/65  | JIT-CHOICE | WH6_HN        | 26070865ER6EU1 |         | ✅Hoàn Thành
+air_waybill_WH6_HN_09072026.pdf  | 8/65  | JIT-CHOICE | WH6_HN        | 26070865HX81JX |         | ✅Hoàn Thành
+air_waybill_WH6_HN_09072026.pdf  | 9/65  | JIT-CHOICE | WH6_HN        | 26070865NFN6MR |         | ✅Hoàn Thành
+air_waybill_WH6_HN_09072026.pdf  | 10/65 | JIT-CHOICE | WH6_HN        | 26070866AMS7W0 |         | ✅Hoàn Thành
+air_waybill_WH6_HN_09072026.pdf  | 11/65 | JIT-CHOICE | WH6_HN        | 26070866BDMW4T |         | ✅Hoàn Thành
+air_waybill_WH6_HN_09072026.pdf  | 12/65 | JIT-CHOICE | WH6_HN        | 26070867XQT1A3 |         | ✅Hoàn Thành
+air_waybill_WH6_HN_09072026.pdf  | 13/65 | JIT-CHOICE | WH6_HN        | 26070868CS1UCD |         | ✅Hoàn Thành
+air_waybill_WH6_HN_09072026.pdf  | 14/65 | JIT-CHOICE | WH6_HN        | 260708699RWVPK |         | ✅Hoàn Thành
+air_waybill_WH6_HN_09072026.pdf  | 15/65 | JIT-CHOICE | WH6_HN        | 26070869YK247D |         | ✅Hoàn Thành
+air_waybill_WH6_HN_09072026.pdf  | 16/65 | JIT-CHOICE | WH6_HN        | 2607086A9P974A |         | ✅Hoàn Thành
+air_waybill_WH6_HN_09072026.pdf  | 17/65 | JIT-CHOICE | WH6_HN        | 2607086ABQ5SCF |         | ✅Hoàn Thành
+air_waybill_WH6_HN_09072026.pdf  | 18/65 | JIT-CHOICE | WH6_HN        | 2607086ABVV9H2 |         | ✅Hoàn Thành
+air_waybill_WH6_HN_09072026.pdf  | 19/65 | JIT-CHOICE | WH6_HN        | 2607086AVMV3M0 |         | ✅Hoàn Thành
+air_waybill_WH6_HN_09072026.pdf  | 20/65 | JIT-CHOICE | WH6_HN        | 2607086BB859SY |         | ✅Hoàn Thành
+air_waybill_WH6_HN_09072026.pdf  | 21/65 | JIT-CHOICE | WH6_HN        | 2607086BBNHF57 |         | ✅Hoàn Thành
+air_waybill_WH6_HN_09072026.pdf  | 22/65 | JIT-CHOICE | WH6_HN        | 2607086CU7JGHN |         | ✅Hoàn Thành
+air_waybill_WH6_HN_09072026.pdf  | 23/65 | JIT-CHOICE | WH6_HN        | 2607086D04XC0Y |         | ✅Hoàn Thành
+air_waybill_WH6_HN_09072026.pdf  | 24/65 | JIT-CHOICE | WH6_HN        | 2607086DMVQ54X |         | ✅Hoàn Thành
+air_waybill_WH6_HN_09072026.pdf  | 25/65 | JIT-CHOICE | WH6_HN        | 2607086DSU0DYQ |         | ✅Hoàn Thành
+air_waybill_WH6_HN_09072026.pdf  | 26/65 | JIT-CHOICE | WH6_HN        | 2607086EEE0YKN |         | ✅Hoàn Thành
+air_waybill_WH6_HN_09072026.pdf  | 27/65 | JIT-CHOICE | WH6_HN        | 2607086F1J9EM0 |         | ✅Hoàn Thành
+air_waybill_WH6_HN_09072026.pdf  | 28/65 | JIT-CHOICE | WH6_HN        | 2607086FXN1CSF |         | ✅Hoàn Thành
+air_waybill_WH6_HN_09072026.pdf  | 29/65 | JIT-CHOICE | WH6_HN        | 2607086GB2QY77 |         | ✅Hoàn Thành
+air_waybill_WH6_HN_09072026.pdf  | 30/65 | JIT-CHOICE | WH6_HN        | 2607086GEJ9X4B |         | ✅Hoàn Thành
+air_waybill_WH6_HN_09072026.pdf  | 31/65 | JIT-CHOICE | WH6_HN        | 2607086GXR33VR |         | ✅Hoàn Thành
+air_waybill_WH6_HN_09072026.pdf  | 32/65 | JIT-CHOICE | WH6_HN        | 2607086HQPCNWR |         | ✅Hoàn Thành
+air_waybill_WH6_HN_09072026.pdf  | 33/65 | JIT-CHOICE | WH6_HN        | 2607096JDEJ1X7 |         | ✅Hoàn Thành
+air_waybill_WH6_HN_09072026.pdf  | 34/65 | JIT-CHOICE | WH6_HN        | 2607096JU91HAB |         | ✅Hoàn Thành
+air_waybill_WH6_HN_09072026.pdf  | 35/65 | JIT-CHOICE | WH6_HN        | 2607096M1W039G |         | ✅Hoàn Thành
+air_waybill_WH6_HN_09072026.pdf  | 36/65 | JIT-CHOICE | WH6_HN        | 2607096M36YXR3 |         | ✅Hoàn Thành
+air_waybill_WH6_HN_09072026.pdf  | 37/65 | JIT-CHOICE | WH6_HN        | 2607096MK8XW5N |         | ✅Hoàn Thành
+air_waybill_WH6_HN_09072026.pdf  | 38/65 | JIT-CHOICE | WH6_HN        | 2607096N9CK7G7 |         | ✅Hoàn Thành
+air_waybill_WH6_HN_09072026.pdf  | 39/65 | JIT-CHOICE | WH6_HN        | 2607096P30R6RA |         | ✅Hoàn Thành
+air_waybill_WH6_HN_09072026.pdf  | 40/65 | JIT-CHOICE | WH6_HN        | 2607096P8UQTB8 |         | ✅Hoàn Thành
+air_waybill_WH6_HN_09072026.pdf  | 41/65 | JIT-CHOICE | WH6_HN        | 2607096Q4AY0GC |         | ✅Hoàn Thành
+air_waybill_WH6_HN_09072026.pdf  | 42/65 | JIT-CHOICE | WH6_HN        | 2607096QVRYNUX |         | ✅Hoàn Thành
+air_waybill_WH6_HN_09072026.pdf  | 43/65 | JIT-CHOICE | WH6_HN        | 2607096SWQ3V7W |         | ✅Hoàn Thành
+air_waybill_WH6_HN_09072026.pdf  | 44/65 | JIT-CHOICE | WH6_HN        | 2607096UFYX0VN |         | ✅Hoàn Thành
+air_waybill_WH6_HN_09072026.pdf  | 45/65 | JIT-CHOICE | WH6_HN        | 2607096VX8Y06C |         | ✅Hoàn Thành
+air_waybill_WH6_HN_09072026.pdf  | 46/65 | JIT-CHOICE | WH6_HN        | 2607096XDXT2GM |         | ✅Hoàn Thành
+air_waybill_WH6_HN_09072026.pdf  | 47/65 | JIT-CHOICE | WH6_HN        | 26070973NP31PK |         | ✅Hoàn Thành
+air_waybill_WH6_HN_09072026.pdf  | 48/65 | JIT-CHOICE | WH6_HN        | 26070973QDDEYN |         | ✅Hoàn Thành
+air_waybill_WH6_HN_09072026.pdf  | 49/65 | JIT-CHOICE | WH6_HN        | 26070975J1AM8P |         | ✅Hoàn Thành
+air_waybill_WH6_HN_09072026.pdf  | 50/65 | JIT-CHOICE | WH6_HN        | 26070975PEF05K |         | ✅Hoàn Thành
+air_waybill_WH6_HN_09072026.pdf  | 51/65 | JIT-CHOICE | WH6_HN        | 26070977A0A2UF |         | ✅Hoàn Thành
+air_waybill_WH6_HN_09072026.pdf  | 52/65 | JIT-CHOICE | WH6_HN        | 26070979M9SP13 |         | ✅Hoàn Thành
+air_waybill_WH6_HN_09072026.pdf  | 53/65 | JIT-CHOICE | WH6_HN        | 2607097A0GUG5H |         | ✅Hoàn Thành
+air_waybill_WH6_HN_09072026.pdf  | 54/65 | JIT-CHOICE | WH6_HN        | 2607097AGE4QQB |         | ✅Hoàn Thành
+air_waybill_WH6_HN_09072026.pdf  | 55/65 | JIT-CHOICE | WH6_HN        | 2607097BANB2K3 |         | ✅Hoàn Thành
+air_waybill_WH6_HN_09072026.pdf  | 56/65 | JIT-CHOICE | WH6_HN        | 2607097CNV6N8J |         | ✅Hoàn Thành
+air_waybill_WH6_HN_09072026.pdf  | 57/65 | JIT-CHOICE | WH6_HN        | 2607097DHXFDQS |         | ✅Hoàn Thành
+air_waybill_WH6_HN_09072026.pdf  | 58/65 | JIT-CHOICE | WH6_HN        | 2607097DKJ188C |         | ✅Hoàn Thành
+air_waybill_WH6_HN_09072026.pdf  | 59/65 | JIT-CHOICE | WH6_HN        | 2607097EQJ25UE |         | ✅Hoàn Thành
+air_waybill_WH6_HN_09072026.pdf  | 60/65 | JIT-CHOICE | WH6_HN        | 2607097FAYVM9Q |         | ✅Hoàn Thành
+air_waybill_WH6_HN_09072026.pdf  | 61/65 | JIT-CHOICE | WH6_HN        | 2607097FMC7MUN |         | ✅Hoàn Thành
+air_waybill_WH6_HN_09072026.pdf  | 62/65 | JIT-CHOICE | WH6_HN        | 2607097FTNG7VW |         | ✅Hoàn Thành
+air_waybill_WH6_HN_09072026.pdf  | 63/65 | JIT-CHOICE | WH6_HN        | 2607097GC58YH9 |         | ✅Hoàn Thành
+air_waybill_WH6_HN_09072026.pdf  | 64/65 | JIT-CHOICE | WH6_HN        | 2607097GFAD20X |         | ✅Hoàn Thành
+air_waybill_WH6_HN_09072026.pdf  | 65/65 | JIT-CHOICE | WH6_HN        | 2607097HUFREQA |         | ✅Hoàn Thành
+air_waybill_WH6_HCM_09072026.pdf | 1/39  | JIT-CHOICE | WH6_HCM       | 26070863X2THAP |         | ✅Hoàn Thành
+air_waybill_WH6_HCM_09072026.pdf | 2/39  | JIT-CHOICE | WH6_HCM       | 26070864CN40PT |         | ✅Hoàn Thành
+air_waybill_WH6_HCM_09072026.pdf | 3/39  | JIT-CHOICE | WH6_HCM       | 26070864N6TPXA |         | ✅Hoàn Thành
+air_waybill_WH6_HCM_09072026.pdf | 4/39  | JIT-CHOICE | WH6_HCM       | 26070864RKHKXU |         | ✅Hoàn Thành
+air_waybill_WH6_HCM_09072026.pdf | 5/39  | JIT-CHOICE | WH6_HCM       | 2607086585CTS3 |         | ✅Hoàn Thành
+air_waybill_WH6_HCM_09072026.pdf | 6/39  | JIT-CHOICE | WH6_HCM       | 26070865JXKSAF |         | ✅Hoàn Thành
+air_waybill_WH6_HCM_09072026.pdf | 7/39  | JIT-CHOICE | WH6_HCM       | 2607086625WK0H |         | ✅Hoàn Thành
+air_waybill_WH6_HCM_09072026.pdf | 8/39  | JIT-CHOICE | WH6_HCM       | 26070866Y9Q8G7 |         | ✅Hoàn Thành
+air_waybill_WH6_HCM_09072026.pdf | 9/39  | JIT-CHOICE | WH6_HCM       | 260708670X4CEG |         | ✅Hoàn Thành
+air_waybill_WH6_HCM_09072026.pdf | 10/39 | JIT-CHOICE | WH6_HCM       | 260708676DJWUG |         | ✅Hoàn Thành
+air_waybill_WH6_HCM_09072026.pdf | 11/39 | JIT-CHOICE | WH6_HCM       | 26070867W3C5MX |         | ✅Hoàn Thành
+air_waybill_WH6_HCM_09072026.pdf | 12/39 | JIT-CHOICE | WH6_HCM       | 260708685FD83H |         | ✅Hoàn Thành
+air_waybill_WH6_HCM_09072026.pdf | 13/39 | JIT-CHOICE | WH6_HCM       | 26070868W5HBUF |         | ✅Hoàn Thành
+air_waybill_WH6_HCM_09072026.pdf | 14/39 | JIT-CHOICE | WH6_HCM       | 260708697KA3U9 |         | ✅Hoàn Thành
+air_waybill_WH6_HCM_09072026.pdf | 15/39 | JIT-CHOICE | WH6_HCM       | 26070869MVM81D |         | ✅Hoàn Thành
+air_waybill_WH6_HCM_09072026.pdf | 16/39 | JIT-CHOICE | WH6_HCM       | 2607086BTVTCK6 |         | ✅Hoàn Thành
+air_waybill_WH6_HCM_09072026.pdf | 17/39 | JIT-CHOICE | WH6_HCM       | 2607086BUB4J67 |         | ✅Hoàn Thành
+air_waybill_WH6_HCM_09072026.pdf | 18/39 | JIT-CHOICE | WH6_HCM       | 2607086CAGK973 |         | ✅Hoàn Thành
+air_waybill_WH6_HCM_09072026.pdf | 19/39 | JIT-CHOICE | WH6_HCM       | 2607086CUXFTHN |         | ✅Hoàn Thành
+air_waybill_WH6_HCM_09072026.pdf | 20/39 | JIT-CHOICE | WH6_HCM       | 2607086D4NWGYU |         | ✅Hoàn Thành
+air_waybill_WH6_HCM_09072026.pdf | 21/39 | JIT-CHOICE | WH6_HCM       | 2607086DS60S3Y |         | ✅Hoàn Thành
+air_waybill_WH6_HCM_09072026.pdf | 22/39 | JIT-CHOICE | WH6_HCM       | 2607086DWM4YQ0 |         | ✅Hoàn Thành
+air_waybill_WH6_HCM_09072026.pdf | 23/39 | JIT-CHOICE | WH6_HCM       | 2607086EA2QARD |         | ✅Hoàn Thành
+air_waybill_WH6_HCM_09072026.pdf | 24/39 | JIT-CHOICE | WH6_HCM       | 2607086ETUN7N1 |         | ✅Hoàn Thành
+air_waybill_WH6_HCM_09072026.pdf | 25/39 | JIT-CHOICE | WH6_HCM       | 2607086FEE7BMR |         | ✅Hoàn Thành
+air_waybill_WH6_HCM_09072026.pdf | 26/39 | JIT-CHOICE | WH6_HCM       | 2607086FMNJGQ8 |         | ✅Hoàn Thành
+air_waybill_WH6_HCM_09072026.pdf | 27/39 | JIT-CHOICE | WH6_HCM       | 2607096JM8124Y |         | ✅Hoàn Thành
+air_waybill_WH6_HCM_09072026.pdf | 28/39 | JIT-CHOICE | WH6_HCM       | 2607096MDTFHSN |         | ✅Hoàn Thành
+air_waybill_WH6_HCM_09072026.pdf | 29/39 | JIT-CHOICE | WH6_HCM       | 2607096PFCHYUA |         | ✅Hoàn Thành
+air_waybill_WH6_HCM_09072026.pdf | 30/39 | JIT-CHOICE | WH6_HCM       | 2607096SM40CMW |         | ✅Hoàn Thành
+air_waybill_WH6_HCM_09072026.pdf | 31/39 | JIT-CHOICE | WH6_HCM       | 2607096YEG9VQP |         | ✅Hoàn Thành
+air_waybill_WH6_HCM_09072026.pdf | 32/39 | JIT-CHOICE | WH6_HCM       | 2607096YVYPVSS |         | ✅Hoàn Thành
+air_waybill_WH6_HCM_09072026.pdf | 33/39 | JIT-CHOICE | WH6_HCM       | 260709708NK0H5 |         | ✅Hoàn Thành
+air_waybill_WH6_HCM_09072026.pdf | 34/39 | JIT-CHOICE | WH6_HCM       | 2607097AQBA9S5 |         | ✅Hoàn Thành
+air_waybill_WH6_HCM_09072026.pdf | 35/39 | JIT-CHOICE | WH6_HCM       | 2607097CJAP6AE |         | ✅Hoàn Thành
+air_waybill_WH6_HCM_09072026.pdf | 36/39 | JIT-CHOICE | WH6_HCM       | 2607097E4U4DDA |         | ✅Hoàn Thành
+air_waybill_WH6_HCM_09072026.pdf | 37/39 | JIT-CHOICE | WH6_HCM       | 2607097EBB1YM1 |         | ✅Hoàn Thành
+air_waybill_WH6_HCM_09072026.pdf | 38/39 | JIT-CHOICE | WH6_HCM       | 2607097G3X406V |         | ✅Hoàn Thành
+air_waybill_WH6_HCM_09072026.pdf | 39/39 | JIT-CHOICE | WH6_HCM       | 2607097JHDKX6B |         | ✅Hoàn Thành
+----- Kết thúc bảng -----
+⚠️ Lỗi gửi dữ liệu lên Google Sheets: HTTPSConnectionPool(host='script.google.com', port=443): Read timed out. (read timeout=15)
+
+----- BẢNG STATUS lúc 09:14:21 09/07/2026 -----
+Tên file                         | Trang | Hệ thống | Mã khách hàng | PO           | Đơn giá  | Trạng thái 
+HA THANH DH CN31_32 03 07.07.pdf | 1/1   | COOP     | MB_MT_COP164  | 102551151-00 | Đúng giá | ✅Hoàn Thành
+HA THANH DH CN31_32 01 07.07.pdf | 1/22  | COOP     | MN_MT_cop122  | 102551412-00 | Đúng giá | ✅Hoàn Thành
+HA THANH DH CN31_32 01 07.07.pdf | 2/22  | COOP     | MN_MT_COP128  | 102551413-00 | Đúng giá | ✅Hoàn Thành
+HA THANH DH CN31_32 01 07.07.pdf | 3/22  | COOP     | MN_MT_cop134  | 102551414-00 | Đúng giá | ✅Hoàn Thành
+HA THANH DH CN31_32 01 07.07.pdf | 4/22  | COOP     | MN_MT_cop136  | 102551415-00 | Đúng giá | ✅Hoàn Thành
+HA THANH DH CN31_32 01 07.07.pdf | 5/22  | COOP     | MN_MT_COP138  | 102551416-00 | Đúng giá | ✅Hoàn Thành
+HA THANH DH CN31_32 01 07.07.pdf | 6/22  | COOP     | MN_MT_COP140  | 102551417-00 | Đúng giá | ✅Hoàn Thành
+HA THANH DH CN31_32 01 07.07.pdf | 7/22  | COOP     | MN_MT_cop148  | 102551418-00 | Đúng giá | ✅Hoàn Thành
+HA THANH DH CN31_32 01 07.07.pdf | 8/22  | COOP     | MN_MT_COP154  | 102551419-00 | Đúng giá | ✅Hoàn Thành
+HA THANH DH CN31_32 01 07.07.pdf | 9/22  | COOP     | MN_MT_cop157  | 102551420-00 | Đúng giá | ✅Hoàn Thành
+HA THANH DH CN31_32 01 07.07.pdf | 10/22 | COOP     | MN_MT_COP173  | 102551421-00 | Đúng giá | ✅Hoàn Thành
+HA THANH DH CN31_32 01 07.07.pdf | 11/22 | COOP     | MN_MT_COP174  | 102551422-00 | Đúng giá | ✅Hoàn Thành
+HA THANH DH CN31_32 01 07.07.pdf | 12/22 | COOP     | MN_MT_cop176  | 102551423-00 | Đúng giá | ✅Hoàn Thành
+HA THANH DH CN31_32 01 07.07.pdf | 13/22 | COOP     | MN_MT_COP199  | 102551424-00 | Đúng giá | ✅Hoàn Thành
+HA THANH DH CN31_32 01 07.07.pdf | 14/22 | COOP     | MN_MT_COP301  | 102551425-00 | Đúng giá | ✅Hoàn Thành
+HA THANH DH CN31_32 01 07.07.pdf | 15/22 | COOP     | MN_MT_cop304  | 102551426-00 | Đúng giá | ✅Hoàn Thành
+HA THANH DH CN31_32 01 07.07.pdf | 16/22 | COOP     | MN_MT_cop305  | 102551427-00 | Đúng giá | ✅Hoàn Thành
+HA THANH DH CN31_32 01 07.07.pdf | 17/22 | COOP     | MN_MT_cop503  | 102551428-00 | Đúng giá | ✅Hoàn Thành
+HA THANH DH CN31_32 01 07.07.pdf | 18/22 | COOP     | MN_MT_COP504  | 102551429-00 | Đúng giá | ✅Hoàn Thành
+HA THANH DH CN31_32 01 07.07.pdf | 19/22 | COOP     | MN_MT_COP512  | 102551430-00 | Đúng giá | ✅Hoàn Thành
+HA THANH DH CN31_32 01 07.07.pdf | 20/22 | COOP     | MN_MT_COP526  | 102551431-00 | Đúng giá | ✅Hoàn Thành
+HA THANH DH CN31_32 01 07.07.pdf | 21/22 | COOP     | MN_MT_COP547  | 102551432-00 | Đúng giá | ✅Hoàn Thành
+HA THANH DH CN31_32 01 07.07.pdf | 22/22 | COOP     | MN_MT_cop572  | 102551277-00 | Đúng giá | ✅Hoàn Thành
+HA THANH DH CN31_32 02 07.07.pdf | 1/3   | COOP     | MN_MT_cop121  | 102552990-00 | Đúng giá | ✅Hoàn Thành
+HA THANH DH CN31_32 02 07.07.pdf | 2/3   | COOP     | MN_MT_COP144  | 102552980-00 | Đúng giá | ✅Hoàn Thành
+HA THANH DH CN31_32 02 07.07.pdf | 3/3   | COOP     | MN_MT_COP197  | 102552541-00 | Đúng giá | ✅Hoàn Thành
+----- Kết thúc bảng -----
+
+----- BẢNG STATUS lúc 09:42:28 09/07/2026 -----
+Tên file                      | Trang | Hệ thống | Mã khách hàng | PO           | Đơn giá  | Trạng thái 
+KSL-PO1002570325-08072026.pdf | 1/2   | Kingfood | MN_MT_KFMSL   | PO1002570325 | Đúng giá | ✅Hoàn Thành
+----- Kết thúc bảng -----
+
+----- BẢNG STATUS lúc 10:07:59 09/07/2026 -----
+Tên file                      | Trang | Hệ thống | Mã khách hàng | PO           | Đơn giá  | Trạng thái 
+KSL-PO1002570325-08072026.pdf | 1/2   | Kingfood | MN_MT_KFMSL   | PO1002570325 | Đúng giá | ✅Hoàn Thành
+----- Kết thúc bảng -----
+
+----- BẢNG STATUS lúc 10:17:49 09/07/2026 -----
+Tên file                      | Trang | Hệ thống | Mã khách hàng | PO           | Đơn giá  | Trạng thái 
+KSL-PO1002570325-08072026.pdf | 1/2   | Kingfood | MN_MT_KFMSL   | PO1002570325 | Đúng giá | ✅Hoàn Thành
+----- Kết thúc bảng -----
+
+----- BẢNG STATUS lúc 10:19:03 09/07/2026 -----
+Tên file                      | Trang | Hệ thống | Mã khách hàng | PO           | Đơn giá  | Trạng thái 
+KSL-PO1002570325-08072026.pdf | 1/2   | Kingfood | MN_MT_KFMSL   | PO1002570325 | Đúng giá | ✅Hoàn Thành
+----- Kết thúc bảng -----
+
+----- BẢNG STATUS lúc 10:24:58 09/07/2026 -----
+Tên file                      | Trang | Hệ thống | Mã khách hàng | PO           | Đơn giá  | Trạng thái 
+KSL-PO1002570325-10072026.pdf | 1/2   | Kingfood | MN_MT_KFMSL   | PO1002570325 | Đúng giá | ✅Hoàn Thành
+----- Kết thúc bảng -----
+
+----- BẢNG STATUS lúc 10:44:43 09/07/2026 -----
+Tên file                                  | Trang | Hệ thống | Mã khách hàng       | PO            | Đơn giá         | Trạng thái  
+806_SOUTHDC_QP0_3006900_2627057198290.pdf | 2/9   | BigC     | GO! AN LAC          | 2627057198290 | Đúng giá        | ✅Hoàn Thành 
+806_SOUTHDC_QP0_3006900_2627057198290.pdf | 3/9   | BigC     | GO! MIEN DONG       | 2627057198290 | Đúng giá        | ✅Hoàn Thành 
+806_SOUTHDC_QP0_3006900_2627057198290.pdf | 4/9   | BigC     | GO! GO VAP          | 2627057198290 | Đúng giá        | ✅Hoàn Thành 
+806_SOUTHDC_QP0_3006900_2627057198290.pdf | 5/9   | BigC     | GO! HUE             | 2627057198290 | Đúng giá        | ✅Hoàn Thành 
+806_SOUTHDC_QP0_3006900_2627057198290.pdf | 6/9   | BigC     | GO! TAN HIEP        | 2627057198290 | Đúng giá        | ✅Hoàn Thành 
+806_SOUTHDC_QP0_3006900_2627057198290.pdf | 7/9   | BigC     | GO! BINH DUONG      | 2627057198290 | Đúng giá        | ✅Hoàn Thành 
+806_SOUTHDC_QP0_3006900_2627057198290.pdf | 8/9   | BigC     | GO! DA LAT          | 2627057198290 | Đúng giá        | ✅Hoàn Thành 
+806_SOUTHDC_QP0_3006900_2627057198290.pdf | 9/9   | BigC     | GO! MY THO          | 2627057198290 | Đúng giá        | ✅Hoàn Thành 
+802_NORTHDC_QP0_3006900_2627057198195.pdf | 2/8   | BigC     | GO! THANG LONG      | 2627057198195 | Đúng giá        | ✅Hoàn Thành 
+802_NORTHDC_QP0_3006900_2627057198195.pdf | 3/8   | BigC     | GO! HAI PHONG       | 2627057198195 | Đúng giá        | ✅Hoàn Thành 
+802_NORTHDC_QP0_3006900_2627057198195.pdf | 4/8   | BigC     | GO! VINH PHUC       | 2627057198195 | Đúng giá        | ✅Hoàn Thành 
+802_NORTHDC_QP0_3006900_2627057198195.pdf | 5/8   | BigC     | GO! HAI DUONG       | 2627057198195 | Đúng giá        | ✅Hoàn Thành 
+802_NORTHDC_QP0_3006900_2627057198195.pdf | 6/8   | BigC     | GO! NINH BINH       | 2627057198195 | Đúng giá        | ✅Hoàn Thành 
+802_NORTHDC_QP0_3006900_2627057198195.pdf | 7/8   | BigC     | GO! BAC GIANG       | 2627057198195 | Đúng giá        | ✅Hoàn Thành 
+802_NORTHDC_QP0_3006900_2627057198195.pdf | 8/8   | BigC     | GO! HA NAM          | 2627057198195 | Đúng giá        | ✅Hoàn Thành 
+806_SOUTHDC_Q06_3005382_2627057198233.pdf | 2/35  | BigC     | CTY TNHH DV EB      | 2627057198233 | Đúng giá        | ✅Hoàn Thành 
+806_SOUTHDC_Q06_3005382_2627057198233.pdf | 3/35  | BigC     | GO! AN LAC          | 2627057198233 | Có 1 mã sai giá | ⚠️Hoàn Thành
+806_SOUTHDC_Q06_3005382_2627057198233.pdf | 4/35  | BigC     | GO! DA NANG         | 2627057198233 | Đúng giá        | ✅Hoàn Thành 
+806_SOUTHDC_Q06_3005382_2627057198233.pdf | 5/35  | BigC     | GO! HUE             | 2627057198233 | Đúng giá        | ✅Hoàn Thành 
+806_SOUTHDC_Q06_3005382_2627057198233.pdf | 6/35  | BigC     | GO! HUE             | 2627057198233 | Đúng giá        | ✅Hoàn Thành 
+806_SOUTHDC_Q06_3005382_2627057198233.pdf | 7/35  | BigC     | GO! PHU THANH       | 2627057198233 | Đúng giá        | ✅Hoàn Thành 
+806_SOUTHDC_Q06_3005382_2627057198233.pdf | 8/35  | BigC     | GO! PHU THANH       | 2627057198233 | Đúng giá        | ✅Hoàn Thành 
+806_SOUTHDC_Q06_3005382_2627057198233.pdf | 9/35  | BigC     | GO! TAN HIEP        | 2627057198233 | Đúng giá        | ✅Hoàn Thành 
+806_SOUTHDC_Q06_3005382_2627057198233.pdf | 10/35 | BigC     | GO! TAN HIEP        | 2627057198233 | Đúng giá        | ✅Hoàn Thành 
+806_SOUTHDC_Q06_3005382_2627057198233.pdf | 11/35 | BigC     | GO! CAN THO         | 2627057198233 | Đúng giá        | ✅Hoàn Thành 
+806_SOUTHDC_Q06_3005382_2627057198233.pdf | 12/35 | BigC     | GO! CAN THO         | 2627057198233 | Đúng giá        | ✅Hoàn Thành 
+806_SOUTHDC_Q06_3005382_2627057198233.pdf | 13/35 | BigC     | GO! BINH DUONG      | 2627057198233 | Đúng giá        | ✅Hoàn Thành 
+806_SOUTHDC_Q06_3005382_2627057198233.pdf | 14/35 | BigC     | GO! TRUONG CHINH    | 2627057198233 | Đúng giá        | ✅Hoàn Thành 
+806_SOUTHDC_Q06_3005382_2627057198233.pdf | 15/35 | BigC     | GO! DA LAT          | 2627057198233 | Đúng giá        | ✅Hoàn Thành 
+806_SOUTHDC_Q06_3005382_2627057198233.pdf | 16/35 | BigC     | GO! DA LAT          | 2627057198233 | Đúng giá        | ✅Hoàn Thành 
+806_SOUTHDC_Q06_3005382_2627057198233.pdf | 17/35 | BigC     | TOPS MARKET AN PHU  | 2627057198233 | Đúng giá        | ✅Hoàn Thành 
+806_SOUTHDC_Q06_3005382_2627057198233.pdf | 18/35 | BigC     | GO! NGUYEN THI THAP | 2627057198233 | Đúng giá        | ✅Hoàn Thành 
+806_SOUTHDC_Q06_3005382_2627057198233.pdf | 19/35 | BigC     | TOPS MARKET AU CO   | 2627057198233 | Đúng giá        | ✅Hoàn Thành 
+806_SOUTHDC_Q06_3005382_2627057198233.pdf | 20/35 | BigC     | GO! QUANG NGAI      | 2627057198233 | Đúng giá        | ✅Hoàn Thành 
+806_SOUTHDC_Q06_3005382_2627057198233.pdf | 21/35 | BigC     | GO! QUANG NGAI      | 2627057198233 | Đúng giá        | ✅Hoàn Thành 
+806_SOUTHDC_Q06_3005382_2627057198233.pdf | 22/35 | BigC     | GO! BUON MA THUOT   | 2627057198233 | Đúng giá        | ✅Hoàn Thành 
+806_SOUTHDC_Q06_3005382_2627057198233.pdf | 23/35 | BigC     | GO! BA RIA          | 2627057198233 | Đúng giá        | ✅Hoàn Thành 
+806_SOUTHDC_Q06_3005382_2627057198233.pdf | 24/35 | BigC     | GO! NINH THUAN      | 2627057198233 | Đúng giá        | ✅Hoàn Thành 
+806_SOUTHDC_Q06_3005382_2627057198233.pdf | 25/35 | BigC     | GO! TAM KY          | 2627057198233 | Đúng giá        | ✅Hoàn Thành 
+806_SOUTHDC_Q06_3005382_2627057198233.pdf | 26/35 | BigC     | GO! PHU MY          | 2627057198233 | Đúng giá        | ✅Hoàn Thành 
+806_SOUTHDC_Q06_3005382_2627057198233.pdf | 27/35 | BigC     | GO! NHON TRACH      | 2627057198233 | Đúng giá        | ✅Hoàn Thành 
+806_SOUTHDC_Q06_3005382_2627057198233.pdf | 28/35 | BigC     | GO! TAN UYEN        | 2627057198233 | Đúng giá        | ✅Hoàn Thành 
+806_SOUTHDC_Q06_3005382_2627057198233.pdf | 29/35 | BigC     | GO! DIEN BAN        | 2627057198233 | Đúng giá        | ✅Hoàn Thành 
+806_SOUTHDC_Q06_3005382_2627057198233.pdf | 30/35 | BigC     | GO! HOA THANH       | 2627057198233 | Đúng giá        | ✅Hoàn Thành 
+806_SOUTHDC_Q06_3005382_2627057198233.pdf | 31/35 | BigC     | GO! RACH GIA        | 2627057198233 | Đúng giá        | ✅Hoàn Thành 
+806_SOUTHDC_Q06_3005382_2627057198233.pdf | 32/35 | BigC     | GO! HONG NGU        | 2627057198233 | Đúng giá        | ✅Hoàn Thành 
+806_SOUTHDC_Q06_3005382_2627057198233.pdf | 33/35 | BigC     | GO! THANH BINH      | 2627057198233 | Đúng giá        | ✅Hoàn Thành 
+806_SOUTHDC_Q06_3005382_2627057198233.pdf | 34/35 | BigC     | GO! AN NHON         | 2627057198233 | Đúng giá        | ✅Hoàn Thành 
+806_SOUTHDC_Q06_3005382_2627057198233.pdf | 35/35 | BigC     | GO! CU CHI          | 2627057198233 | Đúng giá        | ✅Hoàn Thành 
+----- Kết thúc bảng -----
+
+----- BẢNG STATUS lúc 10:49:43 09/07/2026 -----
+Tên file                                                       | Trang | Hệ thống | Mã khách hàng | PO           | Đơn giá  | Trạng thái 
+22856-222-CONG TY CP HA THANH LONG AN 1_LAC LONG QUAN 87.pdf   | 1/1   | COOPFOOD | MN_MT_CF2170  | 102612036-00 | Đúng giá | ✅Hoàn Thành
+22856-222-CONG TY CP HA THANH LONG AN 1_NGUYEN HUU TIEN 11.pdf | 1/1   | COOPFOOD | MN_MT_CF2039  | 102612120-00 | Đúng giá | ✅Hoàn Thành
+Xtra phạm văn đồng 9.pdf                                       | 1/1   | COOP     | MN_MT_cop306  | 102578897-00 | Đúng giá | ✅Hoàn Thành
+Bà rịa 9.pdf                                                   | 1/1   | COOP     | MN_MT_cop515  | 102612966-00 | Đúng giá | ✅Hoàn Thành
+22856-222-CONG TY CP HA THANH LONG AN 1_LA TAN KIM.pdf         | 1/1   | COOPFOOD | MN_MT_CF9502  | 102612270-00 | Đúng giá | ✅Hoàn Thành
+----- Kết thúc bảng -----
+
+----- BẢNG STATUS lúc 10:52:48 09/07/2026 -----
+Tên file                      | Trang | Hệ thống | Mã khách hàng | PO         | Đơn giá         | Trạng thái  
+winp cần thơ PO4192677025.pdf | 1/1   | Winmart  | MN_MT_WIN1352 | 4192677025 | Đúng giá        | ✅Hoàn Thành 
+winp đà nẵng PO4901304749.pdf | 1/2   | Winmart  | MN_MT_WIN1326 | 4901304749 | Có 3 mã sai giá | ⚠️Hoàn Thành
+----- Kết thúc bảng -----

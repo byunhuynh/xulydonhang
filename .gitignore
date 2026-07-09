@@ -27,3 +27,7 @@ Thumbs.db
 # ===== IDE =====
 .vscode/
 .idea/
+
+
+zalo_state.json
+log.log

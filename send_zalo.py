@@ -3,7 +3,13 @@ import os
 import re
 import time as t
 import json
+from datetime import datetime, timedelta
 STATE_FILE = "zalo_state.json"
+
+# Công tắc tổng cho tính năng tự tạo nhắc hẹn giao hàng sau khi gửi tin.
+# Bật/tắt cho TỪNG nhóm cụ thể thì cấu hình trong block <reminder> của settings.ini
+# (cùng key MÃKH+VENDOR như block <zalo>), ví dụ: MNKINGFOOD = 1
+ENABLE_REMINDER = True
 
 
 
@@ -46,27 +52,31 @@ def format_sai_gia_list(text):
 
 
 # ==========================
-# 1️⃣ HÀM LẤY GIÁ TRỊ TRONG <zalo>
+# 1️⃣ HÀM LẤY GIÁ TRỊ TRONG 1 BLOCK <section>...</section>
 # ==========================
-def get_zalo_value(key, filename="settings.ini"):
+def get_ini_section_value(key, section, filename="settings.ini"):
     with open(filename, "r", encoding="utf-8") as f:
         content = f.read()
 
-    # Tìm block <zalo>...</zalo>
-    match = re.search(r"<zalo>(.*?)</zalo>", content, re.DOTALL)
+    # Tìm block <section>...</section>
+    match = re.search(rf"<{section}>(.*?)</{section}>", content, re.DOTALL)
     if not match:
         return None
 
-    zalo_block = match.group(1)
+    section_block = match.group(1)
 
     # Tìm dòng KEY = VALUE
-    pattern = rf"^{key}\s*=\s*(.+)$"
-    value_match = re.search(pattern, zalo_block, re.MULTILINE)
+    pattern = rf"^{re.escape(key)}\s*=\s*(.+)$"
+    value_match = re.search(pattern, section_block, re.MULTILINE)
 
     if value_match:
         return value_match.group(1).strip()
-    
+
     return None
+
+
+def get_zalo_value(key, filename="settings.ini"):
+    return get_ini_section_value(key, "zalo", filename)
 
 def read_message_groups_with_raw(filename="message.txt"):
     with open(filename, "r", encoding="utf-8") as f:
@@ -376,9 +386,9 @@ def send_message(page: Page, tinnhan: str):
 
 
 
-def get_zalo_value_auto(ma_khach_hang, vendor, filename="settings.ini"):
+def make_zalo_key(ma_khach_hang, vendor):
     """
-    Tạo key từ Mã Khách hàng[:2] + vendor, sau đó lấy giá trị trong <zalo>
+    Tạo key từ Mã Khách hàng[:2] + vendor.
     Ví dụ:
     ma_khach_hang = 'MB_MT_BIGC'
     vendor = 'BigC'
@@ -390,10 +400,28 @@ def get_zalo_value_auto(ma_khach_hang, vendor, filename="settings.ini"):
     # Lấy 2 ký tự đầu của mã khách hàng
     prefix = ma_khach_hang[:2].upper()
 
-    # Tạo key
-    key = prefix + vendor_clean
+    return prefix + vendor_clean
 
+
+def get_zalo_value_auto(ma_khach_hang, vendor, filename="settings.ini"):
+    """Tạo key từ Mã Khách hàng[:2] + vendor, sau đó lấy giá trị trong <zalo>"""
+    key = make_zalo_key(ma_khach_hang, vendor)
     return get_zalo_value(key, filename)
+
+
+def is_reminder_enabled(ma_khach_hang, vendor, filename="settings.ini"):
+    """
+    Kiểm tra xem nhóm này có được bật tính năng tạo nhắc hẹn hay không, dựa vào
+    block <reminder> trong settings.ini (dùng cùng key MÃKH+VENDOR như <zalo>).
+    Chỉ những key có mặt trong <reminder> và giá trị là 1/true/yes mới được bật.
+    """
+    key = make_zalo_key(ma_khach_hang, vendor)
+    value = get_ini_section_value(key, "reminder", filename)
+
+    if value is None:
+        return False
+
+    return value.strip().lower() in ("1", "true", "yes", "on", "bật", "bat")
 
 
 
@@ -415,6 +443,227 @@ def is_correct_chat(page, expected_name, timeout=5000):
 
     except:
         return False
+
+# ==========================
+# 3.5️⃣ TẠO NHẮC HẸN GIAO HÀNG (mặc định TẮT, bật bằng ENABLE_REMINDER)
+# ==========================
+REMINDER_LOG_FILE = "reminder_debug.log"
+
+
+def _log_reminder(msg: str):
+    """
+    Ghi log ra cả console lẫn file reminder_debug.log.
+    Cần thiết vì khi chạy headless (hoặc chạy trong app không có console, ví dụ
+    App.py mở như GUI), print() không hiển thị ở đâu cả → không có cách nào biết
+    bước nào bị lỗi. Ghi ra file để luôn xem lại được, kể cả khi không thấy trình duyệt.
+    """
+    line = f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] {msg}"
+    print(line)
+    try:
+        with open(REMINDER_LOG_FILE, "a", encoding="utf-8") as f:
+            f.write(line + "\n")
+    except Exception:
+        pass
+
+
+def _paste_into_contenteditable(page: Page, locator, text: str):
+    """Dán text vào 1 ô contenteditable bất kỳ bằng kỹ thuật shadow-clipboard (giống send_message)."""
+    page.evaluate(f"""
+        () => {{
+            let ta = document.createElement('textarea');
+            ta.id = 'shadow_clipboard_reminder';
+            ta.style.position = 'fixed';
+            ta.style.opacity = '0';
+            ta.value = `{text}`;
+            document.body.appendChild(ta);
+        }}
+    """)
+    page.locator("#shadow_clipboard_reminder").click()
+    page.keyboard.down("Control")
+    page.keyboard.press("A")
+    page.keyboard.press("C")
+    page.keyboard.up("Control")
+    page.evaluate("""
+        () => {
+            let ta = document.getElementById('shadow_clipboard_reminder');
+            if (ta) ta.remove();
+        }
+    """)
+
+    locator.click()
+    page.keyboard.down("Control")
+    page.keyboard.press("V")
+    page.keyboard.up("Control")
+
+
+def build_reminder_content(data: dict) -> str:
+    """Nội dung nhắc hẹn giao hàng, dựa theo thông tin đơn hàng đã có trong tin nhắn đã gửi."""
+    po = data.get("PO")
+    store = data.get("store")
+    vendor = data.get("vendor")
+    entry_date = data.get("entry_date")
+    cancle_date = data.get("cancle_date")
+
+    lines = ["🔔 NHẮC HẸN GIAO HÀNG"]
+    if po: lines.append(f"🎫 Đơn hàng: {po}")
+    if vendor: lines.append(f"🏬 Hệ thống: {vendor}")
+    if store: lines.append(f"🏪 Store: {store}")
+    if entry_date: lines.append(f"🗓️ Ngày đặt hàng: {entry_date}")
+    if cancle_date: lines.append(f"⏳ Hạn giao hàng: {cancle_date}")
+    return "\n".join(lines)
+
+
+def create_delivery_reminder(page: Page, data: dict):
+    """
+    Tạo 1 nhắc hẹn Zalo ngay trong nhóm vừa gửi tin (không chuyển nhóm khác):
+    - Nội dung: thông tin đơn hàng (PO/store/vendor/entry_date/cancle_date)
+    - Thời gian: 9h sáng, trước cancle_date 1 ngày
+
+    Luồng thao tác lấy từ html/Zalo - Thành.html, html/Zalo - Thành - step 3.html
+    và html/Zalo - Thành - calender.html (lúc khung lịch đang mở):
+    menu "..." -> Tạo nhắc hẹn -> nhập nội dung -> chọn "Khác" -> bấm ô ngày để mở
+    khung lịch "#calendar-v3" (popup này gắn ngoài .zl-modal, ngay dưới <body>) ->
+    gõ thẳng ngày/giờ vào 2 ô input trong khung lịch (data-id="txt_RMD_Date" và
+    "txt_RMD_Time", định dạng DD/MM/YYYY và hh:mm) thay vì click từng ô ngày.
+    """
+    cancle_date = data.get("cancle_date")
+    if not cancle_date:
+        _log_reminder("⚠️ Không có cancle_date → bỏ qua tạo nhắc hẹn.")
+        return
+
+    try:
+        cancle_dt = datetime.strptime(cancle_date.strip(), "%d/%m/%Y")
+        # Ngày giao là thứ 2 → nhắc trước 2 ngày (thứ 7) thay vì 1 ngày (rơi vào CN)
+        days_before = 2 if cancle_dt.weekday() == 0 else 1
+        target_dt = (cancle_dt - timedelta(days=days_before)).replace(hour=9, minute=0)
+    except ValueError:
+        _log_reminder(f"⚠️ cancle_date không đúng định dạng dd/mm/yyyy: {cancle_date} → bỏ qua tạo nhắc hẹn.")
+        return
+
+    # Thời gian nhắc hẹn đã qua (Zalo không cho chọn ngày quá khứ) → bỏ qua luôn,
+    # tránh script bị kẹt khi cố gõ 1 ngày mà lịch không chấp nhận.
+    if target_dt <= datetime.now():
+        _log_reminder(f"⏭️ Thời gian nhắc hẹn ({target_dt.strftime('%H:%M %d/%m/%Y')}) đã ở quá khứ → bỏ qua tạo nhắc hẹn.")
+        return
+
+    content = build_reminder_content(data)
+
+    try:
+        # 1) Mở menu "Tùy chọn thêm" trong khung soạn tin (data-id="div_More_Menu")
+        more_btn = page.locator('[data-id="div_More_Menu"]')
+        more_btn.wait_for(timeout=5000)
+        more_btn.click()
+        page.wait_for_timeout(300)
+
+        # 2) Chọn "Tạo nhắc hẹn" trong menu vừa mở
+        reminder_item = page.get_by_text("Tạo nhắc hẹn", exact=True)
+        reminder_item.wait_for(timeout=5000)
+        reminder_item.click()
+
+        # 3) Chờ modal "Tạo nhắc hẹn" mở (class "zl-modal")
+        modal = page.locator(".zl-modal").last
+        modal.wait_for(timeout=5000)
+        page.wait_for_timeout(300)
+
+        # 4) Nhập nội dung nhắc hẹn
+        content_box = modal.locator(".rich-input").first
+        content_box.wait_for(timeout=5000)
+        _paste_into_contenteditable(page, content_box, content)
+
+        # 5) Chọn chip "Khác" để tự chọn ngày giờ cụ thể (thay vì 15p/30p/9h ngày mai)
+        other_chip = modal.get_by_text("Khác", exact=True)
+        other_chip.wait_for(timeout=5000)
+        other_chip.click()
+        page.wait_for_timeout(300)
+
+        # 6) Bấm ô ngày trong modal (data-id="txt_RMD_Date") để mở khung lịch "#calendar-v3"
+        date_field = modal.locator('[data-id="txt_RMD_Date"]')
+        date_field.wait_for(timeout=5000)
+        date_field.click()
+
+        calendar = page.locator("#calendar-v3")
+        calendar.wait_for(timeout=5000)
+        page.wait_for_timeout(300)
+
+        # 7) Gõ ngày/giờ vào 2 ô input trong khung lịch bằng phím thật (giống người
+        # dùng gõ tay) thay vì .fill() — input này có parser theo từng ký tự
+        # (mask DD/MM/YYYY, hh:mm) nên .fill() có thể không kích hoạt đúng, nhất
+        # là khi chạy headless.
+        date_str = target_dt.strftime("%d/%m/%Y")
+        time_str = target_dt.strftime("%H:%M")
+
+        date_input = calendar.locator('input[data-id="txt_RMD_Date"]')
+        date_input.click()
+        date_input.press("Control+A")
+        page.keyboard.type(date_str, delay=50)
+        page.keyboard.press("Enter")
+        page.wait_for_timeout(200)
+
+        time_input = calendar.locator('input[data-id="txt_RMD_Time"]')
+        time_input.click()
+        time_input.press("Control+A")
+        page.keyboard.type(time_str, delay=50)
+        page.keyboard.press("Enter")
+        page.wait_for_timeout(200)
+
+        # Đối chiếu lại giá trị đã gõ vào ô input có đúng không
+        date_ok = time_ok = None
+        try:
+            date_ok = date_input.input_value() == date_str
+            time_ok = time_input.input_value() == time_str
+        except Exception:
+            pass
+        _log_reminder(f"📝 Đã gõ ngày='{date_str}' (khớp={date_ok}) giờ='{time_str}' (khớp={time_ok})")
+
+        # Đóng khung lịch: KHÔNG dùng phím Escape — đã test thực tế thấy Escape kích
+        # hoạt luôn hộp thoại "Xác nhận — Bạn muốn huỷ nhắc hẹn đang được tạo?" của
+        # modal cha (Escape bị modal bắt trước, không chỉ đóng riêng khung lịch).
+        # Cũng không click vào ô nội dung vì khung lịch che ngay phía trên nó.
+        # → Click ra ngoài vào dòng "Chọn kiểu lặp lại" (nằm dưới khung lịch, ảnh
+        # chụp thực tế cho thấy không bị che).
+        try:
+            modal.locator('[data-id="div_RMD_Repeat"]').click(timeout=3000)
+        except Exception as e:
+            _log_reminder(f"⚠️ Không click được ra ngoài để đóng khung lịch (bỏ qua, thử bấm nút tạo luôn): {e}")
+        try:
+            calendar.wait_for(state="hidden", timeout=2000)
+        except Exception:
+            pass
+        page.wait_for_timeout(300)
+
+        # Kiểm tra lại preview ngày giờ hiển thị trên modal có khớp không
+        try:
+            preview_text = " ".join(date_field.inner_text().split())
+            _log_reminder(f"🗓️ Xem trước ngày giờ nhắc hẹn trên modal: {preview_text}")
+        except Exception:
+            pass
+
+        # 8) Bấm "Tạo nhắc hẹn" (data-id="btn_RMD_CXL") sau khi nút được kích hoạt
+        create_btn = modal.locator('[data-id="btn_RMD_CXL"]')
+        create_btn.wait_for(timeout=5000)
+        try:
+            page.wait_for_function(
+                "(el) => el.getAttribute('data-disabled') !== 'disabled'",
+                arg=create_btn.element_handle(),
+                timeout=5000
+            )
+        except Exception:
+            disabled_now = create_btn.get_attribute("data-disabled")
+            _log_reminder(f"⚠️ Nút 'Tạo nhắc hẹn' vẫn có data-disabled='{disabled_now}' sau khi chờ — có thể ngày/giờ chưa được Zalo chấp nhận.")
+
+        create_btn.click()
+        _log_reminder(f"⏰ Đã bấm tạo nhắc hẹn giao hàng lúc {target_dt.strftime('%H:%M %d/%m/%Y')}")
+
+    except Exception as e:
+        _log_reminder(f"❌ Lỗi khi tạo nhắc hẹn: {e}")
+        try:
+            screenshot_path = f"reminder_error_{datetime.now().strftime('%Y%m%d_%H%M%S')}.png"
+            page.screenshot(path=screenshot_path)
+            _log_reminder(f"📸 Đã lưu ảnh chụp màn hình lúc lỗi: {screenshot_path}")
+        except Exception:
+            pass
+        raise
+
 
 def gui_tinnhan():
     groups = read_message_groups_with_raw("message.txt")
@@ -449,6 +698,8 @@ def gui_tinnhan():
             khu_vuc = data.get("khu_vuc")
             url = f"https://bluedonhang.pages.dev/?po={po}" if po else ""
             khung_gio = data.get("khung_gio")
+            entry_date = data.get("entry_date")
+            cancle_date = data.get("cancle_date")
 
             zalo_key_value = get_zalo_value_auto(ma_kh, vendor)
 
@@ -461,8 +712,10 @@ def gui_tinnhan():
                     f"⏱️ Xử lý lúc: {start_time} (Thời gian: {time_})\n"
                     f"📍 Khu vực: {khu_vuc}\n"
                     f"📦 Tổng số đơn: {tong_don}\n"
-                    f"📝 Danh sách đơn hàng:\n{text}"
                 )
+                if entry_date: message += f"🗓️ Ngày đặt hàng: {entry_date}\n"
+                if cancle_date: message += f"⏳ Hạn giao hàng: {cancle_date}\n"
+                message += f"📝 Danh sách đơn hàng:\n{text}"
 
             elif vendor == 'JIT':
                 message = (
@@ -473,6 +726,8 @@ def gui_tinnhan():
                     f"🌅 Buổi: {khung_gio}\n"
                     f"📦 Tổng số đơn: {tong_don}\n"
                 )
+                if entry_date: message += f"🗓️ Ngày đặt hàng: {entry_date}\n"
+                if cancle_date: message += f"⏳ Hạn giao hàng: {cancle_date}\n"
                 if tong_tien:
                     message += f"💰 Tổng tiền: {tong_tien}\n"
 
@@ -483,6 +738,8 @@ def gui_tinnhan():
                 if store: lines.append(f"🏪 Store: {store}")
                 if start_time: lines.append(f"⏱️ Xử lý lúc: {start_time}")
                 if vendor: lines.append(f"🏬 Hệ thống: {vendor}")
+                if entry_date: lines.append(f"🗓️ Ngày đặt hàng: {entry_date}")
+                if cancle_date: lines.append(f"⏳ Hạn giao hàng: {cancle_date}")
                 if url:
                     lines.append(f"🔗 Link đơn hàng: {url}")
                 if tong_tien: lines.append(f"💰 Tổng tiền: {tong_tien}")
@@ -529,6 +786,13 @@ def gui_tinnhan():
             try:
                 t.sleep(0.3)  # nghỉ 1s trước khi gửi
                 send_message(page, message)
+
+                if ENABLE_REMINDER and is_reminder_enabled(ma_kh, vendor):
+                    try:
+                        create_delivery_reminder(page, data)
+                    except Exception as e:
+                        _log_reminder(f"⚠️ Bỏ qua nhắc hẹn do lỗi: {e}")
+
                 remove_processed_block(raw)
                 t.sleep(0.3)
 

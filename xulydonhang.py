@@ -960,6 +960,8 @@ class ProcessHandler(QObject):
         ProcessHandler.ghi_message(f"store: {shipto}")
         ProcessHandler.ghi_message(f"vendor: {hethong}")
         ProcessHandler.ghi_message(f"Mã Khách hàng: {makhachhang}")
+        ProcessHandler.ghi_message(f"entry_date: {entry_date}")
+        ProcessHandler.ghi_message(f"cancle_date: {cancle_date}")
         ProcessHandler.ghi_message(f"start_time: {now_str}")
         if url:
             ProcessHandler.ghi_message(f"url: {url}")
@@ -1973,6 +1975,8 @@ class ProcessHandler(QObject):
         ProcessHandler.ghi_message(f"vendor: {vendor}")
         ProcessHandler.ghi_message(f"store: {diachigiaohang}")
         ProcessHandler.ghi_message(f"Mã Khách hàng: {makhachhang}")
+        ProcessHandler.ghi_message(f"entry_date: {entry_date}")
+        ProcessHandler.ghi_message(f"cancle_date: {cancle_date}")
         ProcessHandler.ghi_message(f"start_time: {now_str}")
         if url:
             ProcessHandler.ghi_message(f"url: {url}")
@@ -2321,6 +2325,8 @@ class ProcessHandler(QObject):
         ProcessHandler.ghi_message(f"store: {diachigiao}")
         ProcessHandler.ghi_message(f"vendor: {vendor}")
         ProcessHandler.ghi_message(f"Mã Khách hàng: {makhachhang}")
+        ProcessHandler.ghi_message(f"entry_date: {entry_date}")
+        ProcessHandler.ghi_message(f"cancle_date: {cancle_date}")
         ProcessHandler.ghi_message(f"start_time: {now_str}")
         if url:
             ProcessHandler.ghi_message(f"url: {url}")
@@ -2698,6 +2704,8 @@ class ProcessHandler(QObject):
         ProcessHandler.ghi_message(f"store: {diachigiao}")
         ProcessHandler.ghi_message(f"vendor: {vendor}")
         ProcessHandler.ghi_message(f"Mã Khách hàng: {makhachhang}")
+        ProcessHandler.ghi_message(f"entry_date: {entry_date}")
+        ProcessHandler.ghi_message(f"cancle_date: {cancle_date}")
         ProcessHandler.ghi_message(f"start_time: {now_str}")
         if url:
             ProcessHandler.ghi_message(f"url: {url}")
@@ -3098,6 +3106,8 @@ class ProcessHandler(QObject):
         ProcessHandler.ghi_message(f"vendor: {vendor}")
         ProcessHandler.ghi_message(f"store: {diachigiao}")
         ProcessHandler.ghi_message(f"Mã Khách hàng: {makhachhang}")
+        ProcessHandler.ghi_message(f"entry_date: {entry_date}")
+        ProcessHandler.ghi_message(f"cancle_date: {cancle_date}")
         ProcessHandler.ghi_message(f"start_time: {now_str}")
         if url:
             ProcessHandler.ghi_message(f"url: {url}")
@@ -3423,6 +3433,8 @@ class ProcessHandler(QObject):
         ProcessHandler.ghi_message(f"vendor: {vendor}")
         ProcessHandler.ghi_message(f"store: {diachigiao}")
         ProcessHandler.ghi_message(f"Mã Khách hàng: {makhachhang}")
+        ProcessHandler.ghi_message(f"entry_date: {entry_date}")
+        ProcessHandler.ghi_message(f"cancle_date: {cancle_date}")
         ProcessHandler.ghi_message(f"start_time: {now_str}")
         if url:
             ProcessHandler.ghi_message(f"url: {url}")
@@ -3758,6 +3770,8 @@ class ProcessHandler(QObject):
         ProcessHandler.ghi_message(f"store: {delivery}")
         ProcessHandler.ghi_message(f"vendor: {vendor}")
         ProcessHandler.ghi_message(f"Mã Khách hàng: {makhachhang}")
+        ProcessHandler.ghi_message(f"entry_date: {entry_date}")
+        ProcessHandler.ghi_message(f"cancle_date: {cancle_date}")
         ProcessHandler.ghi_message(f"start_time: {now_str}")
         if url:
             ProcessHandler.ghi_message(f"url: {url}")
@@ -4101,6 +4115,8 @@ class ProcessHandler(QObject):
         ProcessHandler.ghi_message(f"store: {diachigiaohang}")
         ProcessHandler.ghi_message(f"vendor: {vendor}")
         ProcessHandler.ghi_message(f"Mã Khách hàng: {makhachhang}")
+        ProcessHandler.ghi_message(f"entry_date: {entry_date}")
+        ProcessHandler.ghi_message(f"cancle_date: {cancle_date}")
         ProcessHandler.ghi_message(f"start_time: {now_str}")
         if file_url:
             ProcessHandler.ghi_message(f"url: {file_url}")
@@ -4483,14 +4499,21 @@ class ProcessHandler(QObject):
         saigia = 0
         tongtien = 0
         trongluong = 0
+
         if makhachhang[:2] == "MB":
             khuvuc = "MT_MB"
             kho = "TP_HN_12"
             mien = "HN"
-        else:
+        elif makhachhang[:5] == "MN_MT":
             kho = "LA_KHO2026"
             khuvuc = "MT_MN"
             mien = "LA"
+        elif makhachhang[:5] == "MN_GC":
+            kho = "LA_TP"
+            khuvuc = "MT_MN"
+            mien = "LA"
+
+
         if page_num == 1:
             sheet[f"A{current_row}"] = entry_date
             sheet[f"AV{current_row}"] = songayno_MT
@@ -4854,6 +4877,8 @@ f'đã thêm hàng khuyến mãi <b><span style="color: green;">{kiemtra}</span>
         ProcessHandler.ghi_message(f"store: {diachigiaohang}")
         ProcessHandler.ghi_message(f"vendor: {vendor}")
         ProcessHandler.ghi_message(f"Mã Khách hàng: {makhachhang}")
+        ProcessHandler.ghi_message(f"entry_date: {entry_date}")
+        ProcessHandler.ghi_message(f"cancle_date: {cancle_date}")
         ProcessHandler.ghi_message(f"start_time: {now_str}")
         if url:
             ProcessHandler.ghi_message(f"url: {url}")
@@ -7190,31 +7215,29 @@ f'đã thêm hàng khuyến mãi <b><span style="color: green;">{kiemtra}</span>
                     if match:
                         wh = match.group(1)   # WH6_HN
                         od_raw = match.group(2)   # 19082025
+                        od = datetime.strptime(od_raw, "%d%m%Y").strftime("%d/%m/%Y")
 
                         if page_num == 0:
                             now_xuly = datetime.now()
                             now_str = now_xuly.strftime("%d/%m/%Y %H:%M:%S")
-                            
-                            
+
+
                             ProcessHandler.ghi_message(f"[vendor: {vendor}")
                             ProcessHandler.ghi_message(f"start_time: {now_str}")
                             ProcessHandler.ghi_message(f"khu_vuc: {wh}")
                             ProcessHandler.ghi_message(f"Mã Khách hàng: MN_JIT_01512")
+                            ProcessHandler.ghi_message(f"entry_date: {od}")
+                            ProcessHandler.ghi_message(f"cancle_date: {od}")
                             now = datetime.now(ZoneInfo("Asia/Ho_Chi_Minh"))
                             khung_gio = 'sáng' if now.hour < 12 else 'chiều'
-                            
+
                             ProcessHandler.ghi_message(f"khung_gio: {khung_gio}")
-                            
 
 
-                        
 
-                        
-                       
-                       
-                        od = datetime.strptime(od_raw, "%d%m%Y").strftime("%d/%m/%Y")
 
-                        
+
+
                         products = ProcessHandler.cat_giua_theo_dong(text, "Mã vận đơn:", "Top Value")
                         
                         
@@ -7727,6 +7750,9 @@ f'đã thêm hàng khuyến mãi <b><span style="color: green;">{kiemtra}</span>
                     gio_dat = last2[1]
                     print(entry_date)
                     print(gio_dat)
+                    if page_num == 0:
+                        ProcessHandler.ghi_message(f"entry_date: {entry_date}")
+                        ProcessHandler.ghi_message(f"cancle_date: {entry_date}")
                     products = ProcessHandler.tach_sanpham_JIT_airway(products)
                     khuvuc = "HCM" if "SĐT: 84335617279" in text else "HN"
                     print(khuvuc)
@@ -7809,6 +7835,9 @@ f'đã thêm hàng khuyến mãi <b><span style="color: green;">{kiemtra}</span>
                     gio_dat = last2[1]
                     print(entry_date)
                     print(gio_dat)
+                    if page_num == 0:
+                        ProcessHandler.ghi_message(f"entry_date: {entry_date}")
+                        ProcessHandler.ghi_message(f"cancle_date: {entry_date}")
                     products = ProcessHandler.tach_sanpham_JIT_airway(products)
                     khuvuc = "HCM" if "SĐT: 84909764354" in text else "HN"
                     print(khuvuc)
@@ -9316,13 +9345,23 @@ f'đã thêm hàng khuyến mãi <b><span style="color: green;">{kiemtra}</span>
                         now = datetime.now()
                         now_str = now.strftime("%d/%m/%Y %H:%M:%S")
                         saigia_num = 0
-                        
-                        
+
+
 
                         trangdaubigc = text
-                        if "LINFOX WAREHOUSE (802)" in trangdaubigc:
+                        print(trangdaubigc)
+                        if "3006900" in trangdaubigc and "LINFOX WAREHOUSE (802)" in trangdaubigc:
+                            makhachhang = "MB_GC_BIGC"
+                            diachigiao = "LINFOX WAREHOUSE (802)"
+                        elif "3005382" in trangdaubigc and "LINFOX WAREHOUSE (802)" in trangdaubigc:
                             makhachhang = "MB_MT_BIGC"
                             diachigiao = "LINFOX WAREHOUSE (802)"
+                        elif "3005382" in trangdaubigc and "FM LOGISTIC VSIP 2 (806)" in trangdaubigc:
+                            makhachhang = "MN_MT_BIGCAC"
+                            diachigiao = "FM LOGISTIC VSIP 2 (806)"
+                        elif "3006900" in trangdaubigc and "FM LOGISTIC VSIP 2 (806)" in trangdaubigc:
+                            makhachhang = "MN_GC_BIGCAC"
+                            diachigiao = "FM LOGISTIC VSIP 2 (806)"
                         else:
                             makhachhang = "MN_MT_BIGCAC"
                             diachigiao = "FM LOGISTIC VSIP 2 (806)"
@@ -9353,6 +9392,8 @@ f'đã thêm hàng khuyến mãi <b><span style="color: green;">{kiemtra}</span>
                         ProcessHandler.ghi_message(f"store: {diachigiao}")
                         ProcessHandler.ghi_message(f"vendor: {vendor}")
                         ProcessHandler.ghi_message(f"Mã Khách hàng: {makhachhang}")
+                        ProcessHandler.ghi_message(f"entry_date: {entry_date}")
+                        ProcessHandler.ghi_message(f"cancle_date: {cancel_date}")
                         ProcessHandler.ghi_message(f"start_time: {now_str}")
                         tongtien = 0
 
