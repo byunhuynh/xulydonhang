@@ -3001,16 +3001,17 @@ class ProcessHandler(QObject):
 
 
     
-    def upload_file_to_drive(path, output_name=None, vendor=None, makhachhang=None):
+    def upload_file_to_drive(path, output_name=None, vendor=None, entry_date=None, makhachhang=None, cancle_date=None):
         """
         path: đường dẫn file gốc
         output_name: tên file muốn đặt trên Drive (KHÔNG cần đuôi)
                     nếu None -> dùng tên gốc
-        vendor, makhachhang: nếu có, được chèn vào tên file để dễ tìm lại
-                    -> tên file cuối: [vendor][makhachhang][output_name]
-                    (bọc ngoặc vuông từng trường để ranh giới luôn rõ ràng,
-                    không bị lẫn với dấu "_"/"-" có sẵn bên trong makhachhang/po_number.
-                    KHÔNG tự thêm ngày ở đây vì Apps Script phía Drive đã tự prepend
+        vendor, entry_date, makhachhang, cancle_date: nếu có, được chèn vào tên file để dễ tìm lại
+                    -> tên file cuối: [vendor][entry_date][makhachhang][cancle_date][output_name]
+                    (bọc ngoặc vuông từng trường để ranh giới luôn rõ ràng, không bị lẫn với
+                    dấu "_"/"-" có sẵn bên trong makhachhang/po_number. Trường nào rỗng thì
+                    hiển thị "NA" để giữ đủ số trường, tránh lệch vị trí khi tìm lại.
+                    KHÔNG tự thêm ngày upload ở đây vì Apps Script phía Drive đã tự prepend
                     ngày upload vào tên file rồi, tránh bị lặp ngày)
 
         Đọc file ngay (đồng bộ) rồi đẩy phần gọi mạng (POST + retry) chạy nền,
@@ -3034,14 +3035,17 @@ class ProcessHandler(QObject):
         base_name = output_name if output_name else os.path.splitext(os.path.basename(path))[0]
 
         def _sanitize(value):
-            return re.sub(r'[\\/:*?"<>|\[\]]+', "", str(value)).strip()
+            if value in (None, ""):
+                return "NA"
+            return re.sub(r'[\\/:*?"<>|\[\]]+', "", str(value)).strip() or "NA"
 
-        name_parts = []
-        if vendor:
-            name_parts.append(_sanitize(vendor))
-        if makhachhang:
-            name_parts.append(_sanitize(makhachhang))
-        name_parts.append(_sanitize(base_name))
+        name_parts = [
+            _sanitize(vendor),
+            _sanitize(entry_date),
+            _sanitize(makhachhang),
+            _sanitize(cancle_date),
+            _sanitize(base_name),
+        ]
         filename = "".join(f"[{part}]" for part in name_parts)
 
         # Encode file ngay (đồng bộ) vì file gốc có thể bị xóa ngay sau khi hàm này return
@@ -3772,9 +3776,14 @@ class ProcessHandler(QObject):
             kho = "TP_HN_12"
             mien = "HN"
         else:
-            kho = "LA_KHO2026"
-            khuvuc = "MT_MN"
-            mien = "LA"
+            if makhachhang == "MN_MT_JM0001":
+                kho = "LA_TP"
+                khuvuc = "MT_MN"
+                mien = "LA"
+            else:
+                kho = "LA_KHO2026"
+                khuvuc = "MT_MN"
+                mien = "LA"
 
         diengiai = f"{vendor} {po_number}"
         sheet[f"A{current_row}"] = entry_date
@@ -5441,7 +5450,7 @@ f'đã thêm hàng khuyến mãi <b><span style="color: green;">{kiemtra}</span>
             
             if page_label == '1/1':
                 print('')
-                result  = ProcessHandler.upload_file_to_drive(path, po_number, vendor="COOP", makhachhang=makhachhang)
+                result  = ProcessHandler.upload_file_to_drive(path, po_number, vendor="COOP", makhachhang=makhachhang, entry_date=entry_date, cancle_date=cancle_date)
                 print(result )
                 file_url = result.get("url")
             else:
@@ -5449,7 +5458,7 @@ f'đã thêm hàng khuyến mãi <b><span style="color: green;">{kiemtra}</span>
                 po_name = f"{po_number}.pdf"
                 ProcessHandler.cat_trang_hien_tai(doc,po_name,page_label)
 
-                result  = ProcessHandler.upload_file_to_drive(po_name, po_number, vendor="COOP", makhachhang=makhachhang)
+                result  = ProcessHandler.upload_file_to_drive(po_name, po_number, vendor="COOP", makhachhang=makhachhang, entry_date=entry_date, cancle_date=cancle_date)
                 file_url = result.get("url")
 
                 if os.path.exists(po_name):
@@ -7962,7 +7971,7 @@ f'đã thêm hàng khuyến mãi <b><span style="color: green;">{kiemtra}</span>
                         
                         if page_label == '1/1':
                             print('')
-                            result  = ProcessHandler.upload_file_to_drive(file_path, po_number, vendor=vendor, makhachhang=makhachhang)
+                            result  = ProcessHandler.upload_file_to_drive(file_path, po_number, vendor=vendor, makhachhang=makhachhang, entry_date=entry_date, cancle_date=cancle_date)
                             print(result )
                             file_url = result.get("url")
                         else:
@@ -7971,7 +7980,7 @@ f'đã thêm hàng khuyến mãi <b><span style="color: green;">{kiemtra}</span>
                             po_name = f"{po_number}.pdf"
 
                             ProcessHandler.cat_trang_hien_tai(doc,po_name,page_num)
-                            result  = ProcessHandler.upload_file_to_drive(po_name, po_number, vendor=vendor, makhachhang=makhachhang)
+                            result  = ProcessHandler.upload_file_to_drive(po_name, po_number, vendor=vendor, makhachhang=makhachhang, entry_date=entry_date, cancle_date=cancle_date)
                             file_url = result.get("url")
                             if os.path.exists(po_name):
                                 os.remove(po_name)
@@ -8029,8 +8038,8 @@ f'đã thêm hàng khuyến mãi <b><span style="color: green;">{kiemtra}</span>
                         products = ProcessHandler.replace_sku_numbers(products, sku_mapping)  # Thay SKU
                         soluongsanphamstore = len(products)
                         print(products)
-                        
-                        
+
+
 
                         self.log_signal.emit(f"<b>🏬 Đơn hàng Store:</b> <span style='color:orange;'>{delivery_address}</span>")
                         self.log_signal.emit(f"<b>📦 Số PO:</b> <span style='color:blue;'>{po_number}</span>")
@@ -8038,10 +8047,10 @@ f'đã thêm hàng khuyến mãi <b><span style="color: green;">{kiemtra}</span>
                         self.log_signal.emit(f"<b>⏳ Hạn đơn hàng:</b> <span style='color:red;'>{cancel_date}</span>")
                         self.log_signal.emit(f"<b>🛒 Số lượng sản phẩm đặt của Store:</b> <span style='color:brown;'>{soluongsanphamstore}</span>")
 
-                        
+
                         if page_label == '1/1':
                             print('')
-                            result  = ProcessHandler.upload_file_to_drive(file_path, po_number, vendor=vendor, makhachhang=makhachhang)
+                            result  = ProcessHandler.upload_file_to_drive(file_path, po_number, vendor=vendor, makhachhang=makhachhang, entry_date=entry_date, cancle_date=cancel_date)
                             print(result )
                             file_url = result.get("url")
                         else:
@@ -8050,11 +8059,11 @@ f'đã thêm hàng khuyến mãi <b><span style="color: green;">{kiemtra}</span>
                             po_name = f"{po_number}.pdf"
 
                             ProcessHandler.cat_trang_hien_tai(doc,po_name,page_num)
-                            result  = ProcessHandler.upload_file_to_drive(po_name, po_number, vendor=vendor, makhachhang=makhachhang)
+                            result  = ProcessHandler.upload_file_to_drive(po_name, po_number, vendor=vendor, makhachhang=makhachhang, entry_date=entry_date, cancle_date=cancel_date)
                             file_url = result.get("url")
                             if os.path.exists(po_name):
                                 os.remove(po_name)
-                        
+
                         saigia = ProcessHandler.write_to_dondathang_kingfood(self,products,makhachhang,po_number,entry_date,cancel_date,stt,vendor,delivery_address,file_url)
                         
                         if not makhachhang: 
@@ -8126,8 +8135,8 @@ f'đã thêm hàng khuyến mãi <b><span style="color: green;">{kiemtra}</span>
                         products = ProcessHandler.replace_sku_numbers(products, sku_mapping)  # Thay SKU
                         soluongsanphamstore = len(products)
                         print(products)
-                        
-                        
+
+
 
                         self.log_signal.emit(f"<b>🏬 Đơn hàng Store:</b> <span style='color:orange;'>{delivery_address}</span>")
                         self.log_signal.emit(f"<b>📦 Số PO:</b> <span style='color:blue;'>{po_number}</span>")
@@ -8135,10 +8144,10 @@ f'đã thêm hàng khuyến mãi <b><span style="color: green;">{kiemtra}</span>
                         self.log_signal.emit(f"<b>⏳ Hạn đơn hàng:</b> <span style='color:red;'>{cancel_date}</span>")
                         self.log_signal.emit(f"<b>🛒 Số lượng sản phẩm đặt của Store:</b> <span style='color:brown;'>{soluongsanphamstore}</span>")
 
-                        
+
                         if page_label == '1/1':
                             print('')
-                            result  = ProcessHandler.upload_file_to_drive(file_path, po_number, vendor=vendor, makhachhang=makhachhang)
+                            result  = ProcessHandler.upload_file_to_drive(file_path, po_number, vendor=vendor, makhachhang=makhachhang, entry_date=entry_date, cancle_date=cancel_date)
                             print(result )
                             file_url = result.get("url")
                         else:
@@ -8147,11 +8156,11 @@ f'đã thêm hàng khuyến mãi <b><span style="color: green;">{kiemtra}</span>
                             po_name = f"{po_number}.pdf"
 
                             ProcessHandler.cat_trang_hien_tai(doc,po_name,page_num)
-                            result  = ProcessHandler.upload_file_to_drive(po_name, po_number, vendor=vendor, makhachhang=makhachhang)
+                            result  = ProcessHandler.upload_file_to_drive(po_name, po_number, vendor=vendor, makhachhang=makhachhang, entry_date=entry_date, cancle_date=cancel_date)
                             file_url = result.get("url")
                             if os.path.exists(po_name):
                                 os.remove(po_name)
-                        
+
                         saigia = ProcessHandler.write_to_dondathang_kingfood(self,products,makhachhang,po_number,entry_date,cancel_date,stt,vendor,delivery_address,file_url)
                         
                         if not makhachhang: 
@@ -8382,7 +8391,7 @@ f'đã thêm hàng khuyến mãi <b><span style="color: green;">{kiemtra}</span>
 
                         if page_label == '1/1':
                             print('')
-                            result  = ProcessHandler.upload_file_to_drive(file_path, po_number, vendor=vendor, makhachhang=makhachhang)
+                            result  = ProcessHandler.upload_file_to_drive(file_path, po_number, vendor=vendor, makhachhang=makhachhang, entry_date=entry_date, cancle_date=cancel_date)
                             print(result )
                             file_url = result.get("url")
                         else:
@@ -8391,7 +8400,7 @@ f'đã thêm hàng khuyến mãi <b><span style="color: green;">{kiemtra}</span>
                             po_name = f"{po_number}.pdf"
 
                             ProcessHandler.cat_trang_hien_tai(doc,po_name,page_num)
-                            result  = ProcessHandler.upload_file_to_drive(po_name, po_number, vendor=vendor, makhachhang=makhachhang)
+                            result  = ProcessHandler.upload_file_to_drive(po_name, po_number, vendor=vendor, makhachhang=makhachhang, entry_date=entry_date, cancle_date=cancel_date)
                             file_url = result.get("url")
                             if os.path.exists(po_name):
                                 os.remove(po_name)

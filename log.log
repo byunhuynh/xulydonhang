@@ -14851,3 +14851,208 @@ Tên file                                             | Trang | Hệ thống | M
 222-CONG TY CP HA THANH LONG AN 1  CFMB 8.7.2026.txt | 1/1   | COOPFOOD | MB_MT_CF9167  | 102592451-00 | Có 2 mã sai giá | ⚠️Hoàn Thành
 ----- Kết thúc bảng -----
 ⚠️ Lỗi gửi dữ liệu lên Google Sheets: 500 Server Error: Internal Server Error for url: https://script.google.com/macros/s/AKfycbyeg7Mu72mWOIEv5gYDsiGSY9FB7d-OiPdzM-PdAdBapTp4sUhb7ly1_N2ZtvqUrW8wBA/exec
+
+----- BẢNG STATUS lúc 13:12:34 09/07/2026 -----
+Tên file                     | Trang | Hệ thống | Mã khách hàng | PO          | Đơn giá         | Trạng thái  
+HÃ_ THÃ_NH-5470992-29.06.pdf | 1/1   | Satra    | MN_MT_STF1149 | P-005470992 | Có 1 mã sai giá | ⚠️Hoàn Thành
+----- Kết thúc bảng -----
+
+----- BẢNG STATUS lúc 13:15:17 09/07/2026 -----
+Tên file                     | Trang | Hệ thống | Mã khách hàng | PO          | Đơn giá         | Trạng thái  
+HÃ_ THÃ_NH-5470992-29.06.pdf | 1/1   | Satra    | MN_MT_STF1149 | P-005470992 | Có 1 mã sai giá | ⚠️Hoàn Thành
+----- Kết thúc bảng -----
+⚠️ Lỗi gửi dữ liệu lên Google Sheets: 500 Server Error: Internal Server Error for url: https://script.google.com/macros/s/AKfycbyeg7Mu72mWOIEv5gYDsiGSY9FB7d-OiPdzM-PdAdBapTp4sUhb7ly1_N2ZtvqUrW8wBA/exec
+
+----- BẢNG STATUS lúc 13:20:54 09/07/2026 -----
+Tên file                | Trang | Hệ thống | Mã khách hàng | PO          | Đơn giá  | Trạng thái 
+HATHANH P-5483623.pdf   | 1/1   | Satra    | MN_MT_STF1189 | P-005483623 | Đúng giá | ✅Hoàn Thành
+PO 5483570 HA THANH.pdf | 1/1   | Satra    | MN_MT_STF1086 | P-005483570 | Đúng giá | ✅Hoàn Thành
+----- Kết thúc bảng -----
+
+----- BẢNG STATUS lúc 13:29:26 09/07/2026 -----
+Tên file             | Trang | Hệ thống | Mã khách hàng | PO         | Đơn giá         | Trạng thái  
+PO20260709110600.pdf | 1/1   | Winmart  | MB_MT_WIM1649 | 4192661410 | Đúng giá        | ✅Hoàn Thành 
+PO20260709110604.pdf | 1/2   | Winmart  | MB_MT_WIM1323 | 4192676112 | Có 1 mã sai giá | ⚠️Hoàn Thành
+PO20260709110613.pdf | 1/1   | Winmart  | MB_MT_WIM1331 | 4192676364 | Đúng giá        | ✅Hoàn Thành 
+PO20260709110532.pdf | 1/1   | Winmart  | MB_MT_WIM1331 | 4192661288 | Đúng giá        | ✅Hoàn Thành 
+PO20260709110540.pdf | 1/1   | Winmart  | MB_MT_WIM1336 | 4192661356 | Đúng giá        | ✅Hoàn Thành 
+PO20260709110524.pdf | 1/1   | Winmart  | MB_MT_WIM1389 | 4192661278 | Đúng giá        | ✅Hoàn Thành 
+PO20260709110551.pdf | 1/1   | Winmart  | MB_MT_WIM1389 | 4192661407 | Đúng giá        | ✅Hoàn Thành 
+PO20260709110516.pdf | 1/2   | Winmart  | MB_MT_WIM1649 | 4192667474 | Có 1 mã sai giá | ⚠️Hoàn Thành
+PO20260709110555.pdf | 1/1   | Winmart  | MB_MT_WIM1323 | 4192661406 | Đúng giá        | ✅Hoàn Thành 
+PO20260709110609.pdf | 1/2   | Winmart  | MB_MT_WIM1649 | 4192676196 | Có 1 mã sai giá | ⚠️Hoàn Thành
+PO20260709110619.pdf | 1/1   | Winmart  | MB_MT_WIM1336 | 4192676426 | Đúng giá        | ✅Hoàn Thành 
+----- Kết thúc bảng -----
+
+----- BẢNG STATUS lúc 13:33:43 09/07/2026 -----
+Tên file                     | Trang | Hệ thống | Mã khách hàng | PO          | Đơn giá         | Trạng thái  
+HÃ_ THÃ_NH-5470992-29.06.pdf | 1/1   | Satra    | MN_MT_STF1149 | P-005470992 | Có 1 mã sai giá | ⚠️Hoàn Thành
+----- Kết thúc bảng -----
+
+----- BẢNG STATUS lúc 13:45:59 09/07/2026 -----
+Tên file          | Trang | Hệ thống | Mã khách hàng | PO          | Đơn giá  | Trạng thái 
+đơn hàng tay.xlsx | 1/1   | SATRA    | MN_MT_stsg    | P-000244377 | Đúng giá | ✅Hoàn Thành
+----- Kết thúc bảng -----
+
+----- BẢNG STATUS lúc 13:46:57 09/07/2026 -----
+Tên file          | Trang | Hệ thống | Mã khách hàng | PO          | Đơn giá  | Trạng thái 
+đơn hàng tay.xlsx | 1/1   | SATRA    | MN_MT_stsg    | P-000244377 | Đúng giá | ✅Hoàn Thành
+đơn hàng tay.xlsx | 1/1   | SATRA    | MN_MT_stph    | P-000231021 | Đúng giá | ✅Hoàn Thành
+----- Kết thúc bảng -----
+
+----- BẢNG STATUS lúc 14:22:08 09/07/2026 -----
+Tên file             | Trang | Hệ thống | Mã khách hàng | PO         | Đơn giá  | Trạng thái 
+PO20260709141520.pdf | 1/1   | Winmart  | MB_MT_WIM1323 | 4192690434 | Đúng giá | ✅Hoàn Thành
+PO20260709141509.pdf | 1/1   | Winmart  | MB_MT_WIM1389 | 4192690413 | Đúng giá | ✅Hoàn Thành
+PO20260709141450.pdf | 1/1   | Winmart  | MB_MT_WIM1389 | 4192690664 | Đúng giá | ✅Hoàn Thành
+PO20260709141505.pdf | 1/1   | Winmart  | MB_MT_WIM1649 | 4192690476 | Đúng giá | ✅Hoàn Thành
+PO20260709141458.pdf | 1/1   | Winmart  | MB_MT_WIM1336 | 4192690585 | Đúng giá | ✅Hoàn Thành
+PO20260709141454.pdf | 1/1   | Winmart  | MB_MT_WIM1331 | 4192690604 | Đúng giá | ✅Hoàn Thành
+PO20260709141514.pdf | 1/1   | Winmart  | MB_MT_WIM1649 | 4192690455 | Đúng giá | ✅Hoàn Thành
+----- Kết thúc bảng -----
+
+----- BẢNG STATUS lúc 14:25:45 09/07/2026 -----
+Tên file                   | Trang | Hệ thống | Mã khách hàng | PO          | Đơn giá  | Trạng thái 
+HÀ THÀNH-5482848-08.07.pdf | 1/1   | Satra    | MN_MT_STF1149 | P-005482848 | Đúng giá | ✅Hoàn Thành
+----- Kết thúc bảng -----
+
+----- BẢNG STATUS lúc 15:13:00 09/07/2026 -----
+Tên file                         | Trang | Hệ thống   | Mã khách hàng | PO             | Đơn giá | Trạng thái 
+air_waybill_WH6_HCM_09072026.pdf | 1/50  | JIT-CHOICE | WH6_HCM       | 2607097J9HVAR9 |         | ✅Hoàn Thành
+air_waybill_WH6_HCM_09072026.pdf | 2/50  | JIT-CHOICE | WH6_HCM       | 2607097JX12FNT |         | ✅Hoàn Thành
+air_waybill_WH6_HCM_09072026.pdf | 3/50  | JIT-CHOICE | WH6_HCM       | 2607097KA4754P |         | ✅Hoàn Thành
+air_waybill_WH6_HCM_09072026.pdf | 4/50  | JIT-CHOICE | WH6_HCM       | 2607097KM2SH8N |         | ✅Hoàn Thành
+air_waybill_WH6_HCM_09072026.pdf | 5/50  | JIT-CHOICE | WH6_HCM       | 2607097KN7YF4N |         | ✅Hoàn Thành
+air_waybill_WH6_HCM_09072026.pdf | 6/50  | JIT-CHOICE | WH6_HCM       | 2607097N227N0P |         | ✅Hoàn Thành
+air_waybill_WH6_HCM_09072026.pdf | 7/50  | JIT-CHOICE | WH6_HCM       | 2607097N2621SH |         | ✅Hoàn Thành
+air_waybill_WH6_HCM_09072026.pdf | 8/50  | JIT-CHOICE | WH6_HCM       | 2607097N49TBUJ |         | ✅Hoàn Thành
+air_waybill_WH6_HCM_09072026.pdf | 9/50  | JIT-CHOICE | WH6_HCM       | 2607097N8FAMP9 |         | ✅Hoàn Thành
+air_waybill_WH6_HCM_09072026.pdf | 10/50 | JIT-CHOICE | WH6_HCM       | 2607097N8P0X53 |         | ✅Hoàn Thành
+air_waybill_WH6_HCM_09072026.pdf | 11/50 | JIT-CHOICE | WH6_HCM       | 2607097NF4YS3N |         | ✅Hoàn Thành
+air_waybill_WH6_HCM_09072026.pdf | 12/50 | JIT-CHOICE | WH6_HCM       | 2607097NKJ26UN |         | ✅Hoàn Thành
+air_waybill_WH6_HCM_09072026.pdf | 13/50 | JIT-CHOICE | WH6_HCM       | 2607097P287J5J |         | ✅Hoàn Thành
+air_waybill_WH6_HCM_09072026.pdf | 14/50 | JIT-CHOICE | WH6_HCM       | 2607097Q713B16 |         | ✅Hoàn Thành
+air_waybill_WH6_HCM_09072026.pdf | 15/50 | JIT-CHOICE | WH6_HCM       | 2607097Q8KNAXK |         | ✅Hoàn Thành
+air_waybill_WH6_HCM_09072026.pdf | 16/50 | JIT-CHOICE | WH6_HCM       | 2607097QHW4WAQ |         | ✅Hoàn Thành
+air_waybill_WH6_HCM_09072026.pdf | 17/50 | JIT-CHOICE | WH6_HCM       | 2607097QU3T57B |         | ✅Hoàn Thành
+air_waybill_WH6_HCM_09072026.pdf | 18/50 | JIT-CHOICE | WH6_HCM       | 2607097R2HB99A |         | ✅Hoàn Thành
+air_waybill_WH6_HCM_09072026.pdf | 19/50 | JIT-CHOICE | WH6_HCM       | 2607097RARHHP1 |         | ✅Hoàn Thành
+air_waybill_WH6_HCM_09072026.pdf | 20/50 | JIT-CHOICE | WH6_HCM       | 2607097RQJJRKJ |         | ✅Hoàn Thành
+air_waybill_WH6_HCM_09072026.pdf | 21/50 | JIT-CHOICE | WH6_HCM       | 2607097RX0KSHK |         | ✅Hoàn Thành
+air_waybill_WH6_HCM_09072026.pdf | 22/50 | JIT-CHOICE | WH6_HCM       | 2607097SAH6EEU |         | ✅Hoàn Thành
+air_waybill_WH6_HCM_09072026.pdf | 23/50 | JIT-CHOICE | WH6_HCM       | 2607097SG5C7MU |         | ✅Hoàn Thành
+air_waybill_WH6_HCM_09072026.pdf | 24/50 | JIT-CHOICE | WH6_HCM       | 2607097SK6PDEG |         | ✅Hoàn Thành
+air_waybill_WH6_HCM_09072026.pdf | 25/50 | JIT-CHOICE | WH6_HCM       | 2607097STYM8MX |         | ✅Hoàn Thành
+air_waybill_WH6_HCM_09072026.pdf | 26/50 | JIT-CHOICE | WH6_HCM       | 2607097TH9WX9V |         | ✅Hoàn Thành
+air_waybill_WH6_HCM_09072026.pdf | 27/50 | JIT-CHOICE | WH6_HCM       | 2607097U63HHKC |         | ✅Hoàn Thành
+air_waybill_WH6_HCM_09072026.pdf | 28/50 | JIT-CHOICE | WH6_HCM       | 2607097V051GBV |         | ✅Hoàn Thành
+air_waybill_WH6_HCM_09072026.pdf | 29/50 | JIT-CHOICE | WH6_HCM       | 2607097V0BRMN1 |         | ✅Hoàn Thành
+air_waybill_WH6_HCM_09072026.pdf | 30/50 | JIT-CHOICE | WH6_HCM       | 2607097VG1D5Q1 |         | ✅Hoàn Thành
+air_waybill_WH6_HCM_09072026.pdf | 31/50 | JIT-CHOICE | WH6_HCM       | 2607097W8P1K5S |         | ✅Hoàn Thành
+air_waybill_WH6_HCM_09072026.pdf | 32/50 | JIT-CHOICE | WH6_HCM       | 2607097W8K5YET |         | ✅Hoàn Thành
+air_waybill_WH6_HCM_09072026.pdf | 33/50 | JIT-CHOICE | WH6_HCM       | 2607097WR51KAA |         | ✅Hoàn Thành
+air_waybill_WH6_HCM_09072026.pdf | 34/50 | JIT-CHOICE | WH6_HCM       | 2607097X1GESKP |         | ✅Hoàn Thành
+air_waybill_WH6_HCM_09072026.pdf | 35/50 | JIT-CHOICE | WH6_HCM       | 2607097XKKCDKW |         | ✅Hoàn Thành
+air_waybill_WH6_HCM_09072026.pdf | 36/50 | JIT-CHOICE | WH6_HCM       | 2607097XUC8X5N |         | ✅Hoàn Thành
+air_waybill_WH6_HCM_09072026.pdf | 37/50 | JIT-CHOICE | WH6_HCM       | 2607097YN737Q3 |         | ✅Hoàn Thành
+air_waybill_WH6_HCM_09072026.pdf | 38/50 | JIT-CHOICE | WH6_HCM       | 2607097YQ70CWH |         | ✅Hoàn Thành
+air_waybill_WH6_HCM_09072026.pdf | 39/50 | JIT-CHOICE | WH6_HCM       | 2607097YYBC7TU |         | ✅Hoàn Thành
+air_waybill_WH6_HCM_09072026.pdf | 40/50 | JIT-CHOICE | WH6_HCM       | 260709806F9HQC |         | ✅Hoàn Thành
+air_waybill_WH6_HCM_09072026.pdf | 41/50 | JIT-CHOICE | WH6_HCM       | 26070981BRBGUB |         | ✅Hoàn Thành
+air_waybill_WH6_HCM_09072026.pdf | 42/50 | JIT-CHOICE | WH6_HCM       | 26070981P19KR2 |         | ✅Hoàn Thành
+air_waybill_WH6_HCM_09072026.pdf | 43/50 | JIT-CHOICE | WH6_HCM       | 26070981YNCFPE |         | ✅Hoàn Thành
+air_waybill_WH6_HCM_09072026.pdf | 44/50 | JIT-CHOICE | WH6_HCM       | 260709827E7YMY |         | ✅Hoàn Thành
+air_waybill_WH6_HCM_09072026.pdf | 45/50 | JIT-CHOICE | WH6_HCM       | 26070982P79CRR |         | ✅Hoàn Thành
+air_waybill_WH6_HCM_09072026.pdf | 46/50 | JIT-CHOICE | WH6_HCM       | 2607098330DWA3 |         | ✅Hoàn Thành
+air_waybill_WH6_HCM_09072026.pdf | 47/50 | JIT-CHOICE | WH6_HCM       | 260709840CS51N |         | ✅Hoàn Thành
+air_waybill_WH6_HCM_09072026.pdf | 48/50 | JIT-CHOICE | WH6_HCM       | 260709846AJC1V |         | ✅Hoàn Thành
+air_waybill_WH6_HCM_09072026.pdf | 49/50 | JIT-CHOICE | WH6_HCM       | 260709849AVQDQ |         | ✅Hoàn Thành
+air_waybill_WH6_HCM_09072026.pdf | 50/50 | JIT-CHOICE | WH6_HCM       | 26070985PQ8A87 |         | ✅Hoàn Thành
+air_waybill_WH6_HN_09072026.pdf  | 1/60  | JIT-CHOICE | WH6_HN        | 26070861U305S7 |         | ✅Hoàn Thành
+air_waybill_WH6_HN_09072026.pdf  | 2/60  | JIT-CHOICE | WH6_HN        | 260709787339QE |         | ✅Hoàn Thành
+air_waybill_WH6_HN_09072026.pdf  | 3/60  | JIT-CHOICE | WH6_HN        | 2607097HCUDX2Q |         | ✅Hoàn Thành
+air_waybill_WH6_HN_09072026.pdf  | 4/60  | JIT-CHOICE | WH6_HN        | 2607097MQHMA42 |         | ✅Hoàn Thành
+air_waybill_WH6_HN_09072026.pdf  | 5/60  | JIT-CHOICE | WH6_HN        | 2607097MXTA89A |         | ✅Hoàn Thành
+air_waybill_WH6_HN_09072026.pdf  | 6/60  | JIT-CHOICE | WH6_HN        | 2607097N3QNCG7 |         | ✅Hoàn Thành
+air_waybill_WH6_HN_09072026.pdf  | 7/60  | JIT-CHOICE | WH6_HN        | 2607097NH8KV6M |         | ✅Hoàn Thành
+air_waybill_WH6_HN_09072026.pdf  | 8/60  | JIT-CHOICE | WH6_HN        | 2607097NS78TMP |         | ✅Hoàn Thành
+air_waybill_WH6_HN_09072026.pdf  | 9/60  | JIT-CHOICE | WH6_HN        | 2607097NSA4SKC |         | ✅Hoàn Thành
+air_waybill_WH6_HN_09072026.pdf  | 10/60 | JIT-CHOICE | WH6_HN        | 2607097NSHQMKQ |         | ✅Hoàn Thành
+air_waybill_WH6_HN_09072026.pdf  | 11/60 | JIT-CHOICE | WH6_HN        | 2607097NUDT6TV |         | ✅Hoàn Thành
+air_waybill_WH6_HN_09072026.pdf  | 12/60 | JIT-CHOICE | WH6_HN        | 2607097P78E5ET |         | ✅Hoàn Thành
+air_waybill_WH6_HN_09072026.pdf  | 13/60 | JIT-CHOICE | WH6_HN        | 2607097PAHD86P |         | ✅Hoàn Thành
+air_waybill_WH6_HN_09072026.pdf  | 14/60 | JIT-CHOICE | WH6_HN        | 2607097PX204CS |         | ✅Hoàn Thành
+air_waybill_WH6_HN_09072026.pdf  | 15/60 | JIT-CHOICE | WH6_HN        | 2607097QP6HJRQ |         | ✅Hoàn Thành
+air_waybill_WH6_HN_09072026.pdf  | 16/60 | JIT-CHOICE | WH6_HN        | 2607097RCHRE8R |         | ✅Hoàn Thành
+air_waybill_WH6_HN_09072026.pdf  | 17/60 | JIT-CHOICE | WH6_HN        | 2607097S1RQP81 |         | ✅Hoàn Thành
+air_waybill_WH6_HN_09072026.pdf  | 18/60 | JIT-CHOICE | WH6_HN        | 2607097S6KA5TW |         | ✅Hoàn Thành
+air_waybill_WH6_HN_09072026.pdf  | 19/60 | JIT-CHOICE | WH6_HN        | 2607097SFKAC66 |         | ✅Hoàn Thành
+air_waybill_WH6_HN_09072026.pdf  | 20/60 | JIT-CHOICE | WH6_HN        | 2607097SMPCKWY |         | ✅Hoàn Thành
+air_waybill_WH6_HN_09072026.pdf  | 21/60 | JIT-CHOICE | WH6_HN        | 2607097SU934S0 |         | ✅Hoàn Thành
+air_waybill_WH6_HN_09072026.pdf  | 22/60 | JIT-CHOICE | WH6_HN        | 2607097T9SK0V1 |         | ✅Hoàn Thành
+air_waybill_WH6_HN_09072026.pdf  | 23/60 | JIT-CHOICE | WH6_HN        | 2607097TENWW5X |         | ✅Hoàn Thành
+air_waybill_WH6_HN_09072026.pdf  | 24/60 | JIT-CHOICE | WH6_HN        | 2607097TWSDVYY |         | ✅Hoàn Thành
+air_waybill_WH6_HN_09072026.pdf  | 25/60 | JIT-CHOICE | WH6_HN        | 2607097TYGQU20 |         | ✅Hoàn Thành
+air_waybill_WH6_HN_09072026.pdf  | 26/60 | JIT-CHOICE | WH6_HN        | 2607097UBWGN8U |         | ✅Hoàn Thành
+air_waybill_WH6_HN_09072026.pdf  | 27/60 | JIT-CHOICE | WH6_HN        | 2607097UYTJ387 |         | ✅Hoàn Thành
+air_waybill_WH6_HN_09072026.pdf  | 28/60 | JIT-CHOICE | WH6_HN        | 2607097V6H5UC7 |         | ✅Hoàn Thành
+air_waybill_WH6_HN_09072026.pdf  | 29/60 | JIT-CHOICE | WH6_HN        | 2607097W2CUVWE |         | ✅Hoàn Thành
+air_waybill_WH6_HN_09072026.pdf  | 30/60 | JIT-CHOICE | WH6_HN        | 2607097WCUHT68 |         | ✅Hoàn Thành
+air_waybill_WH6_HN_09072026.pdf  | 31/60 | JIT-CHOICE | WH6_HN        | 2607097WRYR00X |         | ✅Hoàn Thành
+air_waybill_WH6_HN_09072026.pdf  | 32/60 | JIT-CHOICE | WH6_HN        | 2607097WS0N5MC |         | ✅Hoàn Thành
+air_waybill_WH6_HN_09072026.pdf  | 33/60 | JIT-CHOICE | WH6_HN        | 2607097WW1D627 |         | ✅Hoàn Thành
+air_waybill_WH6_HN_09072026.pdf  | 34/60 | JIT-CHOICE | WH6_HN        | 2607097XA34J55 |         | ✅Hoàn Thành
+air_waybill_WH6_HN_09072026.pdf  | 35/60 | JIT-CHOICE | WH6_HN        | 2607097XWEY5TH |         | ✅Hoàn Thành
+air_waybill_WH6_HN_09072026.pdf  | 36/60 | JIT-CHOICE | WH6_HN        | 2607097XY5C9YJ |         | ✅Hoàn Thành
+air_waybill_WH6_HN_09072026.pdf  | 37/60 | JIT-CHOICE | WH6_HN        | 2607097Y3WX53Q |         | ✅Hoàn Thành
+air_waybill_WH6_HN_09072026.pdf  | 38/60 | JIT-CHOICE | WH6_HN        | 2607097Y4QPRV3 |         | ✅Hoàn Thành
+air_waybill_WH6_HN_09072026.pdf  | 39/60 | JIT-CHOICE | WH6_HN        | 2607097YAKMAUA |         | ✅Hoàn Thành
+air_waybill_WH6_HN_09072026.pdf  | 40/60 | JIT-CHOICE | WH6_HN        | 2607097YCKE2VE |         | ✅Hoàn Thành
+air_waybill_WH6_HN_09072026.pdf  | 41/60 | JIT-CHOICE | WH6_HN        | 2607097YN8XYGX |         | ✅Hoàn Thành
+air_waybill_WH6_HN_09072026.pdf  | 42/60 | JIT-CHOICE | WH6_HN        | 2607097YQU1FBD |         | ✅Hoàn Thành
+air_waybill_WH6_HN_09072026.pdf  | 43/60 | JIT-CHOICE | WH6_HN        | 26070980GES2X5 |         | ✅Hoàn Thành
+air_waybill_WH6_HN_09072026.pdf  | 44/60 | JIT-CHOICE | WH6_HN        | 26070980KC5J1C |         | ✅Hoàn Thành
+air_waybill_WH6_HN_09072026.pdf  | 45/60 | JIT-CHOICE | WH6_HN        | 26070980YM4V3J |         | ✅Hoàn Thành
+air_waybill_WH6_HN_09072026.pdf  | 46/60 | JIT-CHOICE | WH6_HN        | 26070981CNVW1F |         | ✅Hoàn Thành
+air_waybill_WH6_HN_09072026.pdf  | 47/60 | JIT-CHOICE | WH6_HN        | 26070981N9EFGG |         | ✅Hoàn Thành
+air_waybill_WH6_HN_09072026.pdf  | 48/60 | JIT-CHOICE | WH6_HN        | 26070981QNRPJC |         | ✅Hoàn Thành
+air_waybill_WH6_HN_09072026.pdf  | 49/60 | JIT-CHOICE | WH6_HN        | 26070981S5EG2M |         | ✅Hoàn Thành
+air_waybill_WH6_HN_09072026.pdf  | 50/60 | JIT-CHOICE | WH6_HN        | 26070981TYNWYU |         | ✅Hoàn Thành
+air_waybill_WH6_HN_09072026.pdf  | 51/60 | JIT-CHOICE | WH6_HN        | 2607098256SMGM |         | ✅Hoàn Thành
+air_waybill_WH6_HN_09072026.pdf  | 52/60 | JIT-CHOICE | WH6_HN        | 26070982JRMX4E |         | ✅Hoàn Thành
+air_waybill_WH6_HN_09072026.pdf  | 53/60 | JIT-CHOICE | WH6_HN        | 26070983CHKGH5 |         | ✅Hoàn Thành
+air_waybill_WH6_HN_09072026.pdf  | 54/60 | JIT-CHOICE | WH6_HN        | 26070983TMQ0UV |         | ✅Hoàn Thành
+air_waybill_WH6_HN_09072026.pdf  | 55/60 | JIT-CHOICE | WH6_HN        | 260709841JVB4K |         | ✅Hoàn Thành
+air_waybill_WH6_HN_09072026.pdf  | 56/60 | JIT-CHOICE | WH6_HN        | 2607098472BYF4 |         | ✅Hoàn Thành
+air_waybill_WH6_HN_09072026.pdf  | 57/60 | JIT-CHOICE | WH6_HN        | 26070984FQUR5T |         | ✅Hoàn Thành
+air_waybill_WH6_HN_09072026.pdf  | 58/60 | JIT-CHOICE | WH6_HN        | 26070984QU899S |         | ✅Hoàn Thành
+air_waybill_WH6_HN_09072026.pdf  | 59/60 | JIT-CHOICE | WH6_HN        | 26070985996P41 |         | ✅Hoàn Thành
+air_waybill_WH6_HN_09072026.pdf  | 60/60 | JIT-CHOICE | WH6_HN        | 260709868U4B7M |         | ✅Hoàn Thành
+----- Kết thúc bảng -----
+⚠️ Lỗi gửi dữ liệu lên Google Sheets: HTTPSConnectionPool(host='script.google.com', port=443): Read timed out. (read timeout=15)
+
+----- BẢNG STATUS lúc 15:14:59 09/07/2026 -----
+Tên file                         | Trang | Hệ thống | Mã khách hàng | PO         | Đơn giá  | Trạng thái 
+wint bình dương PO4192709989.pdf | 1/1   | Winmart  | MN_MT_WIN1355 | 4192709989 | Đúng giá | ✅Hoàn Thành
+----- Kết thúc bảng -----
+
+----- BẢNG STATUS lúc 16:09:58 09/07/2026 -----
+Tên file                         | Trang | Hệ thống | Mã khách hàng | PO                 | Đơn giá  | Trạng thái 
+wint bình dương PO4192709989.pdf | 1/1   | Lotte    | MN_MT_LOT1005 | 260709-01005-00043 | Đúng giá | ✅Hoàn Thành
+----- Kết thúc bảng -----
+
+----- BẢNG STATUS lúc 16:24:11 09/07/2026 -----
+Tên file                     | Trang | Hệ thống | Mã khách hàng | PO          | Đơn giá  | Trạng thái 
+P-5483980-HA THANH.pdf       | 1/1   | Satra    | MN_MT_STF1173 | P-005483980 | Đúng giá | ✅Hoàn Thành
+HÀ THÀNH (2547)- 5484027.pdf | 1/1   | Satra    | MN_MT_STF1150 | P-005484027 | Đúng giá | ✅Hoàn Thành
+----- Kết thúc bảng -----
+
+----- BẢNG STATUS lúc 16:32:20 09/07/2026 -----
+Tên file                     | Trang | Hệ thống | Mã khách hàng | PO          | Đơn giá  | Trạng thái 
+HÀ THÀNH (2547)- 5484027.pdf | 1/1   | Satra    | MN_MT_STF1150 | P-005484027 | Đúng giá | ✅Hoàn Thành
+----- Kết thúc bảng -----
+
+----- BẢNG STATUS lúc 16:32:51 09/07/2026 -----
+Tên file                     | Trang | Hệ thống | Mã khách hàng | PO          | Đơn giá  | Trạng thái 
+HÀ THÀNH (2547)- 5484027.pdf | 1/1   | Satra    | MN_MT_STF1150 | P-005484027 | Đúng giá | ✅Hoàn Thành
+----- Kết thúc bảng -----
