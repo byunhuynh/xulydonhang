@@ -15056,3 +15056,24 @@ HÀ THÀNH (2547)- 5484027.pdf | 1/1   | Satra    | MN_MT_STF1150 | P-005484027 
 Tên file                     | Trang | Hệ thống | Mã khách hàng | PO          | Đơn giá  | Trạng thái 
 HÀ THÀNH (2547)- 5484027.pdf | 1/1   | Satra    | MN_MT_STF1150 | P-005484027 | Đúng giá | ✅Hoàn Thành
 ----- Kết thúc bảng -----
+
+----- BẢNG STATUS lúc 16:58:22 09/07/2026 -----
+Tên file                                  | Trang | Hệ thống | Mã khách hàng            | PO            | Đơn giá  | Trạng thái 
+802_NORTHDC_Q06_3005382_2628057223860.pdf | 2/17  | BigC     | GO! THANG LONG           | 2628057223860 | Đúng giá | ✅Hoàn Thành
+802_NORTHDC_Q06_3005382_2628057223860.pdf | 3/17  | BigC     | GO! THANG LONG           | 2628057223860 | Đúng giá | ✅Hoàn Thành
+802_NORTHDC_Q06_3005382_2628057223860.pdf | 4/17  | BigC     | GO! HAI PHONG            | 2628057223860 | Đúng giá | ✅Hoàn Thành
+802_NORTHDC_Q06_3005382_2628057223860.pdf | 5/17  | BigC     | TOPS MARKET GARDEN       | 2628057223860 | Đúng giá | ✅Hoàn Thành
+802_NORTHDC_Q06_3005382_2628057223860.pdf | 6/17  | BigC     | GO! NAM DINH             | 2628057223860 | Đúng giá | ✅Hoàn Thành
+802_NORTHDC_Q06_3005382_2628057223860.pdf | 7/17  | BigC     | GO! LONG BIEN            | 2628057223860 | Đúng giá | ✅Hoàn Thành
+802_NORTHDC_Q06_3005382_2628057223860.pdf | 8/17  | BigC     | GO! LONG BIEN            | 2628057223860 | Đúng giá | ✅Hoàn Thành
+802_NORTHDC_Q06_3005382_2628057223860.pdf | 9/17  | BigC     | GO! THANH HOA            | 2628057223860 | Đúng giá | ✅Hoàn Thành
+802_NORTHDC_Q06_3005382_2628057223860.pdf | 10/17 | BigC     | GO! NINH BINH            | 2628057223860 | Đúng giá | ✅Hoàn Thành
+802_NORTHDC_Q06_3005382_2628057223860.pdf | 11/17 | BigC     | GO! HA LONG              | 2628057223860 | Đúng giá | ✅Hoàn Thành
+802_NORTHDC_Q06_3005382_2628057223860.pdf | 12/17 | BigC     | TOPS MARKET LE TRONG TAN | 2628057223860 | Đúng giá | ✅Hoàn Thành
+802_NORTHDC_Q06_3005382_2628057223860.pdf | 13/17 | BigC     | GO! THAI NGUYEN          | 2628057223860 | Đúng giá | ✅Hoàn Thành
+802_NORTHDC_Q06_3005382_2628057223860.pdf | 14/17 | BigC     | GO! LAO CAI              | 2628057223860 | Đúng giá | ✅Hoàn Thành
+802_NORTHDC_Q06_3005382_2628057223860.pdf | 15/17 | BigC     | GO! HA NAM               | 2628057223860 | Đúng giá | ✅Hoàn Thành
+802_NORTHDC_Q06_3005382_2628057223860.pdf | 16/17 | BigC     | GO! HUNG YEN             | 2628057223860 | Đúng giá | ✅Hoàn Thành
+802_NORTHDC_Q06_3005382_2628057223860.pdf | 17/17 | BigC     | GO! YEN BAI              | 2628057223860 | Đúng giá | ✅Hoàn Thành
+----- Kết thúc bảng -----
+⚠️ Lỗi gửi dữ liệu lên Google Sheets: HTTPSConnectionPool(host='script.google.com', port=443): Read timed out. (read timeout=15)

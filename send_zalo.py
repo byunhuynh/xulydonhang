@@ -497,24 +497,24 @@ def _paste_into_contenteditable(page: Page, locator, text: str):
     page.keyboard.up("Control")
 
 
-def build_reminder_content(data: dict) -> str:
-    """Nội dung nhắc hẹn giao hàng, dựa theo thông tin đơn hàng đã có trong tin nhắn đã gửi."""
-    po = data.get("PO")
-    store = data.get("store")
-    vendor = data.get("vendor")
-    entry_date = data.get("entry_date")
-    cancle_date = data.get("cancle_date")
+def add_line(lines: list[str], label: str, value: Optional[str]):
+    """Thêm '{label}: {value}' vào lines, bỏ qua nếu value rỗng/None."""
+    if value:
+        lines.append(f"{label}: {value}")
 
+
+def build_reminder_content(data: dict[str, Optional[str]]) -> str:
+    """Nội dung nhắc hẹn giao hàng, dựa theo thông tin đơn hàng đã có trong tin nhắn đã gửi."""
     lines = ["🔔 NHẮC HẸN GIAO HÀNG"]
-    if po: lines.append(f"🎫 Đơn hàng: {po}")
-    if vendor: lines.append(f"🏬 Hệ thống: {vendor}")
-    if store: lines.append(f"🏪 Store: {store}")
-    if entry_date: lines.append(f"🗓️ Ngày đặt hàng: {entry_date}")
-    if cancle_date: lines.append(f"⏳ Hạn giao hàng: {cancle_date}")
+    add_line(lines, "🎫 Đơn hàng", data.get("PO"))
+    add_line(lines, "🏬 Hệ thống", data.get("vendor"))
+    add_line(lines, "🏪 Store", data.get("store"))
+    add_line(lines, "🗓️ Ngày đặt hàng", data.get("entry_date"))
+    add_line(lines, "⏳ Hạn giao hàng", data.get("cancle_date"))
     return "\n".join(lines)
 
 
-def create_delivery_reminder(page: Page, data: dict):
+def create_delivery_reminder(page: Page, data: dict[str, Optional[str]]):
     """
     Tạo 1 nhắc hẹn Zalo ngay trong nhóm vừa gửi tin (không chuyển nhóm khác):
     - Nội dung: thông tin đơn hàng (PO/store/vendor/entry_date/cancle_date)
@@ -727,48 +727,41 @@ def gui_tinnhan(
             zalo_key_value = get_zalo_value_auto(ma_kh, vendor)
 
             # ===== BUILD MESSAGE =====
-            message = ""
             if vendor == 'JV-Mart':
-                message = (
-                    f"🔔 TIN NHẮN TỰ ĐỘNG\n"
-                    f"🏬 Hệ thống: JupViec\n"
-                    f"⏱️ Xử lý lúc: {start_time} (Thời gian: {time_})\n"
-                    f"📍 Khu vực: {khu_vuc}\n"
-                    f"📦 Tổng số đơn: {tong_don}\n"
-                )
-                if entry_date: message += f"🗓️ Ngày đặt hàng: {entry_date}\n"
-                if cancle_date: message += f"⏳ Hạn giao hàng: {cancle_date}\n"
-                message += f"📝 Danh sách đơn hàng:\n{text}"
+                lines = ["🔔 TIN NHẮN TỰ ĐỘNG"]
+                add_line(lines, "🏬 Hệ thống", "JupViec")
+                add_line(lines, "⏱️ Xử lý lúc", f"{start_time} (Thời gian: {time_})")
+                add_line(lines, "📍 Khu vực", khu_vuc)
+                add_line(lines, "📦 Tổng số đơn", tong_don)
+                add_line(lines, "🗓️ Ngày đặt hàng", entry_date)
+                add_line(lines, "⏳ Hạn giao hàng", cancle_date)
+                lines.append(f"📝 Danh sách đơn hàng:\n{text}")
+                message = "\n".join(lines)
 
             elif vendor == 'JIT':
-                message = (
-                    f"🔔 TIN NHẮN TỰ ĐỘNG\n"
-                    f"🏬 Hệ thống: TopValue - JIT\n"
-                    f"⏱️ Xử lý lúc: {start_time} (Thời gian: {time_})\n"
-                    f"📍 Khu vực: {khu_vuc}\n"
-                    f"🌅 Buổi: {khung_gio}\n"
-                    f"📦 Tổng số đơn: {tong_don}\n"
-                )
-                if entry_date: message += f"🗓️ Ngày đặt hàng: {entry_date}\n"
-                if cancle_date: message += f"⏳ Hạn giao hàng: {cancle_date}\n"
-                if tong_tien:
-                    message += f"💰 Tổng tiền: {tong_tien}\n"
+                lines = ["🔔 TIN NHẮN TỰ ĐỘNG"]
+                add_line(lines, "🏬 Hệ thống", "TopValue - JIT")
+                add_line(lines, "⏱️ Xử lý lúc", f"{start_time} (Thời gian: {time_})")
+                add_line(lines, "📍 Khu vực", khu_vuc)
+                add_line(lines, "🌅 Buổi", khung_gio)
+                add_line(lines, "📦 Tổng số đơn", tong_don)
+                add_line(lines, "🗓️ Ngày đặt hàng", entry_date)
+                add_line(lines, "⏳ Hạn giao hàng", cancle_date)
+                add_line(lines, "💰 Tổng tiền", tong_tien)
+                message = "\n".join(lines)
 
             else:
                 lines = ["🔔 TIN NHẮN TỰ ĐỘNG"]
-
-                if po: lines.append(f"🎫 Đơn hàng: {po}")
-                if store: lines.append(f"🏪 Store: {store}")
-                if start_time: lines.append(f"⏱️ Xử lý lúc: {start_time}")
-                if vendor: lines.append(f"🏬 Hệ thống: {vendor}")
-                if entry_date: lines.append(f"🗓️ Ngày đặt hàng: {entry_date}")
-                if cancle_date: lines.append(f"⏳ Hạn giao hàng: {cancle_date}")
-                if url:
-                    lines.append(f"🔗 Link đơn hàng: {url}")
-                if tong_tien: lines.append(f"💰 Tổng tiền: {tong_tien}")
-                if tong_kienhang: lines.append(f"📦 Tổng số kiện: {tong_kienhang}")
-                if tong_trongluong: lines.append(f"⚖️ Tổng trọng lượng: {tong_trongluong}")
-
+                add_line(lines, "🎫 Đơn hàng", po)
+                add_line(lines, "🏪 Store", store)
+                add_line(lines, "⏱️ Xử lý lúc", start_time)
+                add_line(lines, "🏬 Hệ thống", vendor)
+                add_line(lines, "🗓️ Ngày đặt hàng", entry_date)
+                add_line(lines, "⏳ Hạn giao hàng", cancle_date)
+                add_line(lines, "🔗 Link đơn hàng", url)
+                add_line(lines, "💰 Tổng tiền", tong_tien)
+                add_line(lines, "📦 Tổng số kiện", tong_kienhang)
+                add_line(lines, "⚖️ Tổng trọng lượng", tong_trongluong)
                 message = "\n".join(lines)
 
                 if int(sai_gia) > 0:
