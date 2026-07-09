@@ -1,0 +1,16 @@
+[PO: 102592451-00
+store: 09167-CF HN YEN NGHIA - B9 - Lô B- TT2, dự án khu nhà ở Bộ tư lệnh Thủ Đô, phường Yên Nghĩa, Thành phố Hà Nội
+vendor: COOPFOOD
+Mã Khách hàng: MB_MT_CF9167
+entry_date: 08/07/2026
+cancle_date: 11/09/2026
+start_time: 09/07/2026 12:15:50
+url: https://script.google.com/macros/s/AKfycby9fc3IaX1-EwIb26g34WLs8TbQXNkdxeqpVSYSWddwwxRAFaz9kjsS9yFhypezIaF2/exec?po=%5BCOOP%5D%5BMB_MT_CF9167%5D%5B102592451-00%5D
+text: Mã hàng TP30879_02 - Nước giặt xả Blue Đậm đặc Hương Thảo Mộc túi 3.6L, Giá trên PO 146,593.125, Giá đúng: 162,881.0. Chênh lệch -16,288
+text: Mã hàng TP30886_02 - Nước giặt xả Blue Đậm đặc Hương Nước Hoa túi 3.6L, Giá trên PO 146,593.125, Giá đúng: 162,881.0. Chênh lệch -16,288
+tong_tien: 3,909,153
+tong_trongluong: 182.4 kg
+tong_kienhang: 12
+sai_gia: 2
+end_time: 09/07/2026 12:16:02
+time: 12s]

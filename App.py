@@ -92,6 +92,25 @@ class FileProcessorThread(QThread):
         self.finished_all.emit()
 
 
+class ZaloSenderThread(QThread):
+    log_signal = Signal(str)       # Log từng dòng, gửi ngay khi có (không đợi xong hết)
+    item_signal = Signal(dict)     # Kết quả từng nhóm tin vừa xử lý xong
+    status_signal = Signal(int, int)  # (current, total) tiến độ gửi tin
+    error_signal = Signal(str)     # Lỗi tổng quát (vd. không mở được Chrome)
+    finished_all = Signal()
+
+    def run(self):
+        try:
+            send_zalo.gui_tinnhan(
+                on_progress=self.item_signal.emit,
+                on_status=self.status_signal.emit,
+            )
+        except Exception as e:
+            self.error_signal.emit(str(e))
+        finally:
+            self.finished_all.emit()
+
+
 class MyApp(QMainWindow):
     def __init__(self):
         super().__init__()
@@ -200,21 +219,56 @@ class MyApp(QMainWindow):
 
 
 
+    def _lock_ui_for_processing(self, locked: bool):
+        """
+        Khóa/mở khóa các nút thao tác chính trong khi đang xử lý đơn hàng HOẶC đang
+        gửi Zalo. Cả hai luồng đều đọc/ghi message.txt và dondathang.xlsx, nên chạy
+        chồng lên nhau (ví dụ bấm "Xác nhận" trong lúc đang gửi Zalo) sẽ gây lỗi.
+        """
+        enabled = not locked
+        self.ui.xacnhan.setEnabled(enabled)
+        self.ui.loadfile.setEnabled(enabled)
+        self.ui.listdanhsach.setEnabled(enabled)
+        self.ui.stt.setEnabled(enabled)
+        self.ui.zalo_btn.setEnabled(enabled)
+
     def gui_zalo(self):
-        try:
-            result = send_zalo.gui_tinnhan()
+        self._lock_ui_for_processing(True)
+        self.ui.log.append("⏳ Đang gửi Zalo...")
+        self._zalo_had_error = False
 
-            for item in result:
-                self.ui.log.append(item["zalo"] or "KHÔNG CÓ NHÓM")
-                self.ui.log.append("nội dung:")
-                self.ui.log.append(item["message"])
-                self.ui.log.append(f"trạng thái: {item['status']}")
-                self.ui.log.append("-----")
+        self.zalo_thread = ZaloSenderThread()
+        self.zalo_thread.item_signal.connect(self.on_zalo_item)
+        self.zalo_thread.status_signal.connect(self.on_zalo_status)
+        self.zalo_thread.error_signal.connect(self.on_zalo_error)
+        self.zalo_thread.finished_all.connect(self.on_zalo_finished)
+        self.zalo_thread.start()
 
+    def on_zalo_status(self, current, total):
+        """Báo tiến độ gửi tin để người dùng biết đang gửi tin thứ mấy mà chờ."""
+        if total == 0:
+            self.ui.log.append("ℹ️ Không có tin nhắn nào cần gửi.")
+        elif current == 0:
+            self.ui.log.append(f"🔔 Có {total} tin nhắn cần gửi.")
+        else:
+            self.ui.log.append(f"📨 Đang gửi tin nhắn thứ {current}/{total}...")
+
+    def on_zalo_item(self, item):
+        """Cập nhật nhật ký ngay khi 1 nhóm tin vừa được xử lý xong, thay vì đợi gửi hết mới hiển thị."""
+        self.ui.log.append(item["zalo"] or "KHÔNG CÓ NHÓM")
+        self.ui.log.append("nội dung:")
+        self.ui.log.append(item["message"])
+        self.ui.log.append(f"trạng thái: {item['status']}")
+        self.ui.log.append("-----")
+
+    def on_zalo_error(self, message):
+        self._zalo_had_error = True
+        self.ui.log.append(f"❌ Lỗi gửi Zalo: {message}")
+
+    def on_zalo_finished(self):
+        if not self._zalo_had_error:
             self.ui.log.append("✅ Đã gửi Zalo thành công")
-
-        except Exception as e:
-            self.ui.log.append(f"❌ Lỗi gửi Zalo: {e}")
+        self._lock_ui_for_processing(False)
 
     def ensure_monthly_order_folder(self):
         """
@@ -497,10 +551,7 @@ class MyApp(QMainWindow):
 
 
         self.ui.tableStatus.setRowCount(0)
-        self.ui.xacnhan.setEnabled(False)  # Khóa button
-        self.ui.loadfile.setEnabled(False)  # Khóa button
-        self.ui.listdanhsach.setEnabled(False)
-        self.ui.stt.setEnabled(False)
+        self._lock_ui_for_processing(True)
         open("message.txt", "w").close()
 
 
@@ -600,10 +651,7 @@ class MyApp(QMainWindow):
         """Ghi log khi đã xong tất cả các file"""
         self.ui.log.append("🎉 Hoàn tất tất cả các file!")
         self.export_table_to_log()
-        self.ui.xacnhan.setEnabled(True)  # Mở khóa button
-        self.ui.loadfile.setEnabled(True)  # Mở khóa button
-        self.ui.listdanhsach.setEnabled(True)
-        self.ui.stt.setEnabled(True)
+        self._lock_ui_for_processing(False)
 
 if __name__ == "__main__":
 

@@ -4,6 +4,7 @@ import re
 import time as t
 import json
 from datetime import datetime, timedelta
+from typing import Callable, Optional
 STATE_FILE = "zalo_state.json"
 
 # Công tắc tổng cho tính năng tự tạo nhắc hẹn giao hàng sau khi gửi tin.
@@ -665,13 +666,32 @@ def create_delivery_reminder(page: Page, data: dict):
         raise
 
 
-def gui_tinnhan():
+def gui_tinnhan(
+    on_progress: Optional[Callable[[dict], None]] = None,
+    on_status: Optional[Callable[[int, int], None]] = None,
+):
+    """
+    on_progress: callback tuỳ chọn, được gọi ngay sau khi xử lý xong MỖI nhóm tin
+    (thay vì đợi xử lý hết rồi mới trả về), để nơi gọi (ví dụ GUI) có thể cập nhật
+    nhật ký ngay lập tức. Nhận vào 1 dict giống các phần tử trong summary trả về.
+
+    on_status: callback tuỳ chọn, báo tiến độ (current, total) để nơi gọi hiển thị
+    "đang gửi tin thứ mấy / tổng cộng bao nhiêu tin". Được gọi 1 lần với
+    (0, total) trước khi bắt đầu gửi, rồi 1 lần nữa với (current, total) trước
+    khi gửi từng tin (current bắt đầu từ 1).
+    """
     groups = read_message_groups_with_raw("message.txt")
     if not groups:
+        if on_status:
+            on_status(0, 0)
         return []
 
     chrome_path = find_chrome()
     summary = []
+    total = len(groups)
+
+    if on_status:
+        on_status(0, total)
 
     with sync_playwright() as p:
 
@@ -679,7 +699,10 @@ def gui_tinnhan():
 
         prev = None
 
-        for g in groups:
+        for idx, g in enumerate(groups, start=1):
+            if on_status:
+                on_status(idx, total)
+
             raw = g["raw"]
             data = g["data"]
 
@@ -757,11 +780,14 @@ def gui_tinnhan():
 
             # ===== KHÔNG CÓ NHÓM =====
             if not zalo_key_value:
-                summary.append({
+                item = {
                     "zalo": None,
                     "message": message,
                     "status": "no_group"
-                })
+                }
+                summary.append(item)
+                if on_progress:
+                    on_progress(item)
                 continue
 
             # ===== VÀO ĐÚNG CHAT =====
@@ -775,11 +801,14 @@ def gui_tinnhan():
                         prev = zalo_key_value
                         break
                 else:
-                    summary.append({
+                    item = {
                         "zalo": zalo_key_value,
                         "message": message,
                         "status": "wrong_chat"
-                    })
+                    }
+                    summary.append(item)
+                    if on_progress:
+                        on_progress(item)
                     continue
 
             # ===== GỬI TIN =====
@@ -796,18 +825,24 @@ def gui_tinnhan():
                 remove_processed_block(raw)
                 t.sleep(0.3)
 
-                summary.append({
+                item = {
                     "zalo": zalo_key_value,
                     "message": message,
                     "status": "success"
-                })
+                }
+                summary.append(item)
+                if on_progress:
+                    on_progress(item)
 
             except Exception as e:
-                summary.append({
+                item = {
                     "zalo": zalo_key_value,
                     "message": message,
                     "status": f"error: {str(e)}"
-                })
+                }
+                summary.append(item)
+                if on_progress:
+                    on_progress(item)
 
             prev = zalo_key_value
         # Lưu lại cookie mới nhất sau mỗi phiên gửi
