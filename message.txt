@@ -1,0 +1,49 @@
+[PO: 260725-01011-00016
+vendor: LOTTE
+store: Lotte Can Tho
+Mã Khách hàng: MN_MT_LOT1011
+entry_date: 25/07/2026
+cancle_date: 28/07/2026
+start_time: 27/07/2026 09:17:43
+url: https://script.google.com/macros/s/AKfycby9fc3IaX1-EwIb26g34WLs8TbQXNkdxeqpVSYSWddwwxRAFaz9kjsS9yFhypezIaF2/exec?po=%5BLotte%5D%5B25-07-2026%5D%5BMN_MT_LOT1011%5D%5B28-07-2026%5D%5B260725-01011-00016%5D
+tong_tien: 581,956
+tong_trongluong: 30.4 kg
+tong_kienhang: 2
+sai_gia: 0
+end_time: 27/07/2026 09:17:45
+time: 2s]
+[PO: 260725-01001-00167
+vendor: LOTTE
+store: Lotte Nam Sai Gon
+Mã Khách hàng: MN_MT_LOT1001
+entry_date: 25/07/2026
+cancle_date: 28/07/2026
+start_time: 27/07/2026 09:17:45
+url: https://script.google.com/macros/s/AKfycby9fc3IaX1-EwIb26g34WLs8TbQXNkdxeqpVSYSWddwwxRAFaz9kjsS9yFhypezIaF2/exec?po=%5BLotte%5D%5B25-07-2026%5D%5BMN_MT_LOT1001%5D%5B28-07-2026%5D%5B260725-01001-00167%5D
+tong_tien: 294,180
+tong_trongluong: 13.9 kg
+tong_kienhang: 1
+sai_gia: 0
+end_time: 27/07/2026 09:17:47
+time: 1s]
+[PO: 260725-01015-00039
+vendor: LOTTE
+store: Lotte Nha Trang Gold Coast
+Mã Khách hàng: MN_MT_LOT1015
+entry_date: 25/07/2026
+cancle_date: 30/07/2026
+start_time: 27/07/2026 09:17:47
+url: https://script.google.com/macros/s/AKfycby9fc3IaX1-EwIb26g34WLs8TbQXNkdxeqpVSYSWddwwxRAFaz9kjsS9yFhypezIaF2/exec?po=%5BLotte%5D%5B25-07-2026%5D%5BMN_MT_LOT1015%5D%5B30-07-2026%5D%5B260725-01015-00039%5D
+tong_tien: 691,301
+tong_trongluong: 3.96 kg
+tong_kienhang: 1
+sai_gia: 0
+end_time: 27/07/2026 09:17:50
+time: 2s]
+[PO: P-000245207
+store: 460 Đường 3 tháng 2, Phường 12, Quận 10, Thành phố Hồ Chí Minh, Việt Nam
+vendor: SATRA
+Mã Khách hàng: MN_MT_stsg
+entry_date: 24/07/2026
+cancle_date: 25/07/2026
+start_time: 27/07/2026 09:17:50

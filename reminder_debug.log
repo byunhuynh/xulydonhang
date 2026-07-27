@@ -58,3 +58,1655 @@ Call log:
 
 [2026-07-09 16:59:20] 🗓️ Xem trước ngày giờ nhắc hẹn trên modal: 11/07/2026 lúc 09:00
 [2026-07-09 16:59:20] ⏰ Đã bấm tạo nhắc hẹn giao hàng lúc 09:00 11/07/2026
+[2026-07-10 09:03:09] 📝 Đã gõ ngày='11/07/2026' (khớp=True) giờ='09:00' (khớp=True)
+[2026-07-10 09:03:12] ⚠️ Không click được ra ngoài để đóng khung lịch (bỏ qua, thử bấm nút tạo luôn): Locator.click: Timeout 3000ms exceeded.
+Call log:
+  - waiting for locator(".zl-modal").last.locator("[data-id=\"div_RMD_Repeat\"]")
+    - locator resolved to <div data-id="div_RMD_Repeat" class="zl-lbl-component ">…</div>
+  - attempting click action
+    2 × waiting for element to be visible, enabled and stable
+      - element is visible, enabled and stable
+      - scrolling into view if needed
+      - done scrolling
+      - <div class="truncate flx-1">00:10</div> from <div class="popover-v3 menu-suggestion-body">…</div> subtree intercepts pointer events
+    - retrying click action
+    - waiting 20ms
+    2 × waiting for element to be visible, enabled and stable
+      - element is visible, enabled and stable
+      - scrolling into view if needed
+      - done scrolling
+      - <div class="truncate flx-1">00:10</div> from <div class="popover-v3 menu-suggestion-body">…</div> subtree intercepts pointer events
+    - retrying click action
+      - waiting 100ms
+    6 × waiting for element to be visible, enabled and stable
+      - element is visible, enabled and stable
+      - scrolling into view if needed
+      - done scrolling
+      - <div class="truncate flx-1">00:10</div> from <div class="popover-v3 menu-suggestion-body">…</div> subtree intercepts pointer events
+    - retrying click action
+      - waiting 500ms
+
+[2026-07-10 09:03:15] 🗓️ Xem trước ngày giờ nhắc hẹn trên modal: Ngày mai lúc 09:00
+[2026-07-10 09:03:15] ⏰ Đã bấm tạo nhắc hẹn giao hàng lúc 09:00 11/07/2026
+[2026-07-10 10:20:36] ⏭️ Thời gian nhắc hẹn (09:00 10/07/2026) đã ở quá khứ → bỏ qua tạo nhắc hẹn.
+[2026-07-10 10:20:50] ⏭️ Thời gian nhắc hẹn (09:00 10/07/2026) đã ở quá khứ → bỏ qua tạo nhắc hẹn.
+[2026-07-10 10:28:20] 📝 Đã gõ ngày='11/07/2026' (khớp=True) giờ='09:00' (khớp=True)
+[2026-07-10 10:28:23] ⚠️ Không click được ra ngoài để đóng khung lịch (bỏ qua, thử bấm nút tạo luôn): Locator.click: Timeout 3000ms exceeded.
+Call log:
+  - waiting for locator(".zl-modal").last.locator("[data-id=\"div_RMD_Repeat\"]")
+    - locator resolved to <div data-id="div_RMD_Repeat" class="zl-lbl-component ">…</div>
+  - attempting click action
+    2 × waiting for element to be visible, enabled and stable
+      - element is visible, enabled and stable
+      - scrolling into view if needed
+      - done scrolling
+      - <div class="truncate flx-1">00:10</div> from <div class="popover-v3 menu-suggestion-body">…</div> subtree intercepts pointer events
+    - retrying click action
+    - waiting 20ms
+    2 × waiting for element to be visible, enabled and stable
+      - element is visible, enabled and stable
+      - scrolling into view if needed
+      - done scrolling
+      - <div class="truncate flx-1">00:10</div> from <div class="popover-v3 menu-suggestion-body">…</div> subtree intercepts pointer events
+    - retrying click action
+      - waiting 100ms
+    6 × waiting for element to be visible, enabled and stable
+      - element is visible, enabled and stable
+      - scrolling into view if needed
+      - done scrolling
+      - <div class="truncate flx-1">00:10</div> from <div class="popover-v3 menu-suggestion-body">…</div> subtree intercepts pointer events
+    - retrying click action
+      - waiting 500ms
+
+[2026-07-10 10:28:25] 🗓️ Xem trước ngày giờ nhắc hẹn trên modal: Ngày mai lúc 09:00
+[2026-07-10 10:28:26] ⏰ Đã bấm tạo nhắc hẹn giao hàng lúc 09:00 11/07/2026
+[2026-07-10 16:43:51] 📝 Đã gõ ngày='13/07/2026' (khớp=True) giờ='09:00' (khớp=True)
+[2026-07-10 16:43:54] ⚠️ Không click được ra ngoài để đóng khung lịch (bỏ qua, thử bấm nút tạo luôn): Locator.click: Timeout 3000ms exceeded.
+Call log:
+  - waiting for locator(".zl-modal").last.locator("[data-id=\"div_RMD_Repeat\"]")
+    - locator resolved to <div data-id="div_RMD_Repeat" class="zl-lbl-component ">…</div>
+  - attempting click action
+    2 × waiting for element to be visible, enabled and stable
+      - element is visible, enabled and stable
+      - scrolling into view if needed
+      - done scrolling
+      - <div class="truncate flx-1">00:10</div> from <div class="popover-v3 menu-suggestion-body">…</div> subtree intercepts pointer events
+    - retrying click action
+    - waiting 20ms
+    2 × waiting for element to be visible, enabled and stable
+      - element is visible, enabled and stable
+      - scrolling into view if needed
+      - done scrolling
+      - <div class="truncate flx-1">00:10</div> from <div class="popover-v3 menu-suggestion-body">…</div> subtree intercepts pointer events
+    - retrying click action
+      - waiting 100ms
+    6 × waiting for element to be visible, enabled and stable
+      - element is visible, enabled and stable
+      - scrolling into view if needed
+      - done scrolling
+      - <div class="truncate flx-1">00:10</div> from <div class="popover-v3 menu-suggestion-body">…</div> subtree intercepts pointer events
+    - retrying click action
+      - waiting 500ms
+
+[2026-07-10 16:43:57] 🗓️ Xem trước ngày giờ nhắc hẹn trên modal: 13/07/2026 lúc 09:00
+[2026-07-10 16:43:57] ⏰ Đã bấm tạo nhắc hẹn giao hàng lúc 09:00 13/07/2026
+[2026-07-10 16:44:05] 📝 Đã gõ ngày='11/07/2026' (khớp=True) giờ='09:00' (khớp=True)
+[2026-07-10 16:44:08] ⚠️ Không click được ra ngoài để đóng khung lịch (bỏ qua, thử bấm nút tạo luôn): Locator.click: Timeout 3000ms exceeded.
+Call log:
+  - waiting for locator(".zl-modal").last.locator("[data-id=\"div_RMD_Repeat\"]")
+    - locator resolved to <div data-id="div_RMD_Repeat" class="zl-lbl-component ">…</div>
+  - attempting click action
+    2 × waiting for element to be visible, enabled and stable
+      - element is visible, enabled and stable
+      - scrolling into view if needed
+      - done scrolling
+      - <div class="truncate flx-1">00:10</div> from <div class="popover-v3 menu-suggestion-body">…</div> subtree intercepts pointer events
+    - retrying click action
+    - waiting 20ms
+    2 × waiting for element to be visible, enabled and stable
+      - element is visible, enabled and stable
+      - scrolling into view if needed
+      - done scrolling
+      - <div class="truncate flx-1">00:10</div> from <div class="popover-v3 menu-suggestion-body">…</div> subtree intercepts pointer events
+    - retrying click action
+      - waiting 100ms
+    6 × waiting for element to be visible, enabled and stable
+      - element is visible, enabled and stable
+      - scrolling into view if needed
+      - done scrolling
+      - <div class="truncate flx-1">00:10</div> from <div class="popover-v3 menu-suggestion-body">…</div> subtree intercepts pointer events
+    - retrying click action
+      - waiting 500ms
+
+[2026-07-10 16:44:11] 🗓️ Xem trước ngày giờ nhắc hẹn trên modal: Ngày mai lúc 09:00
+[2026-07-10 16:44:11] ⏰ Đã bấm tạo nhắc hẹn giao hàng lúc 09:00 11/07/2026
+[2026-07-11 11:02:30] ⏭️ Thời gian nhắc hẹn (09:00 11/07/2026) đã ở quá khứ → bỏ qua tạo nhắc hẹn.
+[2026-07-11 11:07:44] 📝 Đã gõ ngày='14/07/2026' (khớp=True) giờ='09:00' (khớp=True)
+[2026-07-11 11:07:47] ⚠️ Không click được ra ngoài để đóng khung lịch (bỏ qua, thử bấm nút tạo luôn): Locator.click: Timeout 3000ms exceeded.
+Call log:
+  - waiting for locator(".zl-modal").last.locator("[data-id=\"div_RMD_Repeat\"]")
+    - locator resolved to <div data-id="div_RMD_Repeat" class="zl-lbl-component ">…</div>
+  - attempting click action
+    2 × waiting for element to be visible, enabled and stable
+      - element is visible, enabled and stable
+      - scrolling into view if needed
+      - done scrolling
+      - <div class="truncate flx-1">00:10</div> from <div class="popover-v3 menu-suggestion-body">…</div> subtree intercepts pointer events
+    - retrying click action
+    - waiting 20ms
+    2 × waiting for element to be visible, enabled and stable
+      - element is visible, enabled and stable
+      - scrolling into view if needed
+      - done scrolling
+      - <div class="truncate flx-1">00:10</div> from <div class="popover-v3 menu-suggestion-body">…</div> subtree intercepts pointer events
+    - retrying click action
+      - waiting 100ms
+    6 × waiting for element to be visible, enabled and stable
+      - element is visible, enabled and stable
+      - scrolling into view if needed
+      - done scrolling
+      - <div class="truncate flx-1">00:10</div> from <div class="popover-v3 menu-suggestion-body">…</div> subtree intercepts pointer events
+    - retrying click action
+      - waiting 500ms
+
+[2026-07-11 11:07:49] 🗓️ Xem trước ngày giờ nhắc hẹn trên modal: 14/07/2026 lúc 09:00
+[2026-07-11 11:07:49] ⏰ Đã bấm tạo nhắc hẹn giao hàng lúc 09:00 14/07/2026
+[2026-07-11 11:15:33] ⏭️ Thời gian nhắc hẹn (09:00 11/07/2026) đã ở quá khứ → bỏ qua tạo nhắc hẹn.
+[2026-07-11 11:15:47] ⏭️ Thời gian nhắc hẹn (09:00 11/07/2026) đã ở quá khứ → bỏ qua tạo nhắc hẹn.
+[2026-07-13 08:53:48] 📝 Đã gõ ngày='14/07/2026' (khớp=True) giờ='09:00' (khớp=True)
+[2026-07-13 08:53:51] ⚠️ Không click được ra ngoài để đóng khung lịch (bỏ qua, thử bấm nút tạo luôn): Locator.click: Timeout 3000ms exceeded.
+Call log:
+  - waiting for locator(".zl-modal").last.locator("[data-id=\"div_RMD_Repeat\"]")
+    - locator resolved to <div data-id="div_RMD_Repeat" class="zl-lbl-component ">…</div>
+  - attempting click action
+    2 × waiting for element to be visible, enabled and stable
+      - element is visible, enabled and stable
+      - scrolling into view if needed
+      - done scrolling
+      - <div class="truncate flx-1">00:10</div> from <div class="popover-v3 menu-suggestion-body">…</div> subtree intercepts pointer events
+    - retrying click action
+    - waiting 20ms
+    2 × waiting for element to be visible, enabled and stable
+      - element is visible, enabled and stable
+      - scrolling into view if needed
+      - done scrolling
+      - <div class="truncate flx-1">00:10</div> from <div class="popover-v3 menu-suggestion-body">…</div> subtree intercepts pointer events
+    - retrying click action
+      - waiting 100ms
+    6 × waiting for element to be visible, enabled and stable
+      - element is visible, enabled and stable
+      - scrolling into view if needed
+      - done scrolling
+      - <div class="truncate flx-1">00:10</div> from <div class="popover-v3 menu-suggestion-body">…</div> subtree intercepts pointer events
+    - retrying click action
+      - waiting 500ms
+
+[2026-07-13 08:53:53] 🗓️ Xem trước ngày giờ nhắc hẹn trên modal: Ngày mai lúc 09:00
+[2026-07-13 08:53:53] ⏰ Đã bấm tạo nhắc hẹn giao hàng lúc 09:00 14/07/2026
+[2026-07-13 09:01:24] ⏭️ Thời gian nhắc hẹn (09:00 13/07/2026) đã ở quá khứ → bỏ qua tạo nhắc hẹn.
+[2026-07-13 09:01:38] ⏭️ Thời gian nhắc hẹn (09:00 13/07/2026) đã ở quá khứ → bỏ qua tạo nhắc hẹn.
+[2026-07-13 09:09:27] ⏭️ Thời gian nhắc hẹn (09:00 13/07/2026) đã ở quá khứ → bỏ qua tạo nhắc hẹn.
+[2026-07-13 09:09:41] ⏭️ Thời gian nhắc hẹn (09:00 13/07/2026) đã ở quá khứ → bỏ qua tạo nhắc hẹn.
+[2026-07-13 09:09:55] ⏭️ Thời gian nhắc hẹn (09:00 13/07/2026) đã ở quá khứ → bỏ qua tạo nhắc hẹn.
+[2026-07-13 10:29:44] ⏭️ Thời gian nhắc hẹn (09:00 04/07/2026) đã ở quá khứ → bỏ qua tạo nhắc hẹn.
+[2026-07-13 13:43:09] ⏭️ Thời gian nhắc hẹn (09:00 13/07/2026) đã ở quá khứ → bỏ qua tạo nhắc hẹn.
+[2026-07-13 13:43:23] ⏭️ Thời gian nhắc hẹn (09:00 13/07/2026) đã ở quá khứ → bỏ qua tạo nhắc hẹn.
+[2026-07-13 15:43:56] 📝 Đã gõ ngày='15/07/2026' (khớp=True) giờ='09:00' (khớp=True)
+[2026-07-13 15:43:59] ⚠️ Không click được ra ngoài để đóng khung lịch (bỏ qua, thử bấm nút tạo luôn): Locator.click: Timeout 3000ms exceeded.
+Call log:
+  - waiting for locator(".zl-modal").last.locator("[data-id=\"div_RMD_Repeat\"]")
+    - locator resolved to <div data-id="div_RMD_Repeat" class="zl-lbl-component ">…</div>
+  - attempting click action
+    2 × waiting for element to be visible, enabled and stable
+      - element is visible, enabled and stable
+      - scrolling into view if needed
+      - done scrolling
+      - <div class="truncate flx-1">00:10</div> from <div class="popover-v3 menu-suggestion-body">…</div> subtree intercepts pointer events
+    - retrying click action
+    - waiting 20ms
+    2 × waiting for element to be visible, enabled and stable
+      - element is visible, enabled and stable
+      - scrolling into view if needed
+      - done scrolling
+      - <div class="truncate flx-1">00:10</div> from <div class="popover-v3 menu-suggestion-body">…</div> subtree intercepts pointer events
+    - retrying click action
+      - waiting 100ms
+    6 × waiting for element to be visible, enabled and stable
+      - element is visible, enabled and stable
+      - scrolling into view if needed
+      - done scrolling
+      - <div class="truncate flx-1">00:10</div> from <div class="popover-v3 menu-suggestion-body">…</div> subtree intercepts pointer events
+    - retrying click action
+      - waiting 500ms
+
+[2026-07-13 15:44:02] 🗓️ Xem trước ngày giờ nhắc hẹn trên modal: 15/07/2026 lúc 09:00
+[2026-07-13 15:44:02] ⏰ Đã bấm tạo nhắc hẹn giao hàng lúc 09:00 15/07/2026
+[2026-07-13 15:44:19] 📝 Đã gõ ngày='15/07/2026' (khớp=True) giờ='09:00' (khớp=True)
+[2026-07-13 15:44:22] ⚠️ Không click được ra ngoài để đóng khung lịch (bỏ qua, thử bấm nút tạo luôn): Locator.click: Timeout 3000ms exceeded.
+Call log:
+  - waiting for locator(".zl-modal").last.locator("[data-id=\"div_RMD_Repeat\"]")
+    - locator resolved to <div data-id="div_RMD_Repeat" class="zl-lbl-component ">…</div>
+  - attempting click action
+    2 × waiting for element to be visible, enabled and stable
+      - element is visible, enabled and stable
+      - scrolling into view if needed
+      - done scrolling
+      - <div class="truncate flx-1">00:10</div> from <div class="popover-v3 menu-suggestion-body">…</div> subtree intercepts pointer events
+    - retrying click action
+    - waiting 20ms
+    2 × waiting for element to be visible, enabled and stable
+      - element is visible, enabled and stable
+      - scrolling into view if needed
+      - done scrolling
+      - <div class="truncate flx-1">00:10</div> from <div class="popover-v3 menu-suggestion-body">…</div> subtree intercepts pointer events
+    - retrying click action
+      - waiting 100ms
+    5 × waiting for element to be visible, enabled and stable
+      - element is visible, enabled and stable
+      - scrolling into view if needed
+      - done scrolling
+      - <div class="truncate flx-1">00:10</div> from <div class="popover-v3 menu-suggestion-body">…</div> subtree intercepts pointer events
+    - retrying click action
+      - waiting 500ms
+    - waiting for element to be visible, enabled and stable
+
+[2026-07-13 15:44:25] 🗓️ Xem trước ngày giờ nhắc hẹn trên modal: 15/07/2026 lúc 09:00
+[2026-07-13 15:44:25] ⏰ Đã bấm tạo nhắc hẹn giao hàng lúc 09:00 15/07/2026
+[2026-07-13 15:44:44] 📝 Đã gõ ngày='15/07/2026' (khớp=True) giờ='09:00' (khớp=True)
+[2026-07-13 15:44:47] ⚠️ Không click được ra ngoài để đóng khung lịch (bỏ qua, thử bấm nút tạo luôn): Locator.click: Timeout 3000ms exceeded.
+Call log:
+  - waiting for locator(".zl-modal").last.locator("[data-id=\"div_RMD_Repeat\"]")
+    - locator resolved to <div data-id="div_RMD_Repeat" class="zl-lbl-component ">…</div>
+  - attempting click action
+    2 × waiting for element to be visible, enabled and stable
+      - element is visible, enabled and stable
+      - scrolling into view if needed
+      - done scrolling
+      - <div class="truncate flx-1">00:10</div> from <div class="popover-v3 menu-suggestion-body">…</div> subtree intercepts pointer events
+    - retrying click action
+    - waiting 20ms
+    2 × waiting for element to be visible, enabled and stable
+      - element is visible, enabled and stable
+      - scrolling into view if needed
+      - done scrolling
+      - <div class="truncate flx-1">00:10</div> from <div class="popover-v3 menu-suggestion-body">…</div> subtree intercepts pointer events
+    - retrying click action
+      - waiting 100ms
+    5 × waiting for element to be visible, enabled and stable
+      - element is visible, enabled and stable
+      - scrolling into view if needed
+      - done scrolling
+      - <div class="truncate flx-1">00:10</div> from <div class="popover-v3 menu-suggestion-body">…</div> subtree intercepts pointer events
+    - retrying click action
+      - waiting 500ms
+
+[2026-07-13 15:44:49] 🗓️ Xem trước ngày giờ nhắc hẹn trên modal: 15/07/2026 lúc 09:00
+[2026-07-13 15:44:49] ⏰ Đã bấm tạo nhắc hẹn giao hàng lúc 09:00 15/07/2026
+[2026-07-13 16:18:44] 📝 Đã gõ ngày='14/07/2026' (khớp=True) giờ='09:00' (khớp=True)
+[2026-07-13 16:18:47] ⚠️ Không click được ra ngoài để đóng khung lịch (bỏ qua, thử bấm nút tạo luôn): Locator.click: Timeout 3000ms exceeded.
+Call log:
+  - waiting for locator(".zl-modal").last.locator("[data-id=\"div_RMD_Repeat\"]")
+    - locator resolved to <div data-id="div_RMD_Repeat" class="zl-lbl-component ">…</div>
+  - attempting click action
+    2 × waiting for element to be visible, enabled and stable
+      - element is visible, enabled and stable
+      - scrolling into view if needed
+      - done scrolling
+      - <div class="truncate flx-1">00:10</div> from <div class="popover-v3 menu-suggestion-body">…</div> subtree intercepts pointer events
+    - retrying click action
+    - waiting 20ms
+    2 × waiting for element to be visible, enabled and stable
+      - element is visible, enabled and stable
+      - scrolling into view if needed
+      - done scrolling
+      - <div class="truncate flx-1">00:10</div> from <div class="popover-v3 menu-suggestion-body">…</div> subtree intercepts pointer events
+    - retrying click action
+      - waiting 100ms
+    6 × waiting for element to be visible, enabled and stable
+      - element is visible, enabled and stable
+      - scrolling into view if needed
+      - done scrolling
+      - <div class="truncate flx-1">00:10</div> from <div class="popover-v3 menu-suggestion-body">…</div> subtree intercepts pointer events
+    - retrying click action
+      - waiting 500ms
+
+[2026-07-13 16:18:50] 🗓️ Xem trước ngày giờ nhắc hẹn trên modal: Ngày mai lúc 09:00
+[2026-07-13 16:18:50] ⏰ Đã bấm tạo nhắc hẹn giao hàng lúc 09:00 14/07/2026
+[2026-07-13 16:53:15] 📝 Đã gõ ngày='15/07/2026' (khớp=True) giờ='09:00' (khớp=True)
+[2026-07-13 16:53:18] ⚠️ Không click được ra ngoài để đóng khung lịch (bỏ qua, thử bấm nút tạo luôn): Locator.click: Timeout 3000ms exceeded.
+Call log:
+  - waiting for locator(".zl-modal").last.locator("[data-id=\"div_RMD_Repeat\"]")
+    - locator resolved to <div data-id="div_RMD_Repeat" class="zl-lbl-component ">…</div>
+  - attempting click action
+    2 × waiting for element to be visible, enabled and stable
+      - element is visible, enabled and stable
+      - scrolling into view if needed
+      - done scrolling
+      - <div class="truncate flx-1">00:10</div> from <div class="popover-v3 menu-suggestion-body">…</div> subtree intercepts pointer events
+    - retrying click action
+    - waiting 20ms
+    2 × waiting for element to be visible, enabled and stable
+      - element is visible, enabled and stable
+      - scrolling into view if needed
+      - done scrolling
+      - <div class="truncate flx-1">00:10</div> from <div class="popover-v3 menu-suggestion-body">…</div> subtree intercepts pointer events
+    - retrying click action
+      - waiting 100ms
+    6 × waiting for element to be visible, enabled and stable
+      - element is visible, enabled and stable
+      - scrolling into view if needed
+      - done scrolling
+      - <div class="truncate flx-1">00:10</div> from <div class="popover-v3 menu-suggestion-body">…</div> subtree intercepts pointer events
+    - retrying click action
+      - waiting 500ms
+
+[2026-07-13 16:53:21] 🗓️ Xem trước ngày giờ nhắc hẹn trên modal: 15/07/2026 lúc 09:00
+[2026-07-13 16:53:21] ⏰ Đã bấm tạo nhắc hẹn giao hàng lúc 09:00 15/07/2026
+[2026-07-13 16:53:31] 📝 Đã gõ ngày='15/07/2026' (khớp=True) giờ='09:00' (khớp=True)
+[2026-07-13 16:53:34] ⚠️ Không click được ra ngoài để đóng khung lịch (bỏ qua, thử bấm nút tạo luôn): Locator.click: Timeout 3000ms exceeded.
+Call log:
+  - waiting for locator(".zl-modal").last.locator("[data-id=\"div_RMD_Repeat\"]")
+    - locator resolved to <div data-id="div_RMD_Repeat" class="zl-lbl-component ">…</div>
+  - attempting click action
+    2 × waiting for element to be visible, enabled and stable
+      - element is visible, enabled and stable
+      - scrolling into view if needed
+      - done scrolling
+      - <div class="truncate flx-1">00:10</div> from <div class="popover-v3 menu-suggestion-body">…</div> subtree intercepts pointer events
+    - retrying click action
+    - waiting 20ms
+    2 × waiting for element to be visible, enabled and stable
+      - element is visible, enabled and stable
+      - scrolling into view if needed
+      - done scrolling
+      - <div class="truncate flx-1">00:10</div> from <div class="popover-v3 menu-suggestion-body">…</div> subtree intercepts pointer events
+    - retrying click action
+      - waiting 100ms
+    6 × waiting for element to be visible, enabled and stable
+      - element is visible, enabled and stable
+      - scrolling into view if needed
+      - done scrolling
+      - <div class="truncate flx-1">00:10</div> from <div class="popover-v3 menu-suggestion-body">…</div> subtree intercepts pointer events
+    - retrying click action
+      - waiting 500ms
+
+[2026-07-13 16:53:36] 🗓️ Xem trước ngày giờ nhắc hẹn trên modal: 15/07/2026 lúc 09:00
+[2026-07-13 16:53:36] ⏰ Đã bấm tạo nhắc hẹn giao hàng lúc 09:00 15/07/2026
+[2026-07-14 08:33:24] 📝 Đã gõ ngày='15/07/2026' (khớp=True) giờ='09:00' (khớp=True)
+[2026-07-14 08:33:27] ⚠️ Không click được ra ngoài để đóng khung lịch (bỏ qua, thử bấm nút tạo luôn): Locator.click: Timeout 3000ms exceeded.
+Call log:
+  - waiting for locator(".zl-modal").last.locator("[data-id=\"div_RMD_Repeat\"]")
+    - locator resolved to <div data-id="div_RMD_Repeat" class="zl-lbl-component ">…</div>
+  - attempting click action
+    2 × waiting for element to be visible, enabled and stable
+      - element is visible, enabled and stable
+      - scrolling into view if needed
+      - done scrolling
+      - <div class="truncate flx-1">00:10</div> from <div class="popover-v3 menu-suggestion-body">…</div> subtree intercepts pointer events
+    - retrying click action
+    - waiting 20ms
+    2 × waiting for element to be visible, enabled and stable
+      - element is visible, enabled and stable
+      - scrolling into view if needed
+      - done scrolling
+      - <div class="truncate flx-1">00:10</div> from <div class="popover-v3 menu-suggestion-body">…</div> subtree intercepts pointer events
+    - retrying click action
+      - waiting 100ms
+    6 × waiting for element to be visible, enabled and stable
+      - element is visible, enabled and stable
+      - scrolling into view if needed
+      - done scrolling
+      - <div class="truncate flx-1">00:10</div> from <div class="popover-v3 menu-suggestion-body">…</div> subtree intercepts pointer events
+    - retrying click action
+      - waiting 500ms
+
+[2026-07-14 08:33:29] 🗓️ Xem trước ngày giờ nhắc hẹn trên modal: Ngày mai lúc 09:00
+[2026-07-14 08:33:29] ⏰ Đã bấm tạo nhắc hẹn giao hàng lúc 09:00 15/07/2026
+[2026-07-14 08:34:00] 📝 Đã gõ ngày='15/07/2026' (khớp=None) giờ='09:00' (khớp=None)
+[2026-07-14 08:34:00] ⚠️ Không click được ra ngoài để đóng khung lịch (bỏ qua, thử bấm nút tạo luôn): Locator.click: Target page, context or browser has been closed
+[2026-07-14 08:34:00] ❌ Lỗi khi tạo nhắc hẹn: Page.wait_for_timeout: Target page, context or browser has been closed
+[2026-07-14 08:34:00] ⚠️ Bỏ qua nhắc hẹn do lỗi: Page.wait_for_timeout: Target page, context or browser has been closed
+[2026-07-14 12:00:08] 📝 Đã gõ ngày='17/07/2026' (khớp=True) giờ='09:00' (khớp=True)
+[2026-07-14 12:00:11] ⚠️ Không click được ra ngoài để đóng khung lịch (bỏ qua, thử bấm nút tạo luôn): Locator.click: Timeout 3000ms exceeded.
+Call log:
+  - waiting for locator(".zl-modal").last.locator("[data-id=\"div_RMD_Repeat\"]")
+    - locator resolved to <div data-id="div_RMD_Repeat" class="zl-lbl-component ">…</div>
+  - attempting click action
+    2 × waiting for element to be visible, enabled and stable
+      - element is visible, enabled and stable
+      - scrolling into view if needed
+      - done scrolling
+      - <div class="truncate flx-1">00:10</div> from <div class="popover-v3 menu-suggestion-body">…</div> subtree intercepts pointer events
+    - retrying click action
+    - waiting 20ms
+    2 × waiting for element to be visible, enabled and stable
+      - element is visible, enabled and stable
+      - scrolling into view if needed
+      - done scrolling
+      - <div class="truncate flx-1">00:10</div> from <div class="popover-v3 menu-suggestion-body">…</div> subtree intercepts pointer events
+    - retrying click action
+      - waiting 100ms
+    6 × waiting for element to be visible, enabled and stable
+      - element is visible, enabled and stable
+      - scrolling into view if needed
+      - done scrolling
+      - <div class="truncate flx-1">00:10</div> from <div class="popover-v3 menu-suggestion-body">…</div> subtree intercepts pointer events
+    - retrying click action
+      - waiting 500ms
+
+[2026-07-14 12:00:13] 🗓️ Xem trước ngày giờ nhắc hẹn trên modal: 17/07/2026 lúc 09:00
+[2026-07-14 12:00:13] ⏰ Đã bấm tạo nhắc hẹn giao hàng lúc 09:00 17/07/2026
+[2026-07-14 12:00:27] 📝 Đã gõ ngày='17/07/2026' (khớp=True) giờ='09:00' (khớp=True)
+[2026-07-14 12:00:30] ⚠️ Không click được ra ngoài để đóng khung lịch (bỏ qua, thử bấm nút tạo luôn): Locator.click: Timeout 3000ms exceeded.
+Call log:
+  - waiting for locator(".zl-modal").last.locator("[data-id=\"div_RMD_Repeat\"]")
+    - locator resolved to <div data-id="div_RMD_Repeat" class="zl-lbl-component ">…</div>
+  - attempting click action
+    2 × waiting for element to be visible, enabled and stable
+      - element is visible, enabled and stable
+      - scrolling into view if needed
+      - done scrolling
+      - <div class="truncate flx-1">00:10</div> from <div class="popover-v3 menu-suggestion-body">…</div> subtree intercepts pointer events
+    - retrying click action
+    - waiting 20ms
+    2 × waiting for element to be visible, enabled and stable
+      - element is visible, enabled and stable
+      - scrolling into view if needed
+      - done scrolling
+      - <div class="truncate flx-1">00:10</div> from <div class="popover-v3 menu-suggestion-body">…</div> subtree intercepts pointer events
+    - retrying click action
+      - waiting 100ms
+    6 × waiting for element to be visible, enabled and stable
+      - element is visible, enabled and stable
+      - scrolling into view if needed
+      - done scrolling
+      - <div class="truncate flx-1">00:10</div> from <div class="popover-v3 menu-suggestion-body">…</div> subtree intercepts pointer events
+    - retrying click action
+      - waiting 500ms
+
+[2026-07-14 12:00:32] 🗓️ Xem trước ngày giờ nhắc hẹn trên modal: 17/07/2026 lúc 09:00
+[2026-07-14 12:00:32] ⏰ Đã bấm tạo nhắc hẹn giao hàng lúc 09:00 17/07/2026
+[2026-07-14 12:00:49] 📝 Đã gõ ngày='16/07/2026' (khớp=True) giờ='09:00' (khớp=True)
+[2026-07-14 12:00:52] ⚠️ Không click được ra ngoài để đóng khung lịch (bỏ qua, thử bấm nút tạo luôn): Locator.click: Timeout 3000ms exceeded.
+Call log:
+  - waiting for locator(".zl-modal").last.locator("[data-id=\"div_RMD_Repeat\"]")
+    - locator resolved to <div data-id="div_RMD_Repeat" class="zl-lbl-component ">…</div>
+  - attempting click action
+    2 × waiting for element to be visible, enabled and stable
+      - element is visible, enabled and stable
+      - scrolling into view if needed
+      - done scrolling
+      - <div class="truncate flx-1">00:10</div> from <div class="popover-v3 menu-suggestion-body">…</div> subtree intercepts pointer events
+    - retrying click action
+    - waiting 20ms
+    2 × waiting for element to be visible, enabled and stable
+      - element is visible, enabled and stable
+      - scrolling into view if needed
+      - done scrolling
+      - <div class="truncate flx-1">00:10</div> from <div class="popover-v3 menu-suggestion-body">…</div> subtree intercepts pointer events
+    - retrying click action
+      - waiting 100ms
+    6 × waiting for element to be visible, enabled and stable
+      - element is visible, enabled and stable
+      - scrolling into view if needed
+      - done scrolling
+      - <div class="truncate flx-1">00:10</div> from <div class="popover-v3 menu-suggestion-body">…</div> subtree intercepts pointer events
+    - retrying click action
+      - waiting 500ms
+
+[2026-07-14 12:00:55] 🗓️ Xem trước ngày giờ nhắc hẹn trên modal: 16/07/2026 lúc 09:00
+[2026-07-14 12:00:55] ⏰ Đã bấm tạo nhắc hẹn giao hàng lúc 09:00 16/07/2026
+[2026-07-14 12:01:36] 📝 Đã gõ ngày='17/07/2026' (khớp=True) giờ='09:00' (khớp=True)
+[2026-07-14 12:01:39] ⚠️ Không click được ra ngoài để đóng khung lịch (bỏ qua, thử bấm nút tạo luôn): Locator.click: Timeout 3000ms exceeded.
+Call log:
+  - waiting for locator(".zl-modal").last.locator("[data-id=\"div_RMD_Repeat\"]")
+    - locator resolved to <div data-id="div_RMD_Repeat" class="zl-lbl-component ">…</div>
+  - attempting click action
+    2 × waiting for element to be visible, enabled and stable
+      - element is visible, enabled and stable
+      - scrolling into view if needed
+      - done scrolling
+      - <div class="truncate flx-1">00:10</div> from <div class="popover-v3 menu-suggestion-body">…</div> subtree intercepts pointer events
+    - retrying click action
+    - waiting 20ms
+    2 × waiting for element to be visible, enabled and stable
+      - element is visible, enabled and stable
+      - scrolling into view if needed
+      - done scrolling
+      - <div class="truncate flx-1">00:10</div> from <div class="popover-v3 menu-suggestion-body">…</div> subtree intercepts pointer events
+    - retrying click action
+      - waiting 100ms
+    6 × waiting for element to be visible, enabled and stable
+      - element is visible, enabled and stable
+      - scrolling into view if needed
+      - done scrolling
+      - <div class="truncate flx-1">00:10</div> from <div class="popover-v3 menu-suggestion-body">…</div> subtree intercepts pointer events
+    - retrying click action
+      - waiting 500ms
+
+[2026-07-14 12:01:42] 🗓️ Xem trước ngày giờ nhắc hẹn trên modal: 17/07/2026 lúc 09:00
+[2026-07-14 12:01:42] ⏰ Đã bấm tạo nhắc hẹn giao hàng lúc 09:00 17/07/2026
+[2026-07-14 16:06:37] ⏭️ Thời gian nhắc hẹn (09:00 14/07/2026) đã ở quá khứ → bỏ qua tạo nhắc hẹn.
+[2026-07-15 09:35:06] 📝 Đã gõ ngày='17/07/2026' (khớp=True) giờ='09:00' (khớp=True)
+[2026-07-15 09:35:10] ⚠️ Không click được ra ngoài để đóng khung lịch (bỏ qua, thử bấm nút tạo luôn): Locator.click: Timeout 3000ms exceeded.
+Call log:
+  - waiting for locator(".zl-modal").last.locator("[data-id=\"div_RMD_Repeat\"]")
+    - locator resolved to <div data-id="div_RMD_Repeat" class="zl-lbl-component ">…</div>
+  - attempting click action
+    2 × waiting for element to be visible, enabled and stable
+      - element is visible, enabled and stable
+      - scrolling into view if needed
+      - done scrolling
+      - <div class="truncate flx-1">00:10</div> from <div class="popover-v3 menu-suggestion-body">…</div> subtree intercepts pointer events
+    - retrying click action
+    - waiting 20ms
+    2 × waiting for element to be visible, enabled and stable
+      - element is visible, enabled and stable
+      - scrolling into view if needed
+      - done scrolling
+      - <div class="truncate flx-1">00:10</div> from <div class="popover-v3 menu-suggestion-body">…</div> subtree intercepts pointer events
+    - retrying click action
+      - waiting 100ms
+    6 × waiting for element to be visible, enabled and stable
+      - element is visible, enabled and stable
+      - scrolling into view if needed
+      - done scrolling
+      - <div class="truncate flx-1">00:10</div> from <div class="popover-v3 menu-suggestion-body">…</div> subtree intercepts pointer events
+    - retrying click action
+      - waiting 500ms
+
+[2026-07-15 09:35:12] 🗓️ Xem trước ngày giờ nhắc hẹn trên modal: 17/07/2026 lúc 09:00
+[2026-07-15 09:35:12] ⏰ Đã bấm tạo nhắc hẹn giao hàng lúc 09:00 17/07/2026
+[2026-07-15 11:45:41] ⏭️ Thời gian nhắc hẹn (09:00 15/07/2026) đã ở quá khứ → bỏ qua tạo nhắc hẹn.
+[2026-07-15 11:45:55] ⏭️ Thời gian nhắc hẹn (09:00 15/07/2026) đã ở quá khứ → bỏ qua tạo nhắc hẹn.
+[2026-07-15 11:46:08] ⏭️ Thời gian nhắc hẹn (09:00 15/07/2026) đã ở quá khứ → bỏ qua tạo nhắc hẹn.
+[2026-07-15 11:46:25] 📝 Đã gõ ngày='16/07/2026' (khớp=True) giờ='09:00' (khớp=True)
+[2026-07-15 11:46:28] ⚠️ Không click được ra ngoài để đóng khung lịch (bỏ qua, thử bấm nút tạo luôn): Locator.click: Timeout 3000ms exceeded.
+Call log:
+  - waiting for locator(".zl-modal").last.locator("[data-id=\"div_RMD_Repeat\"]")
+    - locator resolved to <div data-id="div_RMD_Repeat" class="zl-lbl-component ">…</div>
+  - attempting click action
+    2 × waiting for element to be visible, enabled and stable
+      - element is visible, enabled and stable
+      - scrolling into view if needed
+      - done scrolling
+      - <div class="truncate flx-1">00:10</div> from <div class="popover-v3 menu-suggestion-body">…</div> subtree intercepts pointer events
+    - retrying click action
+    - waiting 20ms
+    2 × waiting for element to be visible, enabled and stable
+      - element is visible, enabled and stable
+      - scrolling into view if needed
+      - done scrolling
+      - <div class="truncate flx-1">00:10</div> from <div class="popover-v3 menu-suggestion-body">…</div> subtree intercepts pointer events
+    - retrying click action
+      - waiting 100ms
+    6 × waiting for element to be visible, enabled and stable
+      - element is visible, enabled and stable
+      - scrolling into view if needed
+      - done scrolling
+      - <div class="truncate flx-1">00:10</div> from <div class="popover-v3 menu-suggestion-body">…</div> subtree intercepts pointer events
+    - retrying click action
+      - waiting 500ms
+
+[2026-07-15 11:46:31] 🗓️ Xem trước ngày giờ nhắc hẹn trên modal: Ngày mai lúc 09:00
+[2026-07-15 11:46:31] ⏰ Đã bấm tạo nhắc hẹn giao hàng lúc 09:00 16/07/2026
+[2026-07-15 12:09:04] ⏭️ Thời gian nhắc hẹn (09:00 15/07/2026) đã ở quá khứ → bỏ qua tạo nhắc hẹn.
+[2026-07-15 16:40:18] 📝 Đã gõ ngày='17/07/2026' (khớp=True) giờ='09:00' (khớp=True)
+[2026-07-15 16:40:21] ⚠️ Không click được ra ngoài để đóng khung lịch (bỏ qua, thử bấm nút tạo luôn): Locator.click: Timeout 3000ms exceeded.
+Call log:
+  - waiting for locator(".zl-modal").last.locator("[data-id=\"div_RMD_Repeat\"]")
+    - locator resolved to <div data-id="div_RMD_Repeat" class="zl-lbl-component ">…</div>
+  - attempting click action
+    2 × waiting for element to be visible, enabled and stable
+      - element is visible, enabled and stable
+      - scrolling into view if needed
+      - done scrolling
+      - <div class="truncate flx-1">00:10</div> from <div class="popover-v3 menu-suggestion-body">…</div> subtree intercepts pointer events
+    - retrying click action
+    - waiting 20ms
+    2 × waiting for element to be visible, enabled and stable
+      - element is visible, enabled and stable
+      - scrolling into view if needed
+      - done scrolling
+      - <div class="truncate flx-1">00:10</div> from <div class="popover-v3 menu-suggestion-body">…</div> subtree intercepts pointer events
+    - retrying click action
+      - waiting 100ms
+    6 × waiting for element to be visible, enabled and stable
+      - element is visible, enabled and stable
+      - scrolling into view if needed
+      - done scrolling
+      - <div class="truncate flx-1">00:10</div> from <div class="popover-v3 menu-suggestion-body">…</div> subtree intercepts pointer events
+    - retrying click action
+      - waiting 500ms
+
+[2026-07-15 16:40:24] 🗓️ Xem trước ngày giờ nhắc hẹn trên modal: 17/07/2026 lúc 09:00
+[2026-07-15 16:40:24] ⏰ Đã bấm tạo nhắc hẹn giao hàng lúc 09:00 17/07/2026
+[2026-07-15 16:40:44] 📝 Đã gõ ngày='17/07/2026' (khớp=True) giờ='09:00' (khớp=True)
+[2026-07-15 16:40:47] ⚠️ Không click được ra ngoài để đóng khung lịch (bỏ qua, thử bấm nút tạo luôn): Locator.click: Timeout 3000ms exceeded.
+Call log:
+  - waiting for locator(".zl-modal").last.locator("[data-id=\"div_RMD_Repeat\"]")
+    - locator resolved to <div data-id="div_RMD_Repeat" class="zl-lbl-component ">…</div>
+  - attempting click action
+    2 × waiting for element to be visible, enabled and stable
+      - element is visible, enabled and stable
+      - scrolling into view if needed
+      - done scrolling
+      - <div class="truncate flx-1">00:10</div> from <div class="popover-v3 menu-suggestion-body">…</div> subtree intercepts pointer events
+    - retrying click action
+    - waiting 20ms
+    2 × waiting for element to be visible, enabled and stable
+      - element is visible, enabled and stable
+      - scrolling into view if needed
+      - done scrolling
+      - <div class="truncate flx-1">00:10</div> from <div class="popover-v3 menu-suggestion-body">…</div> subtree intercepts pointer events
+    - retrying click action
+      - waiting 100ms
+    6 × waiting for element to be visible, enabled and stable
+      - element is visible, enabled and stable
+      - scrolling into view if needed
+      - done scrolling
+      - <div class="truncate flx-1">00:10</div> from <div class="popover-v3 menu-suggestion-body">…</div> subtree intercepts pointer events
+    - retrying click action
+      - waiting 500ms
+
+[2026-07-15 16:40:49] 🗓️ Xem trước ngày giờ nhắc hẹn trên modal: 17/07/2026 lúc 09:00
+[2026-07-15 16:40:49] ⏰ Đã bấm tạo nhắc hẹn giao hàng lúc 09:00 17/07/2026
+[2026-07-15 16:41:07] 📝 Đã gõ ngày='17/07/2026' (khớp=True) giờ='09:00' (khớp=True)
+[2026-07-15 16:41:10] ⚠️ Không click được ra ngoài để đóng khung lịch (bỏ qua, thử bấm nút tạo luôn): Locator.click: Timeout 3000ms exceeded.
+Call log:
+  - waiting for locator(".zl-modal").last.locator("[data-id=\"div_RMD_Repeat\"]")
+    - locator resolved to <div data-id="div_RMD_Repeat" class="zl-lbl-component ">…</div>
+  - attempting click action
+    2 × waiting for element to be visible, enabled and stable
+      - element is visible, enabled and stable
+      - scrolling into view if needed
+      - done scrolling
+      - <div class="truncate flx-1">00:10</div> from <div class="popover-v3 menu-suggestion-body">…</div> subtree intercepts pointer events
+    - retrying click action
+    - waiting 20ms
+    2 × waiting for element to be visible, enabled and stable
+      - element is visible, enabled and stable
+      - scrolling into view if needed
+      - done scrolling
+      - <div class="truncate flx-1">00:10</div> from <div class="popover-v3 menu-suggestion-body">…</div> subtree intercepts pointer events
+    - retrying click action
+      - waiting 100ms
+    6 × waiting for element to be visible, enabled and stable
+      - element is visible, enabled and stable
+      - scrolling into view if needed
+      - done scrolling
+      - <div class="truncate flx-1">00:10</div> from <div class="popover-v3 menu-suggestion-body">…</div> subtree intercepts pointer events
+    - retrying click action
+      - waiting 500ms
+
+[2026-07-15 16:41:12] 🗓️ Xem trước ngày giờ nhắc hẹn trên modal: 17/07/2026 lúc 09:00
+[2026-07-15 16:41:12] ⏰ Đã bấm tạo nhắc hẹn giao hàng lúc 09:00 17/07/2026
+[2026-07-15 16:41:29] 📝 Đã gõ ngày='17/07/2026' (khớp=True) giờ='09:00' (khớp=True)
+[2026-07-15 16:41:32] ⚠️ Không click được ra ngoài để đóng khung lịch (bỏ qua, thử bấm nút tạo luôn): Locator.click: Timeout 3000ms exceeded.
+Call log:
+  - waiting for locator(".zl-modal").last.locator("[data-id=\"div_RMD_Repeat\"]")
+    - locator resolved to <div data-id="div_RMD_Repeat" class="zl-lbl-component ">…</div>
+  - attempting click action
+    2 × waiting for element to be visible, enabled and stable
+      - element is visible, enabled and stable
+      - scrolling into view if needed
+      - done scrolling
+      - <div class="truncate flx-1">00:10</div> from <div class="popover-v3 menu-suggestion-body">…</div> subtree intercepts pointer events
+    - retrying click action
+    - waiting 20ms
+    2 × waiting for element to be visible, enabled and stable
+      - element is visible, enabled and stable
+      - scrolling into view if needed
+      - done scrolling
+      - <div class="truncate flx-1">00:10</div> from <div class="popover-v3 menu-suggestion-body">…</div> subtree intercepts pointer events
+    - retrying click action
+      - waiting 100ms
+    6 × waiting for element to be visible, enabled and stable
+      - element is visible, enabled and stable
+      - scrolling into view if needed
+      - done scrolling
+      - <div class="truncate flx-1">00:10</div> from <div class="popover-v3 menu-suggestion-body">…</div> subtree intercepts pointer events
+    - retrying click action
+      - waiting 500ms
+
+[2026-07-15 16:41:35] 🗓️ Xem trước ngày giờ nhắc hẹn trên modal: 17/07/2026 lúc 09:00
+[2026-07-15 16:41:35] ⏰ Đã bấm tạo nhắc hẹn giao hàng lúc 09:00 17/07/2026
+[2026-07-15 16:41:52] 📝 Đã gõ ngày='17/07/2026' (khớp=True) giờ='09:00' (khớp=True)
+[2026-07-15 16:41:55] ⚠️ Không click được ra ngoài để đóng khung lịch (bỏ qua, thử bấm nút tạo luôn): Locator.click: Timeout 3000ms exceeded.
+Call log:
+  - waiting for locator(".zl-modal").last.locator("[data-id=\"div_RMD_Repeat\"]")
+    - locator resolved to <div data-id="div_RMD_Repeat" class="zl-lbl-component ">…</div>
+  - attempting click action
+    2 × waiting for element to be visible, enabled and stable
+      - element is visible, enabled and stable
+      - scrolling into view if needed
+      - done scrolling
+      - <div class="truncate flx-1">00:10</div> from <div class="popover-v3 menu-suggestion-body">…</div> subtree intercepts pointer events
+    - retrying click action
+    - waiting 20ms
+    2 × waiting for element to be visible, enabled and stable
+      - element is visible, enabled and stable
+      - scrolling into view if needed
+      - done scrolling
+      - <div class="truncate flx-1">00:10</div> from <div class="popover-v3 menu-suggestion-body">…</div> subtree intercepts pointer events
+    - retrying click action
+      - waiting 100ms
+    6 × waiting for element to be visible, enabled and stable
+      - element is visible, enabled and stable
+      - scrolling into view if needed
+      - done scrolling
+      - <div class="truncate flx-1">00:10</div> from <div class="popover-v3 menu-suggestion-body">…</div> subtree intercepts pointer events
+    - retrying click action
+      - waiting 500ms
+
+[2026-07-15 16:41:57] 🗓️ Xem trước ngày giờ nhắc hẹn trên modal: 17/07/2026 lúc 09:00
+[2026-07-15 16:41:57] ⏰ Đã bấm tạo nhắc hẹn giao hàng lúc 09:00 17/07/2026
+[2026-07-15 16:42:15] 📝 Đã gõ ngày='17/07/2026' (khớp=True) giờ='09:00' (khớp=True)
+[2026-07-15 16:42:18] ⚠️ Không click được ra ngoài để đóng khung lịch (bỏ qua, thử bấm nút tạo luôn): Locator.click: Timeout 3000ms exceeded.
+Call log:
+  - waiting for locator(".zl-modal").last.locator("[data-id=\"div_RMD_Repeat\"]")
+    - locator resolved to <div data-id="div_RMD_Repeat" class="zl-lbl-component ">…</div>
+  - attempting click action
+    2 × waiting for element to be visible, enabled and stable
+      - element is visible, enabled and stable
+      - scrolling into view if needed
+      - done scrolling
+      - <div class="truncate flx-1">00:10</div> from <div class="popover-v3 menu-suggestion-body">…</div> subtree intercepts pointer events
+    - retrying click action
+    - waiting 20ms
+    2 × waiting for element to be visible, enabled and stable
+      - element is visible, enabled and stable
+      - scrolling into view if needed
+      - done scrolling
+      - <div class="truncate flx-1">00:10</div> from <div class="popover-v3 menu-suggestion-body">…</div> subtree intercepts pointer events
+    - retrying click action
+      - waiting 100ms
+    5 × waiting for element to be visible, enabled and stable
+      - element is visible, enabled and stable
+      - scrolling into view if needed
+      - done scrolling
+      - <div class="truncate flx-1">00:10</div> from <div class="popover-v3 menu-suggestion-body">…</div> subtree intercepts pointer events
+    - retrying click action
+      - waiting 500ms
+    - waiting for element to be visible, enabled and stable
+
+[2026-07-15 16:42:20] 🗓️ Xem trước ngày giờ nhắc hẹn trên modal: 17/07/2026 lúc 09:00
+[2026-07-15 16:42:20] ⏰ Đã bấm tạo nhắc hẹn giao hàng lúc 09:00 17/07/2026
+[2026-07-16 08:16:23] 📝 Đã gõ ngày='17/07/2026' (khớp=True) giờ='09:00' (khớp=True)
+[2026-07-16 08:16:26] ⚠️ Không click được ra ngoài để đóng khung lịch (bỏ qua, thử bấm nút tạo luôn): Locator.click: Timeout 3000ms exceeded.
+Call log:
+  - waiting for locator(".zl-modal").last.locator("[data-id=\"div_RMD_Repeat\"]")
+    - locator resolved to <div data-id="div_RMD_Repeat" class="zl-lbl-component ">…</div>
+  - attempting click action
+    2 × waiting for element to be visible, enabled and stable
+      - element is visible, enabled and stable
+      - scrolling into view if needed
+      - done scrolling
+      - <div class="truncate flx-1">00:10</div> from <div class="popover-v3 menu-suggestion-body">…</div> subtree intercepts pointer events
+    - retrying click action
+    - waiting 20ms
+    2 × waiting for element to be visible, enabled and stable
+      - element is visible, enabled and stable
+      - scrolling into view if needed
+      - done scrolling
+      - <div class="truncate flx-1">00:10</div> from <div class="popover-v3 menu-suggestion-body">…</div> subtree intercepts pointer events
+    - retrying click action
+      - waiting 100ms
+    6 × waiting for element to be visible, enabled and stable
+      - element is visible, enabled and stable
+      - scrolling into view if needed
+      - done scrolling
+      - <div class="truncate flx-1">00:10</div> from <div class="popover-v3 menu-suggestion-body">…</div> subtree intercepts pointer events
+    - retrying click action
+      - waiting 500ms
+
+[2026-07-16 08:16:29] 🗓️ Xem trước ngày giờ nhắc hẹn trên modal: Ngày mai lúc 09:00
+[2026-07-16 08:16:29] ⏰ Đã bấm tạo nhắc hẹn giao hàng lúc 09:00 17/07/2026
+[2026-07-16 08:16:43] 📝 Đã gõ ngày='17/07/2026' (khớp=True) giờ='09:00' (khớp=True)
+[2026-07-16 08:16:46] ⚠️ Không click được ra ngoài để đóng khung lịch (bỏ qua, thử bấm nút tạo luôn): Locator.click: Timeout 3000ms exceeded.
+Call log:
+  - waiting for locator(".zl-modal").last.locator("[data-id=\"div_RMD_Repeat\"]")
+    - locator resolved to <div data-id="div_RMD_Repeat" class="zl-lbl-component ">…</div>
+  - attempting click action
+    2 × waiting for element to be visible, enabled and stable
+      - element is visible, enabled and stable
+      - scrolling into view if needed
+      - done scrolling
+      - <div class="truncate flx-1">00:10</div> from <div class="popover-v3 menu-suggestion-body">…</div> subtree intercepts pointer events
+    - retrying click action
+    - waiting 20ms
+    2 × waiting for element to be visible, enabled and stable
+      - element is visible, enabled and stable
+      - scrolling into view if needed
+      - done scrolling
+      - <div class="truncate flx-1">00:10</div> from <div class="popover-v3 menu-suggestion-body">…</div> subtree intercepts pointer events
+    - retrying click action
+      - waiting 100ms
+    6 × waiting for element to be visible, enabled and stable
+      - element is visible, enabled and stable
+      - scrolling into view if needed
+      - done scrolling
+      - <div class="truncate flx-1">00:10</div> from <div class="popover-v3 menu-suggestion-body">…</div> subtree intercepts pointer events
+    - retrying click action
+      - waiting 500ms
+
+[2026-07-16 08:16:48] 🗓️ Xem trước ngày giờ nhắc hẹn trên modal: Ngày mai lúc 09:00
+[2026-07-16 08:16:48] ⏰ Đã bấm tạo nhắc hẹn giao hàng lúc 09:00 17/07/2026
+[2026-07-16 12:16:28] 📝 Đã gõ ngày='17/07/2026' (khớp=True) giờ='09:00' (khớp=True)
+[2026-07-16 12:16:31] ⚠️ Không click được ra ngoài để đóng khung lịch (bỏ qua, thử bấm nút tạo luôn): Locator.click: Timeout 3000ms exceeded.
+Call log:
+  - waiting for locator(".zl-modal").last.locator("[data-id=\"div_RMD_Repeat\"]")
+    - locator resolved to <div data-id="div_RMD_Repeat" class="zl-lbl-component ">…</div>
+  - attempting click action
+    2 × waiting for element to be visible, enabled and stable
+      - element is visible, enabled and stable
+      - scrolling into view if needed
+      - done scrolling
+      - <div class="truncate flx-1">00:10</div> from <div class="popover-v3 menu-suggestion-body">…</div> subtree intercepts pointer events
+    - retrying click action
+    - waiting 20ms
+    2 × waiting for element to be visible, enabled and stable
+      - element is visible, enabled and stable
+      - scrolling into view if needed
+      - done scrolling
+      - <div class="truncate flx-1">00:10</div> from <div class="popover-v3 menu-suggestion-body">…</div> subtree intercepts pointer events
+    - retrying click action
+      - waiting 100ms
+    3 × waiting for element to be visible, enabled and stable
+      - element is visible, enabled and stable
+      - scrolling into view if needed
+      - done scrolling
+      - <div class="truncate flx-1">00:10</div> from <div class="popover-v3 menu-suggestion-body">…</div> subtree intercepts pointer events
+    - retrying click action
+      - waiting 500ms
+
+[2026-07-16 12:16:33] 🗓️ Xem trước ngày giờ nhắc hẹn trên modal: Ngày mai lúc 09:00
+[2026-07-16 12:16:33] ⏰ Đã bấm tạo nhắc hẹn giao hàng lúc 09:00 17/07/2026
+[2026-07-16 12:16:47] ⏭️ Thời gian nhắc hẹn (09:00 16/07/2026) đã ở quá khứ → bỏ qua tạo nhắc hẹn.
+[2026-07-16 12:18:28] ⏭️ Thời gian nhắc hẹn (09:00 16/07/2026) đã ở quá khứ → bỏ qua tạo nhắc hẹn.
+[2026-07-16 12:23:48] 📝 Đã gõ ngày='17/07/2026' (khớp=True) giờ='09:00' (khớp=True)
+[2026-07-16 12:23:51] ⚠️ Không click được ra ngoài để đóng khung lịch (bỏ qua, thử bấm nút tạo luôn): Locator.click: Timeout 3000ms exceeded.
+Call log:
+  - waiting for locator(".zl-modal").last.locator("[data-id=\"div_RMD_Repeat\"]")
+    - locator resolved to <div data-id="div_RMD_Repeat" class="zl-lbl-component ">…</div>
+  - attempting click action
+    2 × waiting for element to be visible, enabled and stable
+      - element is visible, enabled and stable
+      - scrolling into view if needed
+      - done scrolling
+      - <div class="truncate flx-1">00:10</div> from <div class="popover-v3 menu-suggestion-body">…</div> subtree intercepts pointer events
+    - retrying click action
+    - waiting 20ms
+    2 × waiting for element to be visible, enabled and stable
+      - element is visible, enabled and stable
+      - scrolling into view if needed
+      - done scrolling
+      - <div class="truncate flx-1">00:10</div> from <div class="popover-v3 menu-suggestion-body">…</div> subtree intercepts pointer events
+    - retrying click action
+      - waiting 100ms
+    6 × waiting for element to be visible, enabled and stable
+      - element is visible, enabled and stable
+      - scrolling into view if needed
+      - done scrolling
+      - <div class="truncate flx-1">00:10</div> from <div class="popover-v3 menu-suggestion-body">…</div> subtree intercepts pointer events
+    - retrying click action
+      - waiting 500ms
+
+[2026-07-16 12:23:54] 🗓️ Xem trước ngày giờ nhắc hẹn trên modal: Ngày mai lúc 09:00
+[2026-07-16 12:23:54] ⏰ Đã bấm tạo nhắc hẹn giao hàng lúc 09:00 17/07/2026
+[2026-07-16 16:45:37] ⏭️ Thời gian nhắc hẹn (09:00 15/07/2026) đã ở quá khứ → bỏ qua tạo nhắc hẹn.
+[2026-07-16 16:53:07] 📝 Đã gõ ngày='17/07/2026' (khớp=True) giờ='09:00' (khớp=True)
+[2026-07-16 16:53:10] ⚠️ Không click được ra ngoài để đóng khung lịch (bỏ qua, thử bấm nút tạo luôn): Locator.click: Timeout 3000ms exceeded.
+Call log:
+  - waiting for locator(".zl-modal").last.locator("[data-id=\"div_RMD_Repeat\"]")
+    - locator resolved to <div data-id="div_RMD_Repeat" class="zl-lbl-component ">…</div>
+  - attempting click action
+    2 × waiting for element to be visible, enabled and stable
+      - element is visible, enabled and stable
+      - scrolling into view if needed
+      - done scrolling
+      - <div class="truncate flx-1">00:10</div> from <div class="popover-v3 menu-suggestion-body">…</div> subtree intercepts pointer events
+    - retrying click action
+    - waiting 20ms
+    2 × waiting for element to be visible, enabled and stable
+      - element is visible, enabled and stable
+      - scrolling into view if needed
+      - done scrolling
+      - <div class="truncate flx-1">00:10</div> from <div class="popover-v3 menu-suggestion-body">…</div> subtree intercepts pointer events
+    - retrying click action
+      - waiting 100ms
+    6 × waiting for element to be visible, enabled and stable
+      - element is visible, enabled and stable
+      - scrolling into view if needed
+      - done scrolling
+      - <div class="truncate flx-1">00:10</div> from <div class="popover-v3 menu-suggestion-body">…</div> subtree intercepts pointer events
+    - retrying click action
+      - waiting 500ms
+
+[2026-07-16 16:53:12] 🗓️ Xem trước ngày giờ nhắc hẹn trên modal: Ngày mai lúc 09:00
+[2026-07-16 16:53:12] ⏰ Đã bấm tạo nhắc hẹn giao hàng lúc 09:00 17/07/2026
+[2026-07-16 16:53:21] 📝 Đã gõ ngày='18/07/2026' (khớp=True) giờ='09:00' (khớp=True)
+[2026-07-16 16:53:24] ⚠️ Không click được ra ngoài để đóng khung lịch (bỏ qua, thử bấm nút tạo luôn): Locator.click: Timeout 3000ms exceeded.
+Call log:
+  - waiting for locator(".zl-modal").last.locator("[data-id=\"div_RMD_Repeat\"]")
+    - locator resolved to <div data-id="div_RMD_Repeat" class="zl-lbl-component ">…</div>
+  - attempting click action
+    2 × waiting for element to be visible, enabled and stable
+      - element is visible, enabled and stable
+      - scrolling into view if needed
+      - done scrolling
+      - <div class="truncate flx-1">00:10</div> from <div class="popover-v3 menu-suggestion-body">…</div> subtree intercepts pointer events
+    - retrying click action
+    - waiting 20ms
+    2 × waiting for element to be visible, enabled and stable
+      - element is visible, enabled and stable
+      - scrolling into view if needed
+      - done scrolling
+      - <div class="truncate flx-1">00:10</div> from <div class="popover-v3 menu-suggestion-body">…</div> subtree intercepts pointer events
+    - retrying click action
+      - waiting 100ms
+    6 × waiting for element to be visible, enabled and stable
+      - element is visible, enabled and stable
+      - scrolling into view if needed
+      - done scrolling
+      - <div class="truncate flx-1">00:10</div> from <div class="popover-v3 menu-suggestion-body">…</div> subtree intercepts pointer events
+    - retrying click action
+      - waiting 500ms
+
+[2026-07-16 16:53:26] 🗓️ Xem trước ngày giờ nhắc hẹn trên modal: 18/07/2026 lúc 09:00
+[2026-07-16 16:53:26] ⏰ Đã bấm tạo nhắc hẹn giao hàng lúc 09:00 18/07/2026
+[2026-07-16 16:55:41] 📝 Đã gõ ngày='18/07/2026' (khớp=True) giờ='09:00' (khớp=True)
+[2026-07-16 16:55:44] ⚠️ Không click được ra ngoài để đóng khung lịch (bỏ qua, thử bấm nút tạo luôn): Locator.click: Timeout 3000ms exceeded.
+Call log:
+  - waiting for locator(".zl-modal").last.locator("[data-id=\"div_RMD_Repeat\"]")
+    - locator resolved to <div data-id="div_RMD_Repeat" class="zl-lbl-component ">…</div>
+  - attempting click action
+    2 × waiting for element to be visible, enabled and stable
+      - element is visible, enabled and stable
+      - scrolling into view if needed
+      - done scrolling
+      - <div class="truncate flx-1">00:10</div> from <div class="popover-v3 menu-suggestion-body">…</div> subtree intercepts pointer events
+    - retrying click action
+    - waiting 20ms
+    2 × waiting for element to be visible, enabled and stable
+      - element is visible, enabled and stable
+      - scrolling into view if needed
+      - done scrolling
+      - <div class="truncate flx-1">00:10</div> from <div class="popover-v3 menu-suggestion-body">…</div> subtree intercepts pointer events
+    - retrying click action
+      - waiting 100ms
+    6 × waiting for element to be visible, enabled and stable
+      - element is visible, enabled and stable
+      - scrolling into view if needed
+      - done scrolling
+      - <div class="truncate flx-1">00:10</div> from <div class="popover-v3 menu-suggestion-body">…</div> subtree intercepts pointer events
+    - retrying click action
+      - waiting 500ms
+
+[2026-07-16 16:55:47] 🗓️ Xem trước ngày giờ nhắc hẹn trên modal: 18/07/2026 lúc 09:00
+[2026-07-16 16:55:47] ⏰ Đã bấm tạo nhắc hẹn giao hàng lúc 09:00 18/07/2026
+[2026-07-16 16:56:04] 📝 Đã gõ ngày='18/07/2026' (khớp=True) giờ='09:00' (khớp=True)
+[2026-07-16 16:56:07] ⚠️ Không click được ra ngoài để đóng khung lịch (bỏ qua, thử bấm nút tạo luôn): Locator.click: Timeout 3000ms exceeded.
+Call log:
+  - waiting for locator(".zl-modal").last.locator("[data-id=\"div_RMD_Repeat\"]")
+    - locator resolved to <div data-id="div_RMD_Repeat" class="zl-lbl-component ">…</div>
+  - attempting click action
+    2 × waiting for element to be visible, enabled and stable
+      - element is visible, enabled and stable
+      - scrolling into view if needed
+      - done scrolling
+      - <div class="truncate flx-1">00:10</div> from <div class="popover-v3 menu-suggestion-body">…</div> subtree intercepts pointer events
+    - retrying click action
+    - waiting 20ms
+    2 × waiting for element to be visible, enabled and stable
+      - element is visible, enabled and stable
+      - scrolling into view if needed
+      - done scrolling
+      - <div class="truncate flx-1">00:10</div> from <div class="popover-v3 menu-suggestion-body">…</div> subtree intercepts pointer events
+    - retrying click action
+      - waiting 100ms
+    6 × waiting for element to be visible, enabled and stable
+      - element is visible, enabled and stable
+      - scrolling into view if needed
+      - done scrolling
+      - <div class="truncate flx-1">00:10</div> from <div class="popover-v3 menu-suggestion-body">…</div> subtree intercepts pointer events
+    - retrying click action
+      - waiting 500ms
+
+[2026-07-16 16:56:09] 🗓️ Xem trước ngày giờ nhắc hẹn trên modal: 18/07/2026 lúc 09:00
+[2026-07-16 16:56:09] ⏰ Đã bấm tạo nhắc hẹn giao hàng lúc 09:00 18/07/2026
+[2026-07-17 11:56:51] 📝 Đã gõ ngày='18/07/2026' (khớp=True) giờ='09:00' (khớp=True)
+[2026-07-17 11:56:54] ⚠️ Không click được ra ngoài để đóng khung lịch (bỏ qua, thử bấm nút tạo luôn): Locator.click: Timeout 3000ms exceeded.
+Call log:
+  - waiting for locator(".zl-modal").last.locator("[data-id=\"div_RMD_Repeat\"]")
+    - locator resolved to <div data-id="div_RMD_Repeat" class="zl-lbl-component ">…</div>
+  - attempting click action
+    2 × waiting for element to be visible, enabled and stable
+      - element is visible, enabled and stable
+      - scrolling into view if needed
+      - done scrolling
+      - <div class="truncate flx-1">00:10</div> from <div class="popover-v3 menu-suggestion-body">…</div> subtree intercepts pointer events
+    - retrying click action
+    - waiting 20ms
+    2 × waiting for element to be visible, enabled and stable
+      - element is visible, enabled and stable
+      - scrolling into view if needed
+      - done scrolling
+      - <div class="truncate flx-1">00:10</div> from <div class="popover-v3 menu-suggestion-body">…</div> subtree intercepts pointer events
+    - retrying click action
+      - waiting 100ms
+    6 × waiting for element to be visible, enabled and stable
+      - element is visible, enabled and stable
+      - scrolling into view if needed
+      - done scrolling
+      - <div class="truncate flx-1">00:10</div> from <div class="popover-v3 menu-suggestion-body">…</div> subtree intercepts pointer events
+    - retrying click action
+      - waiting 500ms
+
+[2026-07-17 11:56:56] 🗓️ Xem trước ngày giờ nhắc hẹn trên modal: Ngày mai lúc 09:00
+[2026-07-17 11:56:56] ⏰ Đã bấm tạo nhắc hẹn giao hàng lúc 09:00 18/07/2026
+[2026-07-17 11:57:13] 📝 Đã gõ ngày='18/07/2026' (khớp=True) giờ='09:00' (khớp=True)
+[2026-07-17 11:57:16] ⚠️ Không click được ra ngoài để đóng khung lịch (bỏ qua, thử bấm nút tạo luôn): Locator.click: Timeout 3000ms exceeded.
+Call log:
+  - waiting for locator(".zl-modal").last.locator("[data-id=\"div_RMD_Repeat\"]")
+    - locator resolved to <div data-id="div_RMD_Repeat" class="zl-lbl-component ">…</div>
+  - attempting click action
+    2 × waiting for element to be visible, enabled and stable
+      - element is visible, enabled and stable
+      - scrolling into view if needed
+      - done scrolling
+      - <div class="truncate flx-1">00:10</div> from <div class="popover-v3 menu-suggestion-body">…</div> subtree intercepts pointer events
+    - retrying click action
+    - waiting 20ms
+    2 × waiting for element to be visible, enabled and stable
+      - element is visible, enabled and stable
+      - scrolling into view if needed
+      - done scrolling
+      - <div class="truncate flx-1">00:10</div> from <div class="popover-v3 menu-suggestion-body">…</div> subtree intercepts pointer events
+    - retrying click action
+      - waiting 100ms
+    6 × waiting for element to be visible, enabled and stable
+      - element is visible, enabled and stable
+      - scrolling into view if needed
+      - done scrolling
+      - <div class="truncate flx-1">00:10</div> from <div class="popover-v3 menu-suggestion-body">…</div> subtree intercepts pointer events
+    - retrying click action
+      - waiting 500ms
+
+[2026-07-17 11:57:19] 🗓️ Xem trước ngày giờ nhắc hẹn trên modal: Ngày mai lúc 09:00
+[2026-07-17 11:57:19] ⏰ Đã bấm tạo nhắc hẹn giao hàng lúc 09:00 18/07/2026
+[2026-07-17 11:57:27] 📝 Đã gõ ngày='18/07/2026' (khớp=True) giờ='09:00' (khớp=True)
+[2026-07-17 11:57:30] ⚠️ Không click được ra ngoài để đóng khung lịch (bỏ qua, thử bấm nút tạo luôn): Locator.click: Timeout 3000ms exceeded.
+Call log:
+  - waiting for locator(".zl-modal").last.locator("[data-id=\"div_RMD_Repeat\"]")
+    - locator resolved to <div data-id="div_RMD_Repeat" class="zl-lbl-component ">…</div>
+  - attempting click action
+    2 × waiting for element to be visible, enabled and stable
+      - element is visible, enabled and stable
+      - scrolling into view if needed
+      - done scrolling
+      - <div class="truncate flx-1">00:10</div> from <div class="popover-v3 menu-suggestion-body">…</div> subtree intercepts pointer events
+    - retrying click action
+    - waiting 20ms
+    2 × waiting for element to be visible, enabled and stable
+      - element is visible, enabled and stable
+      - scrolling into view if needed
+      - done scrolling
+      - <div class="truncate flx-1">00:10</div> from <div class="popover-v3 menu-suggestion-body">…</div> subtree intercepts pointer events
+    - retrying click action
+      - waiting 100ms
+    6 × waiting for element to be visible, enabled and stable
+      - element is visible, enabled and stable
+      - scrolling into view if needed
+      - done scrolling
+      - <div class="truncate flx-1">00:10</div> from <div class="popover-v3 menu-suggestion-body">…</div> subtree intercepts pointer events
+    - retrying click action
+      - waiting 500ms
+
+[2026-07-17 11:57:32] 🗓️ Xem trước ngày giờ nhắc hẹn trên modal: Ngày mai lúc 09:00
+[2026-07-17 11:57:32] ⏰ Đã bấm tạo nhắc hẹn giao hàng lúc 09:00 18/07/2026
+[2026-07-17 11:57:49] 📝 Đã gõ ngày='18/07/2026' (khớp=True) giờ='09:00' (khớp=True)
+[2026-07-17 11:57:52] ⚠️ Không click được ra ngoài để đóng khung lịch (bỏ qua, thử bấm nút tạo luôn): Locator.click: Timeout 3000ms exceeded.
+Call log:
+  - waiting for locator(".zl-modal").last.locator("[data-id=\"div_RMD_Repeat\"]")
+    - locator resolved to <div data-id="div_RMD_Repeat" class="zl-lbl-component ">…</div>
+  - attempting click action
+    2 × waiting for element to be visible, enabled and stable
+      - element is visible, enabled and stable
+      - scrolling into view if needed
+      - done scrolling
+      - <div class="truncate flx-1">00:10</div> from <div class="popover-v3 menu-suggestion-body">…</div> subtree intercepts pointer events
+    - retrying click action
+    - waiting 20ms
+    2 × waiting for element to be visible, enabled and stable
+      - element is visible, enabled and stable
+      - scrolling into view if needed
+      - done scrolling
+      - <div class="truncate flx-1">00:10</div> from <div class="popover-v3 menu-suggestion-body">…</div> subtree intercepts pointer events
+    - retrying click action
+      - waiting 100ms
+    6 × waiting for element to be visible, enabled and stable
+      - element is visible, enabled and stable
+      - scrolling into view if needed
+      - done scrolling
+      - <div class="truncate flx-1">00:10</div> from <div class="popover-v3 menu-suggestion-body">…</div> subtree intercepts pointer events
+    - retrying click action
+      - waiting 500ms
+
+[2026-07-17 11:57:55] 🗓️ Xem trước ngày giờ nhắc hẹn trên modal: Ngày mai lúc 09:00
+[2026-07-17 11:57:55] ⏰ Đã bấm tạo nhắc hẹn giao hàng lúc 09:00 18/07/2026
+[2026-07-17 11:58:12] 📝 Đã gõ ngày='21/07/2026' (khớp=True) giờ='09:00' (khớp=True)
+[2026-07-17 11:58:15] ⚠️ Không click được ra ngoài để đóng khung lịch (bỏ qua, thử bấm nút tạo luôn): Locator.click: Timeout 3000ms exceeded.
+Call log:
+  - waiting for locator(".zl-modal").last.locator("[data-id=\"div_RMD_Repeat\"]")
+    - locator resolved to <div data-id="div_RMD_Repeat" class="zl-lbl-component ">…</div>
+  - attempting click action
+    2 × waiting for element to be visible, enabled and stable
+      - element is visible, enabled and stable
+      - scrolling into view if needed
+      - done scrolling
+      - <div class="truncate flx-1">00:10</div> from <div class="popover-v3 menu-suggestion-body">…</div> subtree intercepts pointer events
+    - retrying click action
+    - waiting 20ms
+    2 × waiting for element to be visible, enabled and stable
+      - element is visible, enabled and stable
+      - scrolling into view if needed
+      - done scrolling
+      - <div class="truncate flx-1">00:10</div> from <div class="popover-v3 menu-suggestion-body">…</div> subtree intercepts pointer events
+    - retrying click action
+      - waiting 100ms
+    6 × waiting for element to be visible, enabled and stable
+      - element is visible, enabled and stable
+      - scrolling into view if needed
+      - done scrolling
+      - <div class="truncate flx-1">00:10</div> from <div class="popover-v3 menu-suggestion-body">…</div> subtree intercepts pointer events
+    - retrying click action
+      - waiting 500ms
+
+[2026-07-17 11:58:17] 🗓️ Xem trước ngày giờ nhắc hẹn trên modal: 21/07/2026 lúc 09:00
+[2026-07-17 11:58:17] ⏰ Đã bấm tạo nhắc hẹn giao hàng lúc 09:00 21/07/2026
+[2026-07-17 11:58:34] 📝 Đã gõ ngày='18/07/2026' (khớp=True) giờ='09:00' (khớp=True)
+[2026-07-17 11:58:37] ⚠️ Không click được ra ngoài để đóng khung lịch (bỏ qua, thử bấm nút tạo luôn): Locator.click: Timeout 3000ms exceeded.
+Call log:
+  - waiting for locator(".zl-modal").last.locator("[data-id=\"div_RMD_Repeat\"]")
+    - locator resolved to <div data-id="div_RMD_Repeat" class="zl-lbl-component ">…</div>
+  - attempting click action
+    2 × waiting for element to be visible, enabled and stable
+      - element is visible, enabled and stable
+      - scrolling into view if needed
+      - done scrolling
+      - <div class="truncate flx-1">00:10</div> from <div class="popover-v3 menu-suggestion-body">…</div> subtree intercepts pointer events
+    - retrying click action
+    - waiting 20ms
+    2 × waiting for element to be visible, enabled and stable
+      - element is visible, enabled and stable
+      - scrolling into view if needed
+      - done scrolling
+      - <div class="truncate flx-1">00:10</div> from <div class="popover-v3 menu-suggestion-body">…</div> subtree intercepts pointer events
+    - retrying click action
+      - waiting 100ms
+    6 × waiting for element to be visible, enabled and stable
+      - element is visible, enabled and stable
+      - scrolling into view if needed
+      - done scrolling
+      - <div class="truncate flx-1">00:10</div> from <div class="popover-v3 menu-suggestion-body">…</div> subtree intercepts pointer events
+    - retrying click action
+      - waiting 500ms
+
+[2026-07-17 11:58:40] 🗓️ Xem trước ngày giờ nhắc hẹn trên modal: Ngày mai lúc 09:00
+[2026-07-17 11:58:40] ⏰ Đã bấm tạo nhắc hẹn giao hàng lúc 09:00 18/07/2026
+[2026-07-17 11:58:57] 📝 Đã gõ ngày='18/07/2026' (khớp=True) giờ='09:00' (khớp=True)
+[2026-07-17 11:59:00] ⚠️ Không click được ra ngoài để đóng khung lịch (bỏ qua, thử bấm nút tạo luôn): Locator.click: Timeout 3000ms exceeded.
+Call log:
+  - waiting for locator(".zl-modal").last.locator("[data-id=\"div_RMD_Repeat\"]")
+    - locator resolved to <div data-id="div_RMD_Repeat" class="zl-lbl-component ">…</div>
+  - attempting click action
+    2 × waiting for element to be visible, enabled and stable
+      - element is visible, enabled and stable
+      - scrolling into view if needed
+      - done scrolling
+      - <div class="truncate flx-1">00:10</div> from <div class="popover-v3 menu-suggestion-body">…</div> subtree intercepts pointer events
+    - retrying click action
+    - waiting 20ms
+    2 × waiting for element to be visible, enabled and stable
+      - element is visible, enabled and stable
+      - scrolling into view if needed
+      - done scrolling
+      - <div class="truncate flx-1">00:10</div> from <div class="popover-v3 menu-suggestion-body">…</div> subtree intercepts pointer events
+    - retrying click action
+      - waiting 100ms
+    6 × waiting for element to be visible, enabled and stable
+      - element is visible, enabled and stable
+      - scrolling into view if needed
+      - done scrolling
+      - <div class="truncate flx-1">00:10</div> from <div class="popover-v3 menu-suggestion-body">…</div> subtree intercepts pointer events
+    - retrying click action
+      - waiting 500ms
+
+[2026-07-17 11:59:02] 🗓️ Xem trước ngày giờ nhắc hẹn trên modal: Ngày mai lúc 09:00
+[2026-07-17 11:59:02] ⏰ Đã bấm tạo nhắc hẹn giao hàng lúc 09:00 18/07/2026
+[2026-07-18 08:40:13] 📝 Đã gõ ngày='18/07/2026' (khớp=True) giờ='09:00' (khớp=True)
+[2026-07-18 08:40:16] ⚠️ Không click được ra ngoài để đóng khung lịch (bỏ qua, thử bấm nút tạo luôn): Locator.click: Timeout 3000ms exceeded.
+Call log:
+  - waiting for locator(".zl-modal").last.locator("[data-id=\"div_RMD_Repeat\"]")
+    - locator resolved to <div data-id="div_RMD_Repeat" class="zl-lbl-component ">…</div>
+  - attempting click action
+    2 × waiting for element to be visible, enabled and stable
+      - element is visible, enabled and stable
+      - scrolling into view if needed
+      - done scrolling
+      - <div class="truncate flx-1">08:50</div> from <div class="popover-v3 menu-suggestion-body">…</div> subtree intercepts pointer events
+    - retrying click action
+    - waiting 20ms
+    2 × waiting for element to be visible, enabled and stable
+      - element is visible, enabled and stable
+      - scrolling into view if needed
+      - done scrolling
+      - <div class="truncate flx-1">08:50</div> from <div class="popover-v3 menu-suggestion-body">…</div> subtree intercepts pointer events
+    - retrying click action
+      - waiting 100ms
+    6 × waiting for element to be visible, enabled and stable
+      - element is visible, enabled and stable
+      - scrolling into view if needed
+      - done scrolling
+      - <div class="truncate flx-1">08:50</div> from <div class="popover-v3 menu-suggestion-body">…</div> subtree intercepts pointer events
+    - retrying click action
+      - waiting 500ms
+
+[2026-07-18 08:40:19] 🗓️ Xem trước ngày giờ nhắc hẹn trên modal: Hôm nay lúc 09:00
+[2026-07-18 08:40:19] ⏰ Đã bấm tạo nhắc hẹn giao hàng lúc 09:00 18/07/2026
+[2026-07-20 11:47:23] ⏭️ Thời gian nhắc hẹn (09:00 20/07/2026) đã ở quá khứ → bỏ qua tạo nhắc hẹn.
+[2026-07-20 13:24:14] 📝 Đã gõ ngày='21/07/2026' (khớp=True) giờ='09:00' (khớp=True)
+[2026-07-20 13:24:17] ⚠️ Không click được ra ngoài để đóng khung lịch (bỏ qua, thử bấm nút tạo luôn): Locator.click: Timeout 3000ms exceeded.
+Call log:
+  - waiting for locator(".zl-modal").last.locator("[data-id=\"div_RMD_Repeat\"]")
+    - locator resolved to <div data-id="div_RMD_Repeat" class="zl-lbl-component ">…</div>
+  - attempting click action
+    2 × waiting for element to be visible, enabled and stable
+      - element is visible, enabled and stable
+      - scrolling into view if needed
+      - done scrolling
+      - <div class="truncate flx-1">00:10</div> from <div class="popover-v3 menu-suggestion-body">…</div> subtree intercepts pointer events
+    - retrying click action
+    - waiting 20ms
+    2 × waiting for element to be visible, enabled and stable
+      - element is visible, enabled and stable
+      - scrolling into view if needed
+      - done scrolling
+      - <div class="truncate flx-1">00:10</div> from <div class="popover-v3 menu-suggestion-body">…</div> subtree intercepts pointer events
+    - retrying click action
+      - waiting 100ms
+    6 × waiting for element to be visible, enabled and stable
+      - element is visible, enabled and stable
+      - scrolling into view if needed
+      - done scrolling
+      - <div class="truncate flx-1">00:10</div> from <div class="popover-v3 menu-suggestion-body">…</div> subtree intercepts pointer events
+    - retrying click action
+      - waiting 500ms
+
+[2026-07-20 13:24:20] 🗓️ Xem trước ngày giờ nhắc hẹn trên modal: Ngày mai lúc 09:00
+[2026-07-20 13:24:20] ⏰ Đã bấm tạo nhắc hẹn giao hàng lúc 09:00 21/07/2026
+[2026-07-20 15:22:53] 📝 Đã gõ ngày='21/07/2026' (khớp=True) giờ='09:00' (khớp=True)
+[2026-07-20 15:22:56] ⚠️ Không click được ra ngoài để đóng khung lịch (bỏ qua, thử bấm nút tạo luôn): Locator.click: Timeout 3000ms exceeded.
+Call log:
+  - waiting for locator(".zl-modal").last.locator("[data-id=\"div_RMD_Repeat\"]")
+    - locator resolved to <div data-id="div_RMD_Repeat" class="zl-lbl-component ">…</div>
+  - attempting click action
+    2 × waiting for element to be visible, enabled and stable
+      - element is visible, enabled and stable
+      - scrolling into view if needed
+      - done scrolling
+      - <div class="truncate flx-1">00:10</div> from <div class="popover-v3 menu-suggestion-body">…</div> subtree intercepts pointer events
+    - retrying click action
+    - waiting 20ms
+    2 × waiting for element to be visible, enabled and stable
+      - element is visible, enabled and stable
+      - scrolling into view if needed
+      - done scrolling
+      - <div class="truncate flx-1">00:10</div> from <div class="popover-v3 menu-suggestion-body">…</div> subtree intercepts pointer events
+    - retrying click action
+      - waiting 100ms
+    6 × waiting for element to be visible, enabled and stable
+      - element is visible, enabled and stable
+      - scrolling into view if needed
+      - done scrolling
+      - <div class="truncate flx-1">00:10</div> from <div class="popover-v3 menu-suggestion-body">…</div> subtree intercepts pointer events
+    - retrying click action
+      - waiting 500ms
+
+[2026-07-20 15:22:59] 🗓️ Xem trước ngày giờ nhắc hẹn trên modal: Ngày mai lúc 09:00
+[2026-07-20 15:22:59] ⏰ Đã bấm tạo nhắc hẹn giao hàng lúc 09:00 21/07/2026
+[2026-07-20 16:42:07] 📝 Đã gõ ngày='22/07/2026' (khớp=True) giờ='09:00' (khớp=True)
+[2026-07-20 16:42:10] ⚠️ Không click được ra ngoài để đóng khung lịch (bỏ qua, thử bấm nút tạo luôn): Locator.click: Timeout 3000ms exceeded.
+Call log:
+  - waiting for locator(".zl-modal").last.locator("[data-id=\"div_RMD_Repeat\"]")
+    - locator resolved to <div data-id="div_RMD_Repeat" class="zl-lbl-component ">…</div>
+  - attempting click action
+    2 × waiting for element to be visible, enabled and stable
+      - element is visible, enabled and stable
+      - scrolling into view if needed
+      - done scrolling
+      - <div class="truncate flx-1">00:10</div> from <div class="popover-v3 menu-suggestion-body">…</div> subtree intercepts pointer events
+    - retrying click action
+    - waiting 20ms
+    2 × waiting for element to be visible, enabled and stable
+      - element is visible, enabled and stable
+      - scrolling into view if needed
+      - done scrolling
+      - <div class="truncate flx-1">00:10</div> from <div class="popover-v3 menu-suggestion-body">…</div> subtree intercepts pointer events
+    - retrying click action
+      - waiting 100ms
+    6 × waiting for element to be visible, enabled and stable
+      - element is visible, enabled and stable
+      - scrolling into view if needed
+      - done scrolling
+      - <div class="truncate flx-1">00:10</div> from <div class="popover-v3 menu-suggestion-body">…</div> subtree intercepts pointer events
+    - retrying click action
+      - waiting 500ms
+
+[2026-07-20 16:42:13] 🗓️ Xem trước ngày giờ nhắc hẹn trên modal: 22/07/2026 lúc 09:00
+[2026-07-20 16:42:13] ⏰ Đã bấm tạo nhắc hẹn giao hàng lúc 09:00 22/07/2026
+[2026-07-20 16:42:22] 📝 Đã gõ ngày='22/07/2026' (khớp=True) giờ='09:00' (khớp=True)
+[2026-07-20 16:42:25] ⚠️ Không click được ra ngoài để đóng khung lịch (bỏ qua, thử bấm nút tạo luôn): Locator.click: Timeout 3000ms exceeded.
+Call log:
+  - waiting for locator(".zl-modal").last.locator("[data-id=\"div_RMD_Repeat\"]")
+    - locator resolved to <div data-id="div_RMD_Repeat" class="zl-lbl-component ">…</div>
+  - attempting click action
+    2 × waiting for element to be visible, enabled and stable
+      - element is visible, enabled and stable
+      - scrolling into view if needed
+      - done scrolling
+      - <div class="truncate flx-1">00:10</div> from <div class="popover-v3 menu-suggestion-body">…</div> subtree intercepts pointer events
+    - retrying click action
+    - waiting 20ms
+    2 × waiting for element to be visible, enabled and stable
+      - element is visible, enabled and stable
+      - scrolling into view if needed
+      - done scrolling
+      - <div class="truncate flx-1">00:10</div> from <div class="popover-v3 menu-suggestion-body">…</div> subtree intercepts pointer events
+    - retrying click action
+      - waiting 100ms
+    6 × waiting for element to be visible, enabled and stable
+      - element is visible, enabled and stable
+      - scrolling into view if needed
+      - done scrolling
+      - <div class="truncate flx-1">00:10</div> from <div class="popover-v3 menu-suggestion-body">…</div> subtree intercepts pointer events
+    - retrying click action
+      - waiting 500ms
+
+[2026-07-20 16:42:27] 🗓️ Xem trước ngày giờ nhắc hẹn trên modal: 22/07/2026 lúc 09:00
+[2026-07-20 16:42:27] ⏰ Đã bấm tạo nhắc hẹn giao hàng lúc 09:00 22/07/2026
+[2026-07-20 16:53:09] 📝 Đã gõ ngày='21/07/2026' (khớp=True) giờ='09:00' (khớp=True)
+[2026-07-20 16:53:13] ⚠️ Không click được ra ngoài để đóng khung lịch (bỏ qua, thử bấm nút tạo luôn): Locator.click: Timeout 3000ms exceeded.
+Call log:
+  - waiting for locator(".zl-modal").last.locator("[data-id=\"div_RMD_Repeat\"]")
+    - locator resolved to <div data-id="div_RMD_Repeat" class="zl-lbl-component ">…</div>
+  - attempting click action
+    2 × waiting for element to be visible, enabled and stable
+      - element is visible, enabled and stable
+      - scrolling into view if needed
+      - done scrolling
+      - <div class="truncate flx-1">00:10</div> from <div class="popover-v3 menu-suggestion-body">…</div> subtree intercepts pointer events
+    - retrying click action
+    - waiting 20ms
+    2 × waiting for element to be visible, enabled and stable
+      - element is visible, enabled and stable
+      - scrolling into view if needed
+      - done scrolling
+      - <div class="truncate flx-1">00:10</div> from <div class="popover-v3 menu-suggestion-body">…</div> subtree intercepts pointer events
+    - retrying click action
+      - waiting 100ms
+    6 × waiting for element to be visible, enabled and stable
+      - element is visible, enabled and stable
+      - scrolling into view if needed
+      - done scrolling
+      - <div class="truncate flx-1">00:10</div> from <div class="popover-v3 menu-suggestion-body">…</div> subtree intercepts pointer events
+    - retrying click action
+      - waiting 500ms
+
+[2026-07-20 16:53:15] 🗓️ Xem trước ngày giờ nhắc hẹn trên modal: Ngày mai lúc 09:00
+[2026-07-20 16:53:15] ⏰ Đã bấm tạo nhắc hẹn giao hàng lúc 09:00 21/07/2026
+[2026-07-21 11:33:43] 📝 Đã gõ ngày='22/07/2026' (khớp=True) giờ='09:00' (khớp=True)
+[2026-07-21 11:33:46] ⚠️ Không click được ra ngoài để đóng khung lịch (bỏ qua, thử bấm nút tạo luôn): Locator.click: Timeout 3000ms exceeded.
+Call log:
+  - waiting for locator(".zl-modal").last.locator("[data-id=\"div_RMD_Repeat\"]")
+    - locator resolved to <div data-id="div_RMD_Repeat" class="zl-lbl-component ">…</div>
+  - attempting click action
+    2 × waiting for element to be visible, enabled and stable
+      - element is visible, enabled and stable
+      - scrolling into view if needed
+      - done scrolling
+      - <div class="truncate flx-1">00:10</div> from <div class="popover-v3 menu-suggestion-body">…</div> subtree intercepts pointer events
+    - retrying click action
+    - waiting 20ms
+    2 × waiting for element to be visible, enabled and stable
+      - element is visible, enabled and stable
+      - scrolling into view if needed
+      - done scrolling
+      - <div class="truncate flx-1">00:10</div> from <div class="popover-v3 menu-suggestion-body">…</div> subtree intercepts pointer events
+    - retrying click action
+      - waiting 100ms
+    5 × waiting for element to be visible, enabled and stable
+      - element is visible, enabled and stable
+      - scrolling into view if needed
+      - done scrolling
+      - <div class="truncate flx-1">00:10</div> from <div class="popover-v3 menu-suggestion-body">…</div> subtree intercepts pointer events
+    - retrying click action
+      - waiting 500ms
+
+[2026-07-21 11:33:48] 🗓️ Xem trước ngày giờ nhắc hẹn trên modal: Ngày mai lúc 09:00
+[2026-07-21 11:33:48] ⏰ Đã bấm tạo nhắc hẹn giao hàng lúc 09:00 22/07/2026
+[2026-07-22 09:21:12] ⏭️ Thời gian nhắc hẹn (09:00 22/07/2026) đã ở quá khứ → bỏ qua tạo nhắc hẹn.
+[2026-07-22 09:30:51] ⏭️ Thời gian nhắc hẹn (09:00 22/07/2026) đã ở quá khứ → bỏ qua tạo nhắc hẹn.
+[2026-07-22 09:31:05] ⏭️ Thời gian nhắc hẹn (09:00 22/07/2026) đã ở quá khứ → bỏ qua tạo nhắc hẹn.
+[2026-07-23 08:12:54] 📝 Đã gõ ngày='24/07/2026' (khớp=True) giờ='09:00' (khớp=True)
+[2026-07-23 08:12:57] ⚠️ Không click được ra ngoài để đóng khung lịch (bỏ qua, thử bấm nút tạo luôn): Locator.click: Timeout 3000ms exceeded.
+Call log:
+  - waiting for locator(".zl-modal").last.locator("[data-id=\"div_RMD_Repeat\"]")
+    - locator resolved to <div data-id="div_RMD_Repeat" class="zl-lbl-component ">…</div>
+  - attempting click action
+    2 × waiting for element to be visible, enabled and stable
+      - element is visible, enabled and stable
+      - scrolling into view if needed
+      - done scrolling
+      - <div class="truncate flx-1">00:10</div> from <div class="popover-v3 menu-suggestion-body">…</div> subtree intercepts pointer events
+    - retrying click action
+    - waiting 20ms
+    2 × waiting for element to be visible, enabled and stable
+      - element is visible, enabled and stable
+      - scrolling into view if needed
+      - done scrolling
+      - <div class="truncate flx-1">00:10</div> from <div class="popover-v3 menu-suggestion-body">…</div> subtree intercepts pointer events
+    - retrying click action
+      - waiting 100ms
+    6 × waiting for element to be visible, enabled and stable
+      - element is visible, enabled and stable
+      - scrolling into view if needed
+      - done scrolling
+      - <div class="truncate flx-1">00:10</div> from <div class="popover-v3 menu-suggestion-body">…</div> subtree intercepts pointer events
+    - retrying click action
+      - waiting 500ms
+
+[2026-07-23 08:12:59] 🗓️ Xem trước ngày giờ nhắc hẹn trên modal: Ngày mai lúc 09:00
+[2026-07-23 08:12:59] ⏰ Đã bấm tạo nhắc hẹn giao hàng lúc 09:00 24/07/2026
+[2026-07-23 08:13:09] 📝 Đã gõ ngày='24/07/2026' (khớp=True) giờ='09:00' (khớp=True)
+[2026-07-23 08:13:12] ⚠️ Không click được ra ngoài để đóng khung lịch (bỏ qua, thử bấm nút tạo luôn): Locator.click: Timeout 3000ms exceeded.
+Call log:
+  - waiting for locator(".zl-modal").last.locator("[data-id=\"div_RMD_Repeat\"]")
+    - locator resolved to <div data-id="div_RMD_Repeat" class="zl-lbl-component ">…</div>
+  - attempting click action
+    2 × waiting for element to be visible, enabled and stable
+      - element is visible, enabled and stable
+      - scrolling into view if needed
+      - done scrolling
+      - <div class="truncate flx-1">00:10</div> from <div class="popover-v3 menu-suggestion-body">…</div> subtree intercepts pointer events
+    - retrying click action
+    - waiting 20ms
+    2 × waiting for element to be visible, enabled and stable
+      - element is visible, enabled and stable
+      - scrolling into view if needed
+      - done scrolling
+      - <div class="truncate flx-1">00:10</div> from <div class="popover-v3 menu-suggestion-body">…</div> subtree intercepts pointer events
+    - retrying click action
+      - waiting 100ms
+    6 × waiting for element to be visible, enabled and stable
+      - element is visible, enabled and stable
+      - scrolling into view if needed
+      - done scrolling
+      - <div class="truncate flx-1">00:10</div> from <div class="popover-v3 menu-suggestion-body">…</div> subtree intercepts pointer events
+    - retrying click action
+      - waiting 500ms
+
+[2026-07-23 08:13:14] 🗓️ Xem trước ngày giờ nhắc hẹn trên modal: Ngày mai lúc 09:00
+[2026-07-23 08:13:14] ⏰ Đã bấm tạo nhắc hẹn giao hàng lúc 09:00 24/07/2026
+[2026-07-23 10:40:14] 📝 Đã gõ ngày='24/07/2026' (khớp=True) giờ='09:00' (khớp=True)
+[2026-07-23 10:40:17] ⚠️ Không click được ra ngoài để đóng khung lịch (bỏ qua, thử bấm nút tạo luôn): Locator.click: Timeout 3000ms exceeded.
+Call log:
+  - waiting for locator(".zl-modal").last.locator("[data-id=\"div_RMD_Repeat\"]")
+    - locator resolved to <div data-id="div_RMD_Repeat" class="zl-lbl-component ">…</div>
+  - attempting click action
+    2 × waiting for element to be visible, enabled and stable
+      - element is visible, enabled and stable
+      - scrolling into view if needed
+      - done scrolling
+      - <div class="truncate flx-1">00:10</div> from <div class="popover-v3 menu-suggestion-body">…</div> subtree intercepts pointer events
+    - retrying click action
+    - waiting 20ms
+    2 × waiting for element to be visible, enabled and stable
+      - element is visible, enabled and stable
+      - scrolling into view if needed
+      - done scrolling
+      - <div class="truncate flx-1">00:10</div> from <div class="popover-v3 menu-suggestion-body">…</div> subtree intercepts pointer events
+    - retrying click action
+      - waiting 100ms
+    6 × waiting for element to be visible, enabled and stable
+      - element is visible, enabled and stable
+      - scrolling into view if needed
+      - done scrolling
+      - <div class="truncate flx-1">00:10</div> from <div class="popover-v3 menu-suggestion-body">…</div> subtree intercepts pointer events
+    - retrying click action
+      - waiting 500ms
+
+[2026-07-23 10:40:19] 🗓️ Xem trước ngày giờ nhắc hẹn trên modal: Ngày mai lúc 09:00
+[2026-07-23 10:40:19] ⏰ Đã bấm tạo nhắc hẹn giao hàng lúc 09:00 24/07/2026
+[2026-07-24 08:18:02] 📝 Đã gõ ngày='25/07/2026' (khớp=True) giờ='09:00' (khớp=True)
+[2026-07-24 08:18:05] ⚠️ Không click được ra ngoài để đóng khung lịch (bỏ qua, thử bấm nút tạo luôn): Locator.click: Timeout 3000ms exceeded.
+Call log:
+  - waiting for locator(".zl-modal").last.locator("[data-id=\"div_RMD_Repeat\"]")
+    - locator resolved to <div data-id="div_RMD_Repeat" class="zl-lbl-component ">…</div>
+  - attempting click action
+    2 × waiting for element to be visible, enabled and stable
+      - element is visible, enabled and stable
+      - scrolling into view if needed
+      - done scrolling
+      - <div class="truncate flx-1">00:10</div> from <div class="popover-v3 menu-suggestion-body">…</div> subtree intercepts pointer events
+    - retrying click action
+    - waiting 20ms
+    2 × waiting for element to be visible, enabled and stable
+      - element is visible, enabled and stable
+      - scrolling into view if needed
+      - done scrolling
+      - <div class="truncate flx-1">00:10</div> from <div class="popover-v3 menu-suggestion-body">…</div> subtree intercepts pointer events
+    - retrying click action
+      - waiting 100ms
+    6 × waiting for element to be visible, enabled and stable
+      - element is visible, enabled and stable
+      - scrolling into view if needed
+      - done scrolling
+      - <div class="truncate flx-1">00:10</div> from <div class="popover-v3 menu-suggestion-body">…</div> subtree intercepts pointer events
+    - retrying click action
+      - waiting 500ms
+
+[2026-07-24 08:18:08] 🗓️ Xem trước ngày giờ nhắc hẹn trên modal: Ngày mai lúc 09:00
+[2026-07-24 08:18:08] ⏰ Đã bấm tạo nhắc hẹn giao hàng lúc 09:00 25/07/2026
+[2026-07-24 08:43:15] 📝 Đã gõ ngày='22/08/2026' (khớp=True) giờ='09:00' (khớp=True)
+[2026-07-24 08:43:18] ⚠️ Không click được ra ngoài để đóng khung lịch (bỏ qua, thử bấm nút tạo luôn): Locator.click: Timeout 3000ms exceeded.
+Call log:
+  - waiting for locator(".zl-modal").last.locator("[data-id=\"div_RMD_Repeat\"]")
+    - locator resolved to <div data-id="div_RMD_Repeat" class="zl-lbl-component ">…</div>
+  - attempting click action
+    2 × waiting for element to be visible, enabled and stable
+      - element is visible, enabled and stable
+      - scrolling into view if needed
+      - done scrolling
+      - <div class="truncate flx-1">00:10</div> from <div class="popover-v3 menu-suggestion-body">…</div> subtree intercepts pointer events
+    - retrying click action
+    - waiting 20ms
+    2 × waiting for element to be visible, enabled and stable
+      - element is visible, enabled and stable
+      - scrolling into view if needed
+      - done scrolling
+      - <div class="truncate flx-1">00:10</div> from <div class="popover-v3 menu-suggestion-body">…</div> subtree intercepts pointer events
+    - retrying click action
+      - waiting 100ms
+    6 × waiting for element to be visible, enabled and stable
+      - element is visible, enabled and stable
+      - scrolling into view if needed
+      - done scrolling
+      - <div class="truncate flx-1">00:10</div> from <div class="popover-v3 menu-suggestion-body">…</div> subtree intercepts pointer events
+    - retrying click action
+      - waiting 500ms
+
+[2026-07-24 08:43:20] 🗓️ Xem trước ngày giờ nhắc hẹn trên modal: 22/08/2026 lúc 09:00
+[2026-07-24 08:43:20] ⏰ Đã bấm tạo nhắc hẹn giao hàng lúc 09:00 22/08/2026
+[2026-07-24 09:43:58] 📝 Đã gõ ngày='22/08/2026' (khớp=True) giờ='09:00' (khớp=True)
+[2026-07-24 09:44:01] ⚠️ Không click được ra ngoài để đóng khung lịch (bỏ qua, thử bấm nút tạo luôn): Locator.click: Timeout 3000ms exceeded.
+Call log:
+  - waiting for locator(".zl-modal").last.locator("[data-id=\"div_RMD_Repeat\"]")
+    - locator resolved to <div data-id="div_RMD_Repeat" class="zl-lbl-component ">…</div>
+  - attempting click action
+    2 × waiting for element to be visible, enabled and stable
+      - element is visible, enabled and stable
+      - scrolling into view if needed
+      - done scrolling
+      - <div class="truncate flx-1">00:10</div> from <div class="popover-v3 menu-suggestion-body">…</div> subtree intercepts pointer events
+    - retrying click action
+    - waiting 20ms
+    2 × waiting for element to be visible, enabled and stable
+      - element is visible, enabled and stable
+      - scrolling into view if needed
+      - done scrolling
+      - <div class="truncate flx-1">00:10</div> from <div class="popover-v3 menu-suggestion-body">…</div> subtree intercepts pointer events
+    - retrying click action
+      - waiting 100ms
+    6 × waiting for element to be visible, enabled and stable
+      - element is visible, enabled and stable
+      - scrolling into view if needed
+      - done scrolling
+      - <div class="truncate flx-1">00:10</div> from <div class="popover-v3 menu-suggestion-body">…</div> subtree intercepts pointer events
+    - retrying click action
+      - waiting 500ms
+
+[2026-07-24 09:44:03] 🗓️ Xem trước ngày giờ nhắc hẹn trên modal: 22/08/2026 lúc 09:00
+[2026-07-24 09:44:03] ⏰ Đã bấm tạo nhắc hẹn giao hàng lúc 09:00 22/08/2026
+[2026-07-24 16:37:58] 📝 Đã gõ ngày='27/07/2026' (khớp=True) giờ='09:00' (khớp=True)
+[2026-07-24 16:38:01] ⚠️ Không click được ra ngoài để đóng khung lịch (bỏ qua, thử bấm nút tạo luôn): Locator.click: Timeout 3000ms exceeded.
+Call log:
+  - waiting for locator(".zl-modal").last.locator("[data-id=\"div_RMD_Repeat\"]")
+    - locator resolved to <div data-id="div_RMD_Repeat" class="zl-lbl-component ">…</div>
+  - attempting click action
+    2 × waiting for element to be visible, enabled and stable
+      - element is visible, enabled and stable
+      - scrolling into view if needed
+      - done scrolling
+      - <div class="truncate flx-1">00:10</div> from <div class="popover-v3 menu-suggestion-body">…</div> subtree intercepts pointer events
+    - retrying click action
+    - waiting 20ms
+    2 × waiting for element to be visible, enabled and stable
+      - element is visible, enabled and stable
+      - scrolling into view if needed
+      - done scrolling
+      - <div class="truncate flx-1">00:10</div> from <div class="popover-v3 menu-suggestion-body">…</div> subtree intercepts pointer events
+    - retrying click action
+      - waiting 100ms
+    6 × waiting for element to be visible, enabled and stable
+      - element is visible, enabled and stable
+      - scrolling into view if needed
+      - done scrolling
+      - <div class="truncate flx-1">00:10</div> from <div class="popover-v3 menu-suggestion-body">…</div> subtree intercepts pointer events
+    - retrying click action
+      - waiting 500ms
+
+[2026-07-24 16:38:04] 🗓️ Xem trước ngày giờ nhắc hẹn trên modal: 27/07/2026 lúc 09:00
+[2026-07-24 16:38:04] ⏰ Đã bấm tạo nhắc hẹn giao hàng lúc 09:00 27/07/2026
+[2026-07-27 08:54:55] ⏭️ Thời gian nhắc hẹn (09:00 16/07/2026) đã ở quá khứ → bỏ qua tạo nhắc hẹn.

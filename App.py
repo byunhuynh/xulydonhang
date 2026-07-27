@@ -18,6 +18,7 @@ import json
 import send_zalo
 
 url = "https://script.google.com/macros/s/AKfycbyeg7Mu72mWOIEv5gYDsiGSY9FB7d-OiPdzM-PdAdBapTp4sUhb7ly1_N2ZtvqUrW8wBA/exec"
+LOCK_URL = "https://script.google.com/macros/s/AKfycbyei0-3hQLXa9ZHHckZd4aUM0nd3lSSkM4eIoUFndFDbUstbGd4jP8f3mcwEMaiKsoD/exec"
 FOLDER_PATH = os.path.abspath("đơn hàng")  # Chuyển "đơn hàng" sang đường dẫn tuyệt đối
 ALLOWED_EXTENSIONS = {".pdf", ".xlsx", ".txt"}  # Chỉ nhận các file có định dạng này
 
@@ -174,7 +175,7 @@ class MyApp(QMainWindow):
 
         self.ui.listdanhsach.keyPressEvent = self.xoa_file  # Nhấn Delete để xóa file khỏi danh sách
        
-        active, message = self.check_lock("https://script.googleusercontent.com/macros/echo?user_content_key=AehSKLgV3aPK8-f8VNJwzP90ajqVHPrVA79EFXzEXNYwrl9a54FprnPC1zi38wV1DWN784FxkOHL4WsuQDLudGj0fIXRb9OuiA_fPs4ywbl7c0HTNt1SE2tpqk6RBRfJqv0xZh4N9LVKeKO6EB7SZS3cIWMyIfzzFKpgEArXcuzS-Uy0lmzhpAr5lKU-Ty7m8LNEyNW9a5Z_IN464LDfEpQLEMpvt7cpiS8dxCxSAz_d778KpxTAnNj5uQtViioM2bAtD9bfrWbfMf7Xod-idEFvoEKouvTLTcqBLmNJetxr&lib=MqsGBAay818OJ-NUt2Er7nVZX_pgFzBjH")
+        active, message = self.check_lock(LOCK_URL)
          
 
         # ❌ KHÓA APP nếu KHÔNG active
