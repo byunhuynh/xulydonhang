@@ -1757,8 +1757,14 @@ class ProcessHandler(QObject):
         total_written = 0
 
         kho_haravan = products[0].get("kho_haravan", "").strip()
+        kho_ban_normalized = re.sub(r"\s+", " ", kho_haravan).strip().casefold()
+        is_long_an = (
+            kho_ban_normalized == "la"
+            or "long an" in kho_ban_normalized
+            or "miền nam" in kho_ban_normalized
+        )
 
-        if kho_haravan == "Miền Nam - Kho mặc định":
+        if is_long_an:
             khuvuc = "TMĐT_MN"
             kho = "LA_KHOTMDT"
             mien = "LA"
@@ -1772,12 +1778,17 @@ class ProcessHandler(QObject):
         # ===============================
         for hoa_don in products:
             kenh_ban = hoa_don.get("kenh_ban", "")
+            shop = hoa_don.get("shop", "")
             ma_donhang = hoa_don.get("ma_hoadon", "")
             ma_vandon = hoa_don.get("ma_vandon", "")
             trang_thai = hoa_don.get("trang_thai", "")
 
             hethong = "TMĐT-TikTok" if ma_donhang.startswith("HDTTS") else "TMĐT-Shopee"
-            diengiai = f"{hethong}-{kenh_ban} - {ma_donhang} - Ngày đổ {entry_date} - {mien}"
+            thong_tin_shop = f" - {shop}" if shop else ""
+            diengiai = (
+                f"{hethong}-{kenh_ban}{thong_tin_shop} - {ma_donhang} "
+                f"- Ngày đổ {entry_date} - {mien}"
+            )
 
             self.log_signal.emit(
                 f'Bắt đầu xử lý đơn <b><span style="color: green;">{ma_donhang}</span></b>'
@@ -9793,7 +9804,159 @@ f'đã thêm hàng khuyến mãi <b><span style="color: green;">{kiemtra}</span>
                     self.table_signal.emit(file_name, '1/1', 'CHOICE', wh, po, '', "✅Hoàn Thành")
 
 
-            elif file_name.startswith("XUẤT HÀNG "):  
+            elif file_name == "XUẤT HÀNG HN-LA MỚI.xlsx":
+                wb = openpyxl.load_workbook(filename=file_path, data_only=True)
+                sheet_name = "Đơn hàng haravan"
+                if sheet_name not in wb.sheetnames:
+                    raise ValueError(f"Không tìm thấy sheet '{sheet_name}'")
+
+                ws = wb[sheet_name]
+
+                def normalize_header(value):
+                    """Bỏ Markdown và chuẩn hóa khoảng trắng trong tiêu đề Excel."""
+                    value = str(value or "").replace("*", "")
+                    return re.sub(r"\s+", " ", value).strip().casefold()
+
+                headers = {
+                    normalize_header(cell.value): cell.column
+                    for cell in ws[1]
+                    if cell.value not in (None, "")
+                }
+
+                required_headers = [
+                    "Mã đơn hàng", "Kho bán", "Kênh bán hàng",
+                    "Thời gian Đặt", "Shop", "Mã misa", "Giá sản phẩm",
+                    "MÃ TP 1", "SLTP1", "MÃ TP 2", "SLTP2",
+                    "MÃ TP 3", "SLTP3", "MÃ TP 4", "SLTP4",
+                ]
+                missing_headers = [
+                    name for name in required_headers
+                    if normalize_header(name) not in headers
+                ]
+                if missing_headers:
+                    raise ValueError(
+                        "Thiếu cột trong sheet 'Đơn hàng haravan': "
+                        + ", ".join(missing_headers)
+                    )
+
+                def cell_value(row_number, header_name):
+                    column = headers[normalize_header(header_name)]
+                    return ws.cell(row=row_number, column=column).value
+
+                def clean_excel_value(value):
+                    if value in (None, "", "#N/A"):
+                        return ""
+                    if isinstance(value, float) and value.is_integer():
+                        return str(int(value))
+                    return str(value).strip()
+
+                # Mỗi nhóm có cùng mã Misa, kho và ngày đặt được ghi một lần.
+                grouped_orders = defaultdict(dict)
+
+                for row_number in range(2, ws.max_row + 1):
+                    po_number = clean_excel_value(cell_value(row_number, "Mã đơn hàng"))
+                    kho_ban = clean_excel_value(cell_value(row_number, "Kho bán"))
+                    kenh_ban = clean_excel_value(cell_value(row_number, "Kênh bán hàng"))
+                    shop = clean_excel_value(cell_value(row_number, "Shop"))
+                    ma_misa = clean_excel_value(cell_value(row_number, "Mã misa"))
+                    thoi_gian_dat_raw = cell_value(row_number, "Thời gian Đặt")
+                    gia_san_pham_raw = cell_value(row_number, "Giá sản phẩm")
+
+                    if not po_number or not ma_misa:
+                        continue
+
+                    thoi_gian_dat = ProcessHandler.format_date(thoi_gian_dat_raw)
+                    group_key = (ma_misa, kho_ban, thoi_gian_dat)
+
+                    if po_number not in grouped_orders[group_key]:
+                        grouped_orders[group_key][po_number] = {
+                            "ma_hoadon": po_number,
+                            "kenh_ban": kenh_ban,
+                            "kho_haravan": kho_ban,
+                            "shop": shop,
+                            "dong_chi_tiet": [],
+                        }
+
+                    order = grouped_orders[group_key][po_number]
+
+                    try:
+                        if isinstance(gia_san_pham_raw, str):
+                            gia_san_pham_text = gia_san_pham_raw.strip().replace(" ", "")
+                            gia_san_pham_text = re.sub(
+                                r"[^\d,.-]", "", gia_san_pham_text
+                            )
+                            if "," in gia_san_pham_text and "." in gia_san_pham_text:
+                                gia_san_pham_text = gia_san_pham_text.replace(".", "").replace(",", ".")
+                            elif "," in gia_san_pham_text:
+                                comma_groups = gia_san_pham_text.split(",")
+                                if all(len(group) == 3 for group in comma_groups[1:]):
+                                    gia_san_pham_text = "".join(comma_groups)
+                                else:
+                                    gia_san_pham_text = gia_san_pham_text.replace(",", ".")
+                            elif "." in gia_san_pham_text:
+                                dot_groups = gia_san_pham_text.split(".")
+                                if all(len(group) == 3 for group in dot_groups[1:]):
+                                    gia_san_pham_text = "".join(dot_groups)
+                            gia_san_pham = float(gia_san_pham_text)
+                        else:
+                            gia_san_pham = float(gia_san_pham_raw)
+                    except (TypeError, ValueError):
+                        self.log_signal.emit(
+                            f"⚠ Giá sản phẩm không hợp lệ tại dòng {row_number}: "
+                            f"{gia_san_pham_raw}"
+                        )
+                        continue
+
+                    # Mỗi cặp MÃ TP/SLTP là một dòng chi tiết riêng.
+                    for index in range(1, 5):
+                        ma_tp = clean_excel_value(
+                            cell_value(row_number, f"MÃ TP {index}")
+                        )
+                        sl_tp_raw = cell_value(row_number, f"SLTP{index}")
+
+                        if not ma_tp or sl_tp_raw in (None, "", "#N/A"):
+                            continue
+
+                        try:
+                            sl_tp = float(sl_tp_raw)
+                            if sl_tp.is_integer():
+                                sl_tp = int(sl_tp)
+                        except (TypeError, ValueError):
+                            self.log_signal.emit(
+                                f"⚠ Số lượng không hợp lệ tại dòng {row_number}, "
+                                f"SLTP{index}: {sl_tp_raw}"
+                            )
+                            continue
+
+                        if sl_tp <= 0:
+                            continue
+
+                        order["dong_chi_tiet"].append({
+                            # Hàm ghi nhận thành tiền và tự chia lại cho số lượng.
+                            "thanh_tien": gia_san_pham * sl_tp,
+                            "san_pham": [{"ma_tp": ma_tp, "sl_tp": sl_tp}],
+                        })
+
+                for (ma_misa, kho_ban, thoi_gian_dat), orders in grouped_orders.items():
+                    hoa_don_list = [
+                        order for order in orders.values()
+                        if order["dong_chi_tiet"]
+                    ]
+                    if not hoa_don_list:
+                        continue
+
+                    ProcessHandler.write_to_dondathang_TMDT(
+                        self,
+                        hoa_don_list,
+                        ma_misa,
+                        thoi_gian_dat,
+                        thoi_gian_dat,
+                    )
+
+                self.log_signal.emit("✅ Đã xử lý xong file XUẤT HÀNG HN-LA MỚI.xlsx")
+                return
+
+            elif file_name.startswith("XUẤT HÀNG "):
 
                 # 🔹 Regex cho phép có khoảng trắng giữa ngày và tháng
                 match = re.search(r'(\d{1,2})\s*-\s*(\d{1,2})', file_name)
