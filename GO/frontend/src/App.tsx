@@ -2,10 +2,12 @@ import { useState } from 'react'
 import { FaGears, FaCircleInfo } from 'react-icons/fa6'
 import { ProcessTab } from './components/ProcessTab'
 import { InfoTab } from './components/InfoTab'
+import { useWailsEvents } from './hooks/useWailsEvents'
 
 type TabKey = 'process' | 'info'
 
 function App() {
+  useWailsEvents()
   const [tab, setTab] = useState<TabKey>('process')
 
   return (
