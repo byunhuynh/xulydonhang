@@ -137,6 +137,24 @@ không cần đổi.
   (dùng skill `frontend-design`), không giữ giao diện Qt cũ, nhưng giữ nguyên
   nghiệp vụ/bố cục chức năng đã có.
 
+### Cảm giác desktop app (không phải trang web)
+
+Webview của Wails mặc định vẫn có hành vi trình duyệt (bôi đen text khi kéo
+chuột, menu chuột phải mặc định, kéo-thả ảnh, zoom bằng Ctrl+cuộn...). Để
+UI cảm giác như app desktop thật:
+
+- `user-select: none` áp dụng toàn cục cho UI chrome (nút, nhãn, tab, header,
+  panel tiêu đề...). Ngoại lệ: vùng nội dung `LogPanel` và các ô dữ liệu
+  trong `ResultTable` vẫn cho phép bôi đen/copy (giữ đúng hành vi
+  `QTextEdit`/`QTableWidget` hiện tại — người dùng cần copy số PO, copy log
+  lỗi để báo cáo).
+- Tắt context menu mặc định của webview (chuột phải) trên toàn bộ ứng dụng.
+- Tắt kéo-thả ảnh/element mặc định của trình duyệt (`draggable="false"` cho
+  ảnh QR, ngăn `dragstart` mặc định ngoài vùng file-drop hợp lệ).
+- Tắt zoom bằng Ctrl+cuộn/Ctrl+/-/= trong webview.
+- Build production tắt DevTools/chuột-phải-inspect (Wails mặc định đã tắt
+  DevTools khi build không kèm `-debug`, chỉ cần đảm bảo không bật lại).
+
 ### Data flow
 
 ```
