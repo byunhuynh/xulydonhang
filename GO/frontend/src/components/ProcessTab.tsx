@@ -1,5 +1,6 @@
 import { FileListPanel } from './FileListPanel'
 import { LogPanel } from './LogPanel'
+import { ResultTable } from './ResultTable'
 
 function Placeholder({ label }: { label: string }) {
   return (
@@ -18,7 +19,7 @@ export function ProcessTab() {
       </div>
       <div className="grid grid-rows-[1fr_1fr] gap-4 overflow-hidden">
         <LogPanel />
-        <Placeholder label="ResultTable (Task 10)" />
+        <ResultTable />
       </div>
     </div>
   )
