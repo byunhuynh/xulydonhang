@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"path/filepath"
+	"sync/atomic"
 	"time"
 
 	"github.com/wailsapp/wails/v2/pkg/runtime"
@@ -32,11 +33,12 @@ const configFileName = "config.txt"
 
 // App struct
 type App struct {
-	ctx       context.Context
-	cfg       *config.Store
-	processor processing.Processor
-	emitter   Emitter
-	orderDir  string
+	ctx        context.Context
+	cfg        *config.Store
+	processor  processing.Processor
+	emitter    Emitter
+	orderDir   string
+	processing atomic.Bool
 }
 
 // NewApp creates a new App application struct
@@ -99,23 +101,33 @@ func (a *App) SelectFiles() ([]string, error) {
 // ProcessFiles chạy xử lý các file đã chọn trong nền, phát sự kiện
 // process:log / process:row / process:done về frontend.
 func (a *App) ProcessFiles(files []string, stt int) {
+	if !a.processing.CompareAndSwap(false, true) {
+		a.emitter.Emit("process:log", "⚠️ Đã có một batch đang xử lý, vui lòng đợi hoàn tất.")
+		return
+	}
 	go a.runBatch(a.emitter, files, stt)
 }
 
 func (a *App) runBatch(emitter Emitter, files []string, stt int) {
+	current := stt
 	defer func() {
 		if r := recover(); r != nil {
 			emitter.Emit("process:log", fmt.Sprintf("❌ Lỗi không mong muốn: %v", r))
 		}
-		emitter.Emit("process:done")
+		a.processing.Store(false)
+		emitter.Emit("process:done", current)
 	}()
 
-	current := stt
 	for _, f := range files {
 		emitter.Emit("process:log", fmt.Sprintf("Đang xử lý %s...", filepath.Base(f)))
 		row, err := a.processOne(f, current)
 		if err != nil {
 			emitter.Emit("process:log", fmt.Sprintf("❌ Lỗi xử lý %s: %v", filepath.Base(f), err))
+			emitter.Emit("process:row", processing.OrderRow{
+				FileName:   filepath.Base(f),
+				Status:     processing.StatusFailed,
+				StatusKind: processing.StatusKindFailed,
+			})
 			current++
 			continue
 		}

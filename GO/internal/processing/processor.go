@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"math/rand"
 	"path/filepath"
+	"sync"
 	"time"
 )
 
@@ -21,7 +22,20 @@ var mockVendors = []string{
 	"Fujimart", "BHX", "Farmer", "CN-HCM", "MR.DIY", "JIT", "JV-Mart", "JMART", "BC MART",
 }
 
-var mockStatuses = []string{StatusDone, StatusDone, StatusDone, StatusWarning, StatusFailed}
+// mockOutcome ghép một chuỗi Status hiển thị (giữ emoji cho người dùng)
+// với StatusKind kiểu (typed) tương ứng để frontend phân loại màu/icon.
+type mockOutcome struct {
+	status string
+	kind   string
+}
+
+var mockOutcomes = []mockOutcome{
+	{StatusDone, StatusKindDone},
+	{StatusDone, StatusKindDone},
+	{StatusDone, StatusKindDone},
+	{StatusWarning, StatusKindWarning},
+	{StatusFailed, StatusKindFailed},
+}
 
 // MockProcessor giả lập xử lý đơn hàng: delay ngắn + dữ liệu mẫu ngẫu
 // nhiên, để dựng và xác minh pipeline UI/event trước khi có parser PDF
@@ -29,6 +43,7 @@ var mockStatuses = []string{StatusDone, StatusDone, StatusDone, StatusWarning, S
 type MockProcessor struct {
 	Rand  *rand.Rand
 	Delay time.Duration
+	mu    sync.Mutex
 }
 
 func NewMockProcessor() *MockProcessor {
@@ -45,8 +60,11 @@ func (m *MockProcessor) Process(ctx context.Context, filePath string, stt int) (
 		return OrderRow{}, ctx.Err()
 	}
 
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
 	system := mockVendors[m.Rand.Intn(len(mockVendors))]
-	status := mockStatuses[m.Rand.Intn(len(mockStatuses))]
+	outcome := mockOutcomes[m.Rand.Intn(len(mockOutcomes))]
 
 	return OrderRow{
 		FileName:    filepath.Base(filePath),
@@ -55,6 +73,7 @@ func (m *MockProcessor) Process(ctx context.Context, filePath string, stt int) (
 		MaKhachHang: fmt.Sprintf("MN_KH%04d", m.Rand.Intn(9999)),
 		PO:          fmt.Sprintf("PO%06d", stt),
 		DonGia:      fmt.Sprintf("%d", 10000+m.Rand.Intn(90000)),
-		Status:      status,
+		Status:      outcome.status,
+		StatusKind:  outcome.kind,
 	}, nil
 }

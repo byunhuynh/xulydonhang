@@ -31,6 +31,12 @@ func TestMockProcessor_ReturnsRowWithKnownVendorAndPO(t *testing.T) {
 	if !found {
 		t.Fatalf("System = %q, not in known vendor list", row.System)
 	}
+
+	switch row.StatusKind {
+	case StatusKindDone, StatusKindWarning, StatusKindFailed:
+	default:
+		t.Fatalf("StatusKind = %q, want one of done/warning/failed", row.StatusKind)
+	}
 }
 
 func TestMockProcessor_ContextCancelledReturnsError(t *testing.T) {

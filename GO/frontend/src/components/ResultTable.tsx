@@ -13,21 +13,22 @@ const columns: { key: keyof OrderRow; label: string }[] = [
   { key: 'status', label: 'Trạng thái' },
 ]
 
-function statusMeta(status: string): { icon: ReactNode; classes: string; label: string } {
-  if (status.includes('❌')) {
-    return { icon: <FaCircleXmark />, classes: 'bg-danger/20 text-danger', label: status.replace('❌', '').trim() }
+function statusMeta(row: OrderRow): { icon: ReactNode; classes: string; label: string } {
+  const { status, statusKind } = row
+  switch (statusKind) {
+    case 'failed':
+      return { icon: <FaCircleXmark />, classes: 'bg-danger/20 text-danger', label: status.replace('❌', '').trim() }
+    case 'warning':
+      return {
+        icon: <FaTriangleExclamation />,
+        classes: 'bg-warning/20 text-warning',
+        label: status.replace('⚠️', '').trim(),
+      }
+    case 'done':
+      return { icon: <FaCircleCheck />, classes: 'bg-success/20 text-success', label: status.replace('✅', '').trim() }
+    default:
+      return { icon: null, classes: 'bg-border text-muted', label: status }
   }
-  if (status.includes('⚠️')) {
-    return {
-      icon: <FaTriangleExclamation />,
-      classes: 'bg-warning/20 text-warning',
-      label: status.replace('⚠️', '').trim(),
-    }
-  }
-  if (status.includes('✅')) {
-    return { icon: <FaCircleCheck />, classes: 'bg-success/20 text-success', label: status.replace('✅', '').trim() }
-  }
-  return { icon: null, classes: 'bg-border text-muted', label: status }
 }
 
 export function ResultTable() {
@@ -49,7 +50,7 @@ export function ResultTable() {
           </thead>
           <tbody>
             {rows.map((row, i) => {
-              const meta = statusMeta(row.status)
+              const meta = statusMeta(row)
               return (
                 <tr key={i} className="odd:bg-bg/40">
                   {columns.map((c) => (

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"path/filepath"
+	"reflect"
 	"testing"
 
 	"order-processor/internal/config"
@@ -51,6 +52,15 @@ func TestRunBatch_EmitsLogRowPerFileThenDone(t *testing.T) {
 		}
 	}
 
+	wantDoneData := []interface{}{12}
+	lastEvent := emitter.events[len(emitter.events)-1]
+	if lastEvent.name != "process:done" {
+		t.Fatalf("last event = %q, want %q", lastEvent.name, "process:done")
+	}
+	if !reflect.DeepEqual(lastEvent.data, wantDoneData) {
+		t.Fatalf("process:done data = %#v, want %#v", lastEvent.data, wantDoneData)
+	}
+
 	gotSTT, err := cfg.GetSTT()
 	if err != nil {
 		t.Fatalf("GetSTT returned error: %v", err)
@@ -67,9 +77,37 @@ func TestRunBatch_FileErrorEmitsLogAndContinues(t *testing.T) {
 
 	a.runBatch(emitter, []string{"bad.pdf", "good.pdf"}, 1)
 
-	wantNames := []string{"process:log", "process:log", "process:log", "process:row", "process:done"}
+	wantNames := []string{"process:log", "process:log", "process:row", "process:log", "process:row", "process:done"}
 	if len(emitter.events) != len(wantNames) {
 		t.Fatalf("got %d events, want %d: %+v", len(emitter.events), len(wantNames), emitter.events)
+	}
+	for i, want := range wantNames {
+		if emitter.events[i].name != want {
+			t.Fatalf("event[%d] = %q, want %q", i, emitter.events[i].name, want)
+		}
+	}
+
+	failureRow, ok := emitter.events[2].data[0].(processing.OrderRow)
+	if !ok {
+		t.Fatalf("event[2].data[0] is not an OrderRow: %#v", emitter.events[2].data)
+	}
+	if failureRow.FileName != "bad.pdf" {
+		t.Fatalf("failure row FileName = %q, want %q", failureRow.FileName, "bad.pdf")
+	}
+	if failureRow.Status != processing.StatusFailed {
+		t.Fatalf("failure row Status = %q, want %q", failureRow.Status, processing.StatusFailed)
+	}
+	if failureRow.StatusKind != processing.StatusKindFailed {
+		t.Fatalf("failure row StatusKind = %q, want %q", failureRow.StatusKind, processing.StatusKindFailed)
+	}
+
+	wantDoneData := []interface{}{3}
+	lastEvent := emitter.events[len(emitter.events)-1]
+	if lastEvent.name != "process:done" {
+		t.Fatalf("last event = %q, want %q", lastEvent.name, "process:done")
+	}
+	if !reflect.DeepEqual(lastEvent.data, wantDoneData) {
+		t.Fatalf("process:done data = %#v, want %#v", lastEvent.data, wantDoneData)
 	}
 
 	gotSTT, err := cfg.GetSTT()

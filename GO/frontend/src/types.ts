@@ -6,4 +6,5 @@ export interface OrderRow {
   po: string
   donGia: string
   status: string
+  statusKind: string
 }

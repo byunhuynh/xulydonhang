@@ -10,8 +10,10 @@ import (
 
 const sttKey = "current_row"
 
-// Store đọc/ghi số thứ tự đơn hàng (STT) từ một file dạng key=value,
-// tương thích với config.txt (`current_row=N`) của bản Python hiện tại.
+// Store đọc/ghi số thứ tự đơn hàng (STT) từ một file dạng key=value
+// (`current_row=N`). Đây là cơ chế lưu trữ mới cho bản Go; không có quan hệ
+// tương thích với dữ liệu STT của bản Python hiện tại (bản Python đọc STT
+// từ ô G1 trong dondathang.xlsx qua cơ chế khác).
 type Store struct {
 	path string
 }

@@ -10,12 +10,18 @@ type OrderRow struct {
 	PO          string `json:"po"`
 	DonGia      string `json:"donGia"`
 	Status      string `json:"status"`
+	StatusKind  string `json:"statusKind"`
 }
 
-// Các giá trị Status giữ nguyên ký hiệu (emoji) của bản gốc để frontend
-// phân loại màu/icon theo đúng ngữ nghĩa cũ.
+// Các giá trị Status giữ nguyên ký hiệu (emoji) của bản gốc để hiển thị
+// đúng ngữ nghĩa cũ; StatusKind là discriminator kiểu (typed) dùng để
+// frontend phân loại màu/icon mà không phụ thuộc vào khớp chuỗi con emoji.
 const (
 	StatusDone    = "✅ Hoàn Thành"
 	StatusWarning = "⚠️ Hoàn Thành"
 	StatusFailed  = "❌ Thất bại"
+
+	StatusKindDone    = "done"
+	StatusKindWarning = "warning"
+	StatusKindFailed  = "failed"
 )
