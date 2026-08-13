@@ -20,6 +20,12 @@ env/
 
 build/
 dist/
+
+# Wails' GO/build/ holds tracked project config (icon.ico, installer
+# scripts, platform manifests), not build output — keep it even though the
+# generic build/ rule above would otherwise ignore it. The actual compiled
+# binary output (GO/build/bin/) gets its own explicit ignore rule.
+!GO/build/
 # ===== OS =====
 .DS_Store
 Thumbs.db
