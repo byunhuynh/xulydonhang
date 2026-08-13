@@ -31,3 +31,6 @@ Thumbs.db
 
 zalo_state.json
 log.log
+
+# ===== Superpowers scratch (per-plan SDD ledgers/workspaces) =====
+.superpowers/
