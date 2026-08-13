@@ -40,3 +40,12 @@ log.log
 
 # ===== Superpowers scratch (per-plan SDD ledgers/workspaces) =====
 .superpowers/
+
+# ===== Go (Wails) build artefacts =====
+# GO/.gitignore already covers these locally; listed here too so the root
+# .gitignore is self-describing. GO/build/bin/ sits after the !GO/build/
+# exception above and only re-excludes the compiled-binary subfolder —
+# GO/build/windows/icon.ico and other tracked Wails project config stay.
+GO/frontend/node_modules/
+GO/frontend/dist/
+GO/build/bin/
