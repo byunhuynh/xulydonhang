@@ -12,21 +12,23 @@ import (
 var assets embed.FS
 
 func main() {
-	// Create an instance of the app structure
 	app := NewApp()
 
-	// Create application with options
 	err := wails.Run(&options.App{
-		Title:  "order-processor",
-		Width:  1024,
-		Height: 768,
+		Title:     "Blue Hà Thành - Order System v3.0",
+		Width:     1100,
+		Height:    850,
+		MinWidth:  900,
+		MinHeight: 800,
 		AssetServer: &assetserver.Options{
 			Assets: assets,
 		},
-		BackgroundColour: &options.RGBA{R: 27, G: 38, B: 54, A: 1},
-		OnStartup:        app.startup,
+		OnStartup: app.startup,
 		Bind: []interface{}{
 			app,
+		},
+		DragAndDrop: &options.DragAndDrop{
+			EnableFileDrop: true,
 		},
 	})
 
