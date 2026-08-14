@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"errors"
+	"os"
 	"path/filepath"
 	"reflect"
 	"testing"
@@ -116,5 +117,79 @@ func TestRunBatch_FileErrorEmitsLogAndContinues(t *testing.T) {
 	}
 	if gotSTT != 3 {
 		t.Fatalf("STT after batch = %d, want 3", gotSTT)
+	}
+}
+
+// chdirForTest changes the process working directory to dir and
+// registers a t.Cleanup that restores the original working directory,
+// even on test failure/panic. resolveRepoFile's tests need this since
+// it walks up from os.Getwd(), which os.Chdir is the only way to
+// simulate without changing resolveRepoFile's signature.
+func chdirForTest(t *testing.T, dir string) {
+	t.Helper()
+	origWD, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("Getwd: %v", err)
+	}
+	t.Cleanup(func() {
+		if err := os.Chdir(origWD); err != nil {
+			t.Fatalf("restore Chdir: %v", err)
+		}
+	})
+	if err := os.Chdir(dir); err != nil {
+		t.Fatalf("Chdir: %v", err)
+	}
+}
+
+func TestResolveRepoFile_FindsFileInAncestorDirectory(t *testing.T) {
+	base := t.TempDir()
+	const markerName = "marker.txt"
+	if err := os.WriteFile(filepath.Join(base, markerName), []byte("x"), 0o644); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+
+	// base/a/b/c/d is 4 directories below base. resolveRepoFile checks
+	// cwd plus up to 4 parents (5 directories total), so base sits
+	// exactly at the edge of what it can find.
+	nested := filepath.Join(base, "a", "b", "c", "d")
+	if err := os.MkdirAll(nested, 0o755); err != nil {
+		t.Fatalf("MkdirAll: %v", err)
+	}
+	chdirForTest(t, nested)
+
+	got := resolveRepoFile(markerName)
+	wantAbs, err := filepath.Abs(filepath.Join(base, markerName))
+	if err != nil {
+		t.Fatalf("Abs: %v", err)
+	}
+	gotAbs, err := filepath.Abs(got)
+	if err != nil {
+		t.Fatalf("Abs: %v", err)
+	}
+	if gotAbs != wantAbs {
+		t.Fatalf("resolveRepoFile(%q) = %q, want %q", markerName, gotAbs, wantAbs)
+	}
+}
+
+func TestResolveRepoFile_FallsBackToBareNameBeyondSearchDepth(t *testing.T) {
+	base := t.TempDir()
+	const markerName = "marker.txt"
+	if err := os.WriteFile(filepath.Join(base, markerName), []byte("x"), 0o644); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+
+	// One directory deeper than the "found" test above puts base just
+	// outside resolveRepoFile's cwd+4-parents search window, so the
+	// file — despite existing — must not be found, and the bare
+	// filename must be returned instead.
+	nested := filepath.Join(base, "a", "b", "c", "d", "e")
+	if err := os.MkdirAll(nested, 0o755); err != nil {
+		t.Fatalf("MkdirAll: %v", err)
+	}
+	chdirForTest(t, nested)
+
+	got := resolveRepoFile(markerName)
+	if got != markerName {
+		t.Fatalf("resolveRepoFile(%q) = %q, want bare filename %q (not found within search depth)", markerName, got, markerName)
 	}
 }

@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"os"
 	"path/filepath"
 	"sync/atomic"
 	"time"
@@ -43,9 +44,38 @@ type App struct {
 	processing atomic.Bool
 }
 
+// resolveRepoFile looks for filename starting in the current working
+// directory and then each parent directory up to 5 levels, returning
+// the first path where the file actually exists. This is needed
+// because data.xlsx/settings.ini live at the repo root, but the app's
+// working directory differs between `wails dev` (GO/) and the built
+// .exe (GO/build/bin/, confirmed empirically via Phase 1's config.txt
+// landing there) — a single hardcoded relative path only works for
+// one of the two. Falls back to the bare filename if not found
+// anywhere, so the resulting "file not found" error from the caller
+// is still informative rather than this silently returning garbage.
+func resolveRepoFile(filename string) string {
+	dir, err := os.Getwd()
+	if err != nil {
+		return filename
+	}
+	for i := 0; i < 5; i++ {
+		candidate := filepath.Join(dir, filename)
+		if _, err := os.Stat(candidate); err == nil {
+			return candidate
+		}
+		parent := filepath.Dir(dir)
+		if parent == dir {
+			break
+		}
+		dir = parent
+	}
+	return filename
+}
+
 // NewApp creates a new App application struct
 func NewApp() (*App, error) {
-	store, err := productdata.Load("data.xlsx")
+	store, err := productdata.Load(resolveRepoFile("data.xlsx"))
 	if err != nil {
 		return nil, fmt.Errorf("app: load data.xlsx: %w", err)
 	}
@@ -54,7 +84,7 @@ func NewApp() (*App, error) {
 		cfg: config.NewStore(configFileName),
 		processor: &processing.RealProcessor{
 			Store:     store,
-			Pricing:   pricing.NewHTTPSource("settings.ini"),
+			Pricing:   pricing.NewHTTPSource(resolveRepoFile("settings.ini")),
 			ExcelPath: "dondathang_test.xlsx",
 		},
 		orderDir: orderFolderName,
