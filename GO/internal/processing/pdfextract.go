@@ -152,7 +152,7 @@ func reconstructLinesFromContent(page pdf.Page) (string, bool) {
 	var b strings.Builder
 	for _, y := range ys {
 		items := rowsByY[y]
-		sort.Slice(items, func(i, j int) bool { return items[i].X < items[j].X })
+		sort.SliceStable(items, func(i, j int) bool { return items[i].X < items[j].X })
 		lastX, lastW := -1.0, 0.0
 		for _, it := range items {
 			if lastX >= 0 && it.X-(lastX+lastW) > gapThreshold {
