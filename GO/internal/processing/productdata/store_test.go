@@ -73,6 +73,23 @@ func TestResolveSku_MapsVendorSkuToInternalCode(t *testing.T) {
 	}
 }
 
+func TestResolveSku_PreservedBugMapsWeightColumnToo(t *testing.T) {
+	store, err := Load(testDataPath)
+	if err != nil {
+		t.Fatalf("Load returned error: %v", err)
+	}
+
+	// Preserves load_sku_mapping's bug: the mapping loop starts at column C
+	// (index 2, the weight column) rather than skipping straight to the
+	// per-vendor SKU columns further right, so SanPham's weight cell for
+	// SP0001 ("3.6" in column C) is itself indexed as a "SKU" that resolves
+	// back to SP0001. If the loop's start index were "fixed" to skip
+	// non-SKU columns, this would fail.
+	if got := store.ResolveSku("3.6"); got != "SP0001" {
+		t.Fatalf("ResolveSku(3.6) = %q, want %q (bug preserved: weight column C is mapped too)", got, "SP0001")
+	}
+}
+
 func TestFindSkusMentioned(t *testing.T) {
 	store, err := Load(testDataPath)
 	if err != nil {
