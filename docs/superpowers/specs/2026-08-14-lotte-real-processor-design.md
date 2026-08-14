@@ -223,9 +223,16 @@ giá đã tô đỏ, Failed = không ghi được dòng, lý do cụ thể trong
 
 - `laytenstore_lotte` dựa vào chuỗi cố định `"DOAN TUAN ANH"` (tên người
   liên hệ cụ thể xuất hiện trên mọi PO Lotte theo mẫu hiện tại) làm mốc
-  định vị — heuristic dễ vỡ nếu Lotte đổi mẫu PO trong tương lai, giữ
-  nguyên vì đó là cách Python đang làm và có dữ liệu mẫu xác nhận hoạt
-  động trên 60 file.
+  định vị. **Đã xác minh trực tiếp trên toàn bộ 60/60 file mẫu thật**
+  (script kiểm tra riêng, không qua GUI): mốc này xuất hiện đúng 1 lần
+  trên mọi trang Lotte, không thiếu lần nào, không lặp lần nào, và tách
+  đúng tên cửa hàng ở cả 60/60 trang — 17 tên cửa hàng phân biệt, đều hợp
+  lệ (Nha Trang, Vũng Tàu, Đà Nẵng, Nam Sài Gòn, Cần Thơ, Nha Trang Gold
+  Coast, West Lake, Phú Thọ, Gò Vấp, Bắc Giang...). Đây là mốc đáng tin
+  cậy trên toàn bộ dữ liệu hiện có, giữ nguyên khi port sang Go. Rủi ro
+  còn lại chỉ là **tương lai** — nếu Lotte đổi mẫu PO hoặc đổi người liên
+  hệ in trên phiếu, mốc này sẽ cần cập nhật; không phải rủi ro ở dữ liệu
+  hiện tại.
 - Barcode Lotte dài 12-13 chữ số, khác hẳn định dạng `1234567-1` của
   Coop — `productdata.CleanSkuNumber`/`ResolveSku` hiện được viết riêng
   cho định dạng Coop; cần xác nhận khi viết plan xem có áp dụng được cho
