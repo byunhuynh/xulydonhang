@@ -73,6 +73,20 @@ func resolveRepoFile(filename string) string {
 	return filename
 }
 
+// resolveRepoDir returns the directory resolveRepoFile would resolve
+// filename into (the repo root, in practice), so callers that need a
+// place to write a new file near data.xlsx/settings.ini (rather than
+// open an existing one) can reuse the same directory-walk logic. Falls
+// back to "." if filename can't be found anywhere in the walk, matching
+// resolveRepoFile's own fallback.
+func resolveRepoDir(filename string) string {
+	resolved := resolveRepoFile(filename)
+	if dir := filepath.Dir(resolved); dir != "" {
+		return dir
+	}
+	return "."
+}
+
 // NewApp creates a new App application struct
 func NewApp() (*App, error) {
 	store, err := productdata.Load(resolveRepoFile("data.xlsx"))
