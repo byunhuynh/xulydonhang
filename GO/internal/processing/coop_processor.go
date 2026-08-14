@@ -18,11 +18,11 @@ import (
 
 const coopDebtDays = 60 // songayno_MT in xulydonhang.py
 
-// PricingSource abstracts fetching Coop's price/promotion data for one
-// order, so tests substitute a fixture-backed implementation instead of
-// a live Google Sheets fetch. Production wiring uses *pricing.HTTPSource.
+// PricingSource abstracts fetching a vendor's price/promotion data for
+// one order, so tests substitute a fixture-backed implementation instead
+// of a live Google Sheets fetch. Production wiring uses *pricing.HTTPSource.
 type PricingSource interface {
-	FetchCoopIndex() (*pricing.Index, error)
+	FetchIndex(sheetKey string) (*pricing.Index, error)
 }
 
 // RealProcessor implements processing.Processor for the Coop vendor.
@@ -148,7 +148,7 @@ func (p *RealProcessor) processSegment(filePath, text, pageLabel string) (OrderR
 		system = "COOPMART"
 	}
 
-	priceIndex, err := p.Pricing.FetchCoopIndex()
+	priceIndex, err := p.Pricing.FetchIndex("COOP")
 	if err != nil {
 		return OrderRow{}, fmt.Errorf("không tải được giá/khuyến mãi: %w", err)
 	}

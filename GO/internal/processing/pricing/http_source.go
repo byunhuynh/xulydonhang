@@ -9,8 +9,12 @@ import (
 
 const spreadsheetID = "1yvxE_SPYXKhofcZdhv1CSKAyiwdY1Mf4pFlsiMbtOr4"
 
-// HTTPSource fetches Coop's live pricing/promotion sheet over HTTP. It
-// is the production PricingSource; Task 12's tests substitute a
+// HTTPSource fetches a vendor's live pricing/promotion sheet over HTTP.
+// Every vendor's sheet lives in the same Google Sheet (spreadsheetID),
+// on a different tab selected by gid — confirmed in xulydonhang.py's
+// find_price_by_sku/find_all_promotions_by_sku_and_time family, which
+// all hardcode the same sheet_id and vary only the sheet_name param used
+// to resolve gid. It is the production PricingSource; tests substitute a
 // fixture-backed implementation instead of hitting the network.
 type HTTPSource struct {
 	SettingsPath string
@@ -21,17 +25,18 @@ func NewHTTPSource(settingsPath string) *HTTPSource {
 	return &HTTPSource{SettingsPath: settingsPath, Client: &http.Client{Timeout: 30 * time.Second}}
 }
 
-// FetchCoopIndex mirrors find_price_by_sku/find_all_promotions_by_sku_and_time's
-// URL construction (both use gid = get_gid("COOP") at their real Coop
-// call site) and fetches it once.
-func (s *HTTPSource) FetchCoopIndex() (*Index, error) {
+// FetchIndex mirrors find_price_by_sku/find_all_promotions_by_sku_and_time's
+// URL construction: sheetKey is the same value as their sheet_name
+// parameter (e.g. "COOP", "LOTTE" — must match a key in settings.ini's
+// <gid> block), resolved to a gid and fetched once.
+func (s *HTTPSource) FetchIndex(sheetKey string) (*Index, error) {
 	gidMap, err := LoadGidMap(s.SettingsPath)
 	if err != nil {
 		return nil, err
 	}
-	gid, ok := gidMap["COOP"]
+	gid, ok := gidMap[sheetKey]
 	if !ok {
-		return nil, fmt.Errorf("pricing: no COOP gid in %s", s.SettingsPath)
+		return nil, fmt.Errorf("pricing: no %s gid in %s", sheetKey, s.SettingsPath)
 	}
 
 	url := fmt.Sprintf("https://docs.google.com/spreadsheets/d/%s/gviz/tq?tqx=out:csv&gid=%s", spreadsheetID, gid)

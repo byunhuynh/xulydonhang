@@ -15,7 +15,7 @@ type fixturePricingSource struct {
 	index *pricing.Index
 }
 
-func (f *fixturePricingSource) FetchCoopIndex() (*pricing.Index, error) {
+func (f *fixturePricingSource) FetchIndex(sheetKey string) (*pricing.Index, error) {
 	return f.index, nil
 }
 
