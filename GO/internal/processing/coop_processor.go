@@ -185,12 +185,13 @@ func (p *RealProcessor) processSegment(filePath, text, pageLabel string) (OrderR
 		realPrice, _ := strconv.ParseFloat(strings.ReplaceAll(realPriceStr, ",", ""), 64)
 
 		promos := priceIndex.FindPromotions(product.Barcode, entryDate)
-		matchedPromo := ""
+		lastExaminedPromo := ""
 		matched := false
 		finalPrice := realPrice
 
 		for _, promo := range promos {
 			value := coop.SplitPromoText(promo.Value, system)
+			lastExaminedPromo = value
 			if value == "" {
 				continue
 			}
@@ -199,7 +200,8 @@ func (p *RealProcessor) processSegment(filePath, text, pageLabel string) (OrderR
 				candidatePrice = realPrice - (realPrice * discount / 100)
 			}
 			if closeEnough(invoicePrice, candidatePrice) {
-				finalPrice, matchedPromo, matched = candidatePrice, value, true
+				finalPrice = candidatePrice
+				matched = true
 				break
 			}
 		}
@@ -217,19 +219,27 @@ func (p *RealProcessor) processSegment(filePath, text, pageLabel string) (OrderR
 		if !matched {
 			productRow.PriceMismatch = true
 			productRow.InvoicePrice = invoicePrice
-			productRow.PromoContent = matchedPromo
+			productRow.PromoContent = lastExaminedPromo
 			saigia++
 		}
+
+		productRowIndex := len(rows)
 		rows = append(rows, productRow)
 		totalValue += finalPrice * product.Qty
 
-		for i, promoPart := range strings.Split(matchedPromo, "|") {
-			bonusRow, added := buildPromoBonusRow(p.Store, promoPart, product, i, entryDate, cancelDate, shipTo,
+		for i, promoPart := range strings.Split(lastExaminedPromo, "|") {
+			bonusRow, mainRowNote, mainRowBundleSku, added := buildPromoBonusRow(p.Store, promoPart, product, i, entryDate, cancelDate, shipTo,
 				customerCode, description, warehouse, region, statCode, info.PONumber)
 			if !added {
 				continue
 			}
 			totalWeight += bonusRow.LineWeightKg
+			if i == 0 {
+				rows[productRowIndex].PromoNote = mainRowNote
+				if mainRowBundleSku != "" {
+					rows[productRowIndex].PromoBundleSku = mainRowBundleSku
+				}
+			}
 			rows = append(rows, bonusRow)
 		}
 	}
@@ -285,7 +295,7 @@ func closeEnough(a, b float64) bool {
 
 func buildPromoBonusRow(store *productdata.Store, promoPart string, product coop.Product, index int,
 	entryDate, cancelDate, shipTo, customerCode, description, warehouse, region, statCode, poNumber string,
-) (excelwriter.Row, bool) {
+) (row excelwriter.Row, mainRowNote string, mainRowBundleSku string, added bool) {
 	skus := store.FindSkusMentioned(promoPart)
 	bonusMatch := xPlus1Pattern.FindStringSubmatch(promoPart)
 	bonusQty := product.Qty
@@ -303,7 +313,7 @@ func buildPromoBonusRow(store *productdata.Store, promoPart string, product coop
 		}
 	}
 	if bonusSku == "" {
-		return excelwriter.Row{}, false
+		return excelwriter.Row{}, "", "", false
 	}
 
 	bonusInfo, _ := store.GetProductInfo(bonusSku)
@@ -317,22 +327,37 @@ func buildPromoBonusRow(store *productdata.Store, promoPart string, product coop
 	if bundleNote == "" {
 		bundleNote = "KM Bó Kèm - Che Barcode"
 	}
+	lower := strings.ToLower(bundleNote)
+	isBundle := strings.Contains(lower, "bó kèm") || strings.Contains(lower, "quấn kèm")
+	bundleSkuValue := ""
+	if isBundle {
+		bundleSkuValue = fmt.Sprintf("%s_%s_1", coop.LastFourDigits(product.Barcode), coop.LastFourDigits(bonusSku))
+	}
 
-	row := excelwriter.Row{
+	row = excelwriter.Row{
 		EntryDate: entryDate, DebtDays: coopDebtDays, OrderNumber: orderNumber(poNumber),
 		Status: "Chưa thực hiện", CancelDate: cancelDate, ShipTo: shipTo, CustomerCode: customerCode,
 		Description: description, SKU: bonusSku, Warehouse: warehouse, VATPercent: 8, RegionCode: region,
 		StatCode: statCode, IsPromoItem: true, Qty: bonusQty, ProductName: bonusInfo.Name,
 		CaseCount: bonusCase, LineWeightKg: bonusWeight, UseZFormula: false,
 	}
+	if isBundle {
+		row.PromoBundleSku = bundleSkuValue
+	}
+
 	if index == 0 {
+		// Python (xulydonhang.py:1201) writes the first promo item's AO
+		// note onto the MAIN PRODUCT ROW, not this bonus row; AP goes
+		// onto both the main row and this bonus row (already set above).
+		mainRowNote = bundleNote
+		mainRowBundleSku = bundleSkuValue
+	} else {
+		// Python (xulydonhang.py:1211) writes AO for i>0 onto that
+		// item's own bonus row.
 		row.PromoNote = bundleNote
 	}
-	lower := strings.ToLower(bundleNote)
-	if strings.Contains(lower, "bó kèm") || strings.Contains(lower, "quấn kèm") {
-		row.PromoBundleSku = fmt.Sprintf("%s_%s_1", coop.LastFourDigits(product.Barcode), coop.LastFourDigits(bonusSku))
-	}
-	return row, true
+
+	return row, mainRowNote, mainRowBundleSku, true
 }
 
 func buildInvoiceBonusRow(store *productdata.Store, invoicePromo string, totalValue float64,
