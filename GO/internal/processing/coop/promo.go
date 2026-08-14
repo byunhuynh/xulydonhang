@@ -121,9 +121,24 @@ func FormatWeightKg(kg float64) string {
 	return fmt.Sprintf("%s kg", trimFloat(kg, 2))
 }
 
+// trimFloat mirrors Python's f"{round(value, decimals)}": round(x, 2)
+// returns a float, and Python's default float-to-str always shows a
+// fractional part with at least one digit (round(70.0, 2) -> 70.0 ->
+// "70.0", never "70"). Format to `decimals` places, trim trailing
+// zeros, but always leave exactly one digit after the decimal point —
+// unlike a bare TrimRight(s, "0.") which would strip a whole-number
+// result ("70.00") down to "70" and silently drop the fractional part
+// real fixtures always show (e.g. "COOPFOOD PO... (Tổng trọng lượng:
+// 70.0 kg)", not "70 kg").
 func trimFloat(v float64, decimals int) string {
 	s := strconv.FormatFloat(v, 'f', decimals, 64)
-	s = strings.TrimRight(s, "0")
-	s = strings.TrimRight(s, ".")
-	return s
+	dot := strings.IndexByte(s, '.')
+	if dot < 0 {
+		return s
+	}
+	end := len(s)
+	for end > dot+2 && s[end-1] == '0' {
+		end--
+	}
+	return s[:end]
 }

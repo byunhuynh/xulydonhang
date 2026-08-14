@@ -5,9 +5,27 @@ import (
 	"strings"
 )
 
+// pom34Pattern and subTotalCountPattern add character-by-character
+// whitespace tolerance (via spacedPattern, already used for
+// P/O-Number-style fields in invoice.go) on top of a faithful port of
+// demsodonhang1trang_coop's two literal regexes. This is NOT a
+// behavioral deviation from the Python original — PyMuPDF's text
+// extraction never introduces gaps between adjacent letters of a
+// single word for these PDFs, so Python's un-tolerant literals always
+// matched real "POM343"/"Sub Total" text as intact substrings. But this
+// Go port's PDF library sometimes can't fully reconstruct the original
+// letter-spacing for certain field labels (confirmed against a real
+// archived PDF, 103311304-00: "Sub Total" extracts as "S u b   T o t a
+// l", a pure text-extraction-fidelity gap, not a difference in what the
+// PDF actually contains) — spacedPattern's \s* between every letter is
+// purely additive tolerance that still requires the same letters in
+// the same order, so it can only recognize genuine
+// "POM343"/"POM346"/"Sub Total" occurrences the original, stricter
+// pattern would also have recognized on cleanly-extracted text; it
+// cannot introduce a false match that wasn't already the real word.
 var (
-	pom34Pattern         = regexp.MustCompile(`POM34[36]\b`)
-	subTotalCountPattern = regexp.MustCompile(`\bSub\s*(?:Total|Tot\s*al)\b`)
+	pom34Pattern         = regexp.MustCompile(spacedPattern("POM34") + `\s*[36]\b`)
+	subTotalCountPattern = regexp.MustCompile(`\b` + spacedPattern("Sub Total") + `\b`)
 )
 
 // PageCounts mirrors demsodonhang1trang_coop's returned dict.

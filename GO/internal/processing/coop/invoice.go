@@ -142,12 +142,21 @@ func matchGroup(pattern *regexp.Regexp, text string) string {
 }
 
 // ConvertDateFormat mirrors process_coop_invoice's inline
-// convert_date_format: "dd/mm/yy" -> "dd/mm/yyyy".
+// convert_date_format: "dd/mm/yy" -> "dd/mm/yyyy". Uses the unpadded
+// reference layout "2/1/06" (not "02/01/06"): Python's
+// datetime.strptime(date_str, "%d/%m/%y") accepts both zero-padded and
+// single-digit day/month components, and real archived Coop PDFs
+// contain both ("23/07/26" and "3/10/26" both occur) — go's time.Parse
+// requires an exact digit-count match against "02"/"01" placeholders,
+// so a strict zero-padded layout wrongly rejected every unpadded date
+// as "Không hợp lệ" where Python parsed it fine. "2/1/06" parses both
+// forms identically (confirmed: "3/10/26", "03/10/26" and "23/07/26"
+// all parse correctly against it).
 func ConvertDateFormat(dateStr string) string {
 	if dateStr == "" || dateStr == notFound {
 		return notFound
 	}
-	t, err := time.Parse("02/01/06", dateStr)
+	t, err := time.Parse("2/1/06", dateStr)
 	if err != nil {
 		return "Không hợp lệ"
 	}
@@ -204,9 +213,21 @@ func ExtractNotes(text string) string {
 	return strings.Join(deduped, " ")
 }
 
+// shipToStatusPattern and shipToStorePattern mirror process_coop_invoice's
+// two Ship To regexes (xulydonhang.py:5407,5415) verbatim, INCLUDING the
+// `\s*` the Python literals put between the word and the following
+// literal "-" (Python: r"...Status\s*-\s*\d+..." / r"...Store\s*-\s*...").
+// A first Go port dropped that `\s*` (spacedPattern only inserts \s*
+// *between* a word's own letters, not after the whole word), so it
+// required "Status-"/"Store-" with zero space before the hyphen — but
+// real archived PDFs render "Status - 3 RELEASED" / normalize to
+// "Contact -" with a space before the hyphen, which never matched,
+// silently falling through to ExtractShipTo's "" default for every
+// order. Confirmed against real extracted text via a throwaway debug
+// probe before fixing.
 var (
-	shipToStatusPattern = regexp.MustCompile(`(?is)` + spacedPattern("Ship To") + `:\s*` + spacedPattern("Status") + `-\s*\d+\s*` + spacedPattern("RELEASED") + `\s*(.*?)\s*` + spacedPattern("Contact") + `-`)
-	shipToStorePattern  = regexp.MustCompile(`(?is)` + spacedPattern("Store") + `-\s*(.*?)\s*` + spacedPattern("Vendor"))
+	shipToStatusPattern = regexp.MustCompile(`(?is)` + spacedPattern("Ship To") + `:\s*` + spacedPattern("Status") + `\s*-\s*\d+\s*` + spacedPattern("RELEASED") + `\s*(.*?)\s*` + spacedPattern("Contact") + `\s*-`)
+	shipToStorePattern  = regexp.MustCompile(`(?is)` + spacedPattern("Store") + `\s*-\s*(.*?)\s*` + spacedPattern("Vendor"))
 )
 
 // ExtractShipTo mirrors process_coop_invoice's Ship To extraction: try

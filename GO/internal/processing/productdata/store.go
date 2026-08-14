@@ -72,7 +72,17 @@ func loadCustomerRows(f *excelize.File) ([][4]string, error) {
 }
 
 func loadProducts(f *excelize.File) (map[string]ProductInfo, map[string]string, error) {
-	rows, err := f.GetRows("SanPham")
+	// RawCellValue: true is required here — without it, GetRows returns
+	// the cell's *displayed* string, rounded to whatever number format
+	// is applied in the spreadsheet (e.g. weight 3.475 displays/rounds
+	// to "3.48" under a "0.00" format). Python's openpyxl reads the
+	// actual underlying float (3.475) with no such formatting applied,
+	// so the un-raw read here silently double-rounds every weight/pack
+	// size, compounding into wrong line-weight (AT) and total-weight (L)
+	// values downstream — confirmed against data.xlsx directly (SKU
+	// TP31630's true weight is 3.475 kg; GetRows without RawCellValue
+	// returned "3.48").
+	rows, err := f.GetRows("SanPham", excelize.Options{RawCellValue: true})
 	if err != nil {
 		return nil, nil, fmt.Errorf("productdata: read SanPham sheet: %w", err)
 	}

@@ -189,6 +189,19 @@ func (p *RealProcessor) processSegment(filePath, text, pageLabel string) (OrderR
 		matched := false
 		finalPrice := realPrice
 
+		// finalPrice mirrors Python's giathucte (xulydonhang.py:1080-1148):
+		// it is overwritten on EVERY examined promo whose split value is
+		// non-empty — discounted from realPrice/giathuctegoc fresh each
+		// time (Python re-reads giathuctegoc as its base at line
+		// 1097-1099 before subtracting, so multiple promo candidates for
+		// the same SKU never compound), not only when that candidate
+		// turns out to match the invoice price. A first Go port only
+		// updated finalPrice inside the closeEnough-matched branch, so an
+		// unmatched product's Y column silently fell back to the
+		// undiscounted realPrice instead of the last examined discounted
+		// price real fixtures show (e.g. a genuine 30%-off SKU priced at
+		// 42158 writes Y=29510.6 with a price-mismatch flag in Python,
+		// not Y=42158).
 		for _, promo := range promos {
 			value := coop.SplitPromoText(promo.Value, system)
 			lastExaminedPromo = value
@@ -199,14 +212,22 @@ func (p *RealProcessor) processSegment(filePath, text, pageLabel string) (OrderR
 			if discount := coop.ExtractDiscount(value); discount != 0 {
 				candidatePrice = realPrice - (realPrice * discount / 100)
 			}
+			finalPrice = candidatePrice
 			if closeEnough(invoicePrice, candidatePrice) {
-				finalPrice = candidatePrice
 				matched = true
 				break
 			}
 		}
-		if !matched && closeEnough(invoicePrice, realPrice) {
-			finalPrice, matched = realPrice, true
+		// Python's raw-price fallback comparison ("if not results:",
+		// xulydonhang.py:1131-1147) only runs when NO promotions were
+		// found at all — not merely when none of the found promotions'
+		// split values matched. Gating this on len(promos)==0 preserves
+		// that: a SKU with promo candidates that all fail to match stays
+		// flagged as a price mismatch (using the last examined
+		// candidatePrice, per the loop above) even if its raw realPrice
+		// happens to equal the invoice price, exactly like Python.
+		if len(promos) == 0 && closeEnough(invoicePrice, realPrice) {
+			matched = true
 		}
 
 		productRow := excelwriter.Row{
@@ -215,11 +236,21 @@ func (p *RealProcessor) processSegment(filePath, text, pageLabel string) (OrderR
 			Description: description, SKU: product.Barcode, Warehouse: warehouse, VATPercent: 8,
 			RegionCode: region, StatCode: statCode, Qty: product.Qty, UnitPrice: finalPrice,
 			ProductName: productInfo.Name, CaseCount: caseCount, LineWeightKg: lineWeight, UseZFormula: true,
+			// AQ (PromoContent/khuyenmai) is written unconditionally in
+			// Python (xulydonhang.py:1183, inside the `for i, hangkm in
+			// enumerate(nhieuCtkm)` loop that always runs at least once
+			// even when khuyenmai is "") — NOT only on a price mismatch
+			// (that's a separate write at line 1168, which this
+			// unconditional one always overwrites with the same value
+			// anyway). Confirmed against real fixtures: matched rows with
+			// no price mismatch still carry a real AQ value (e.g.
+			// 102945235-00's product rows show AQ="20%" with
+			// Y_has_comment=false).
+			PromoContent: lastExaminedPromo,
 		}
 		if !matched {
 			productRow.PriceMismatch = true
 			productRow.InvoicePrice = invoicePrice
-			productRow.PromoContent = lastExaminedPromo
 			saigia++
 		}
 
@@ -227,7 +258,24 @@ func (p *RealProcessor) processSegment(filePath, text, pageLabel string) (OrderR
 		rows = append(rows, productRow)
 		totalValue += finalPrice * product.Qty
 
+		// currentRowIndex mirrors Python's current_row pointer through
+		// this loop (xulydonhang.py:1174-1250): "AQ{current_row} =
+		// khuyenmai" (line 1183) is written EVERY iteration, using
+		// whatever row current_row happens to point at that moment —
+		// and current_row only advances when a bonus row is actually
+		// created (inside the "if kiemtra" block, line 1226), not once
+		// per loop iteration. Net effect (verified against real
+		// fixtures, e.g. 103108366-00.json rows 1-2): the FIRST promo
+		// part's AQ lands on the main product row as expected, but every
+		// SUBSEQUENT part's AQ lands on the PRECEDING bonus row (the one
+		// the previous iteration just created), not on that part's own
+		// bonus row — an off-by-one quirk in the original that this
+		// mirrors exactly rather than "fixing", since golden-fixture
+		// parity is the point.
+		currentRowIndex := productRowIndex
 		for i, promoPart := range strings.Split(lastExaminedPromo, "|") {
+			rows[currentRowIndex].PromoContent = lastExaminedPromo
+
 			bonusRow, mainRowNote, mainRowBundleSku, added := buildPromoBonusRow(p.Store, promoPart, product, i, entryDate, cancelDate, shipTo,
 				customerCode, description, warehouse, region, statCode, info.PONumber)
 			if !added {
@@ -241,6 +289,7 @@ func (p *RealProcessor) processSegment(filePath, text, pageLabel string) (OrderR
 				}
 			}
 			rows = append(rows, bonusRow)
+			currentRowIndex = len(rows) - 1
 		}
 	}
 

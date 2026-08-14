@@ -121,8 +121,6 @@ func writeRow(f *excelize.File, rowNum int, row Row, redFillStyle int) error {
 		{"T", yesNo(row.IsNoteRow)},
 		{"X", row.Qty},
 		{"S", row.ProductName},
-		{"AU", row.CaseCount},
-		{"AT", row.LineWeightKg},
 		{"AO", row.PromoNote},
 		{"AP", row.PromoBundleSku},
 		{"AQ", row.PromoContent},
@@ -130,6 +128,21 @@ func writeRow(f *excelize.File, rowNum int, row Row, redFillStyle int) error {
 	for _, w := range writes {
 		if err := set(w.col, w.value); err != nil {
 			return fmt.Errorf("excelwriter: set %s%d: %w", w.col, rowNum, err)
+		}
+	}
+
+	// AU (case count) and AT (line weight) are only written for actual
+	// product/promo-bonus rows in Python's write_to_dondathang — the
+	// header/note row block (xulydonhang.py:994-1013) never touches
+	// either cell, leaving them blank. Writing a literal 0 there instead
+	// (as an unconditional write would) is a real, visible difference:
+	// real fixtures show AU/AT as null on the header row, not 0.
+	if !row.IsNoteRow {
+		if err := set("AU", row.CaseCount); err != nil {
+			return fmt.Errorf("excelwriter: set AU%d: %w", rowNum, err)
+		}
+		if err := set("AT", row.LineWeightKg); err != nil {
+			return fmt.Errorf("excelwriter: set AT%d: %w", rowNum, err)
 		}
 	}
 

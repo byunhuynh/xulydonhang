@@ -72,10 +72,18 @@ func TestLastFourDigits(t *testing.T) {
 }
 
 func TestFormatWeightKg(t *testing.T) {
-	if got := FormatWeightKg(500); got != "500 kg" {
-		t.Fatalf("FormatWeightKg(500) = %q, want %q", got, "500 kg")
+	// Python's format_weight_kg does f"{round(value, 2)} kg" — and
+	// Python's default float-to-str always shows a fractional part
+	// (round(500, 2) is a float 500.0, str is "500.0", never "500").
+	// Verified against real golden fixtures (Task 13), e.g.
+	// "COOPFOOD PO103204622-00 (Tổng trọng lượng: 70.0 kg)".
+	if got := FormatWeightKg(500); got != "500.0 kg" {
+		t.Fatalf("FormatWeightKg(500) = %q, want %q", got, "500.0 kg")
 	}
 	if got := FormatWeightKg(1500); got != "1.5 tấn" {
 		t.Fatalf("FormatWeightKg(1500) = %q, want %q", got, "1.5 tấn")
+	}
+	if got := FormatWeightKg(20.16); got != "20.16 kg" {
+		t.Fatalf("FormatWeightKg(20.16) = %q, want %q", got, "20.16 kg")
 	}
 }
