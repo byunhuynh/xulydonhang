@@ -91,7 +91,7 @@ func TestRealProcessor_MatchesGoldenFixtures(t *testing.T) {
 			continue
 		}
 
-		compareRowsAgainstFixture(t, excelPath, fixture, &mismatches)
+		compareRowsAgainstFixture(t, excelPath, fixture, &mismatches, nil)
 	}
 
 	if len(mismatches) > 0 {
@@ -120,7 +120,7 @@ func TestRealProcessor_MatchesGoldenFixtures(t *testing.T) {
 // strings (openpyxl and excelize report fill color metadata in
 // different shapes; what actually matters is "was the mismatch flagged
 // at all", which both representations agree on).
-func compareRowsAgainstFixture(t *testing.T, excelPath string, fixture fixtureData, mismatches *[]string) {
+func compareRowsAgainstFixture(t *testing.T, excelPath string, fixture fixtureData, mismatches *[]string, allowedDivergences map[string]bool) {
 	t.Helper()
 
 	f, err := excelize.OpenFile(excelPath)
@@ -161,6 +161,13 @@ func compareRowsAgainstFixture(t *testing.T, excelPath string, fixture fixtureDa
 	floatColumns := []string{"X", "Y", "AT"}
 	intColumns := []string{"AE", "AU", "AV"}
 
+	isAllowed := func(rowIdx int, col string) bool {
+		if allowedDivergences == nil {
+			return false
+		}
+		return allowedDivergences[fmt.Sprintf("%d:%s", rowIdx, col)]
+	}
+
 	for i, expectedRow := range fixture.Rows {
 		rowNum := startRow + i
 		cell := func(col string) string {
@@ -169,6 +176,9 @@ func compareRowsAgainstFixture(t *testing.T, excelPath string, fixture fixtureDa
 		}
 
 		for _, col := range textColumns {
+			if isAllowed(i, col) {
+				continue
+			}
 			expected := stringify(expectedRow[col])
 			got := cell(col)
 			if expected != got {
@@ -177,6 +187,9 @@ func compareRowsAgainstFixture(t *testing.T, excelPath string, fixture fixtureDa
 		}
 
 		for _, col := range floatColumns {
+			if isAllowed(i, col) {
+				continue
+			}
 			expected := toFloat(expectedRow[col])
 			got := toFloat(cell(col))
 			if !floatCloseEnough(expected, got) {
@@ -185,6 +198,9 @@ func compareRowsAgainstFixture(t *testing.T, excelPath string, fixture fixtureDa
 		}
 
 		for _, col := range intColumns {
+			if isAllowed(i, col) {
+				continue
+			}
 			expected := stringify(expectedRow[col])
 			got := cell(col)
 			if expected != got {

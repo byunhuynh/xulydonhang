@@ -593,26 +593,38 @@ func (p *RealProcessor) processLotteSegment(filePath, text, pageLabel string) (O
 		rows = append(rows, productRow)
 		totalValue += finalPrice * qty
 
-		currentRowIndex := productRowIndex
-		for i, promoPart := range strings.Split(lastExaminedPromo, "|") {
-			rows[currentRowIndex].PromoContent = lastExaminedPromo
-
-			bonusRow, mainRowNote, mainRowBundleSku, added := buildPromoBonusRow(p.Store, promoPart,
-				coop.Product{Barcode: barcode, Qty: qty}, i, info.EntryDate, cancelDate, shipTo,
-				customerCode, description, warehouse, region, statCode, info.PONumber)
-			if !added {
-				continue
-			}
+		// Unlike Coop's write_to_dondathang_coop (xulydonhang.py:1174,
+		// "nhieuCtkm = khuyenmai.split('|')" followed by an
+		// enumerate-loop), Lotte's write_to_dondathang_lotte
+		// (xulydonhang.py:2196-2243, the single un-looped "if kiemtra:"
+		// block) never splits the matched promo string on "|" — the
+		// whole string is examined as one unit and at most one bonus
+		// row is ever added per product. Some real promo values contain
+		// a literal "|" as part of their own text (e.g.
+		// "giảm 35% | 2+1 Nước lau sàn 1L TP30596 {KM Giao rời - Che
+		// Barcode}" in đơn hàng/08-2026/260727-01013-00057.pdf's
+		// matched CTKM cell). Splitting on "|" here (mirroring Coop's
+		// pattern, as an earlier version of this function did)
+		// misinterpreted that literal "|" as a multi-promo delimiter:
+		// it wrote AO onto the bonus row (index i=1, "i>0" branch)
+		// instead of the main product row, and evaluated the pre-"|"
+		// fragment ("giảm 35% ") as a phantom promo segment on its own.
+		// Passing the whole string through once, always as index 0 (so
+		// buildPromoBonusRow's mainRowNote/mainRowBundleSku branch
+		// applies), matches Python exactly: laycachbo_khuyenmai's `{...}`
+		// extraction and the "X+1" regex both search the whole string
+		// regardless of where "|" appears in it.
+		bonusRow, mainRowNote, mainRowBundleSku, added := buildPromoBonusRow(p.Store, lastExaminedPromo,
+			coop.Product{Barcode: barcode, Qty: qty}, 0, info.EntryDate, cancelDate, shipTo,
+			customerCode, description, warehouse, region, statCode, info.PONumber)
+		if added {
 			bonusRow.OrderNumber = lotteOrderNumber(info.PONumber) // buildPromoBonusRow hardcodes Coop's order number
 			totalWeight += bonusRow.LineWeightKg
-			if i == 0 {
-				rows[productRowIndex].PromoNote = mainRowNote
-				if mainRowBundleSku != "" {
-					rows[productRowIndex].PromoBundleSku = mainRowBundleSku
-				}
+			rows[productRowIndex].PromoNote = mainRowNote
+			if mainRowBundleSku != "" {
+				rows[productRowIndex].PromoBundleSku = mainRowBundleSku
 			}
 			rows = append(rows, bonusRow)
-			currentRowIndex = len(rows) - 1
 		}
 	}
 
