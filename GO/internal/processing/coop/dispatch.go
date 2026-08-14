@@ -47,18 +47,23 @@ func CountPOsOnPage(text string) PageCounts {
 // latent case-sensitivity bug (see this plan's Global Constraints): the
 // membership check (`keyword in text.lower()`) is case-insensitive, but
 // the actual split (`text.split(keyword, 1)`) is case-sensitive against
-// the lowercase literal keyword.
+// the lowercase literal keyword. That preserved bug is only about the
+// POM keyword; the "Sub Total" boundary below uses subTotalCountPattern
+// (the same whitespace-tolerant matcher CountPOsOnPage uses) instead of
+// a literal split, so a page whose extraction shreds "Sub Total" into
+// "S u b   T o t a l" — which CountPOsOnPage already tolerates — doesn't
+// silently produce zero segments here despite the counts matching.
 func SplitMultiPO(text string) []string {
 	var segments []string
 
-	parts := strings.SplitN(text, "Sub Total", 2)
-	if len(parts) < 2 {
+	before, after, ok := splitOnSubTotal(text)
+	if !ok {
 		return segments
 	}
-	segments = append(segments, parts[0])
-	text = parts[1]
+	segments = append(segments, before)
+	text = after
 
-	for containsAny(strings.ToLower(text), "pom343", "pom346") && strings.Contains(text, "Sub Total") {
+	for containsAny(strings.ToLower(text), "pom343", "pom346") && subTotalCountPattern.MatchString(text) {
 		found := false
 		for _, keyword := range []string{"pom343", "pom346"} {
 			if !strings.Contains(strings.ToLower(text), keyword) {
@@ -73,10 +78,10 @@ func SplitMultiPO(text string) []string {
 			found = true
 			text = splitParts[1]
 
-			subParts := strings.SplitN(text, "Sub Total", 2)
-			if len(subParts) > 1 {
-				segments = append(segments, strings.ToUpper(keyword)+strings.TrimRight(subParts[0], "\n"))
-				text = subParts[1]
+			subBefore, subAfter, subOK := splitOnSubTotal(text)
+			if subOK {
+				segments = append(segments, strings.ToUpper(keyword)+strings.TrimRight(subBefore, "\n"))
+				text = subAfter
 			} else {
 				segments = append(segments, strings.ToUpper(keyword)+text)
 				return segments
@@ -90,6 +95,18 @@ func SplitMultiPO(text string) []string {
 	}
 
 	return segments
+}
+
+// splitOnSubTotal finds the first whitespace-tolerant "Sub Total"
+// boundary (per subTotalCountPattern) and returns the text before and
+// after it. Mirrors strings.SplitN(text, "Sub Total", 2) but tolerant
+// of character-shredded extraction the same way CountPOsOnPage is.
+func splitOnSubTotal(text string) (before, after string, ok bool) {
+	loc := subTotalCountPattern.FindStringIndex(text)
+	if loc == nil {
+		return "", "", false
+	}
+	return text[:loc[0]], text[loc[1]:], true
 }
 
 func containsAny(s string, subs ...string) bool {
