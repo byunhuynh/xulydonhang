@@ -1,0 +1,365 @@
+package processing
+
+import (
+	"context"
+	"fmt"
+	"math"
+	"path/filepath"
+	"regexp"
+	"strconv"
+	"strings"
+
+	"order-processor/internal/processing/coop"
+	"order-processor/internal/processing/excelwriter"
+	"order-processor/internal/processing/pricing"
+	"order-processor/internal/processing/productdata"
+	"order-processor/internal/processing/vendor"
+)
+
+const coopDebtDays = 60 // songayno_MT in xulydonhang.py
+
+// PricingSource abstracts fetching Coop's price/promotion data for one
+// order, so tests substitute a fixture-backed implementation instead of
+// a live Google Sheets fetch. Production wiring uses *pricing.HTTPSource.
+type PricingSource interface {
+	FetchCoopIndex() (*pricing.Index, error)
+}
+
+// RealProcessor implements processing.Processor for the Coop vendor.
+// Any page whose text doesn't match Coop's vendor markers produces a
+// single Failed OrderRow explaining why, rather than being silently
+// skipped — support for other vendors is added in later phases by
+// extending this same dispatch.
+type RealProcessor struct {
+	Store     *productdata.Store
+	Pricing   PricingSource
+	ExcelPath string
+}
+
+func (p *RealProcessor) Process(ctx context.Context, filePath string, stt int) ([]OrderRow, error) {
+	pageTexts, err := extractPageTexts(filePath)
+	if err != nil {
+		return []OrderRow{{
+			FileName:   filepath.Base(filePath),
+			Status:     StatusFailed + " - không đọc được PDF: " + err.Error(),
+			StatusKind: StatusKindFailed,
+		}}, nil
+	}
+
+	var rows []OrderRow
+	for pageIdx, text := range pageTexts {
+		pageLabel := fmt.Sprintf("%d/%d", pageIdx+1, len(pageTexts))
+		v := vendor.Identify(text)
+		if v != "Coop" {
+			reason := "không nhận diện được nhà cung cấp"
+			if v != "" {
+				reason = "nhà cung cấp " + v + " chưa được hỗ trợ"
+			}
+			rows = append(rows, OrderRow{
+				FileName: filepath.Base(filePath), Page: pageLabel, System: v,
+				Status: StatusFailed + " - " + reason, StatusKind: StatusKindFailed,
+			})
+			continue
+		}
+
+		segments, ok := splitPageIntoPOs(text)
+		if !ok {
+			rows = append(rows, OrderRow{
+				FileName: filepath.Base(filePath), Page: pageLabel, System: "Coop",
+				Status: StatusFailed + " - không đếm khớp số đơn trên trang", StatusKind: StatusKindFailed,
+			})
+			continue
+		}
+
+		for segIdx, segment := range segments {
+			segLabel := fmt.Sprintf("%d/%d", segIdx+1, len(segments))
+			row, err := p.processSegment(filePath, segment, segLabel)
+			if err != nil {
+				rows = append(rows, OrderRow{
+					FileName: filepath.Base(filePath), Page: segLabel, System: "Coop",
+					Status: fmt.Sprintf("%s - %v", StatusFailed, err), StatusKind: StatusKindFailed,
+				})
+				continue
+			}
+			rows = append(rows, row)
+		}
+	}
+
+	return rows, nil
+}
+
+func splitPageIntoPOs(text string) ([]string, bool) {
+	counts := coop.CountPOsOnPage(text)
+	if counts.POM343 == 0 || counts.SubTotal == 0 || counts.POM343 != counts.SubTotal {
+		return nil, false
+	}
+	if counts.POM343 == 1 {
+		return []string{text}, true
+	}
+	segments := coop.SplitMultiPO(text)
+	if len(segments) == 0 {
+		return nil, false
+	}
+	return segments, true
+}
+
+// xPlus1Pattern mirrors the "(\d+)\s*\+\s*1" match inside
+// write_to_dondathang's promo-bonus-quantity logic.
+var xPlus1Pattern = regexp.MustCompile(`(\d+)\s*\+\s*1`)
+
+func (p *RealProcessor) processSegment(filePath, text, pageLabel string) (OrderRow, error) {
+	info := coop.ParseInvoiceInfo(text)
+	notes := coop.ExtractNotes(text)
+	shipTo := coop.ExtractShipTo(text)
+
+	entryDate := coop.ConvertDateFormat(info.EntryDate)
+	cancelDate := coop.ConvertDateFormat(info.CancelDate)
+	cancelDate, err := coop.ResolveCancelDate(entryDate, cancelDate)
+	if err != nil {
+		return OrderRow{}, err
+	}
+
+	customerCode := "Không tìm thấy"
+	if info.POLocation != "" && info.POLocation != "Không tìm thấy" {
+		customerCode = p.Store.GetCustomerCode(info.POLocation)
+		if customerCode == "Không tìm thấy" && len(info.POLocation) > 1 {
+			half := info.POLocation[:len(info.POLocation)/2]
+			customerCode = p.Store.GetCustomerCode(half)
+		}
+	}
+
+	products, err := coop.ExtractProducts(text)
+	if err != nil {
+		return OrderRow{}, err
+	}
+	if len(products) == 0 {
+		return OrderRow{}, fmt.Errorf("không trích xuất được sản phẩm nào")
+	}
+	for i := range products {
+		products[i].Barcode = p.Store.ResolveSku(products[i].Barcode)
+	}
+
+	system := p.Store.GetSystemForCustomer(customerCode)
+	if system == "COOPFOOD" {
+		if addr := p.Store.GetCoopfoodAddress(customerCode); addr != "" {
+			shipTo = shipTo + " - " + addr
+		}
+	} else {
+		system = "COOPMART"
+	}
+
+	priceIndex, err := p.Pricing.FetchCoopIndex()
+	if err != nil {
+		return OrderRow{}, fmt.Errorf("không tải được giá/khuyến mãi: %w", err)
+	}
+
+	region, statCode, warehouse := regionInfo(customerCode)
+	description := fmt.Sprintf("%s PO%s", system, info.PONumber)
+	if notes != "" {
+		description += " - " + notes
+	}
+
+	var rows []excelwriter.Row
+	rows = append(rows, excelwriter.Row{
+		EntryDate: entryDate, DebtDays: coopDebtDays, OrderNumber: orderNumber(info.PONumber),
+		Status: "Chưa thực hiện", CancelDate: cancelDate, ShipTo: shipTo, CustomerCode: customerCode,
+		Description: description, Warehouse: warehouse, VATPercent: 8, RegionCode: region,
+		StatCode: statCode, IsNoteRow: true, ProductName: fmt.Sprintf("%s PO%s", system, info.PONumber),
+	})
+
+	saigia := 0
+	totalWeight := 0.0
+	totalValue := 0.0
+
+	for _, product := range products {
+		productInfo, _ := p.Store.GetProductInfo(product.Barcode)
+		lineWeight := productInfo.WeightKg * product.Qty
+		caseCount := 0
+		if productInfo.PackSize > 0 {
+			caseCount = int(math.Ceil(product.Qty / productInfo.PackSize))
+		}
+		totalWeight += lineWeight
+
+		invoicePrice := product.Cost / product.Qty
+		realPriceStr, _ := priceIndex.FindPrice(product.Barcode)
+		realPrice, _ := strconv.ParseFloat(strings.ReplaceAll(realPriceStr, ",", ""), 64)
+
+		promos := priceIndex.FindPromotions(product.Barcode, entryDate)
+		matchedPromo := ""
+		matched := false
+		finalPrice := realPrice
+
+		for _, promo := range promos {
+			value := coop.SplitPromoText(promo.Value, system)
+			if value == "" {
+				continue
+			}
+			candidatePrice := realPrice
+			if discount := coop.ExtractDiscount(value); discount != 0 {
+				candidatePrice = realPrice - (realPrice * discount / 100)
+			}
+			if closeEnough(invoicePrice, candidatePrice) {
+				finalPrice, matchedPromo, matched = candidatePrice, value, true
+				break
+			}
+		}
+		if !matched && closeEnough(invoicePrice, realPrice) {
+			finalPrice, matched = realPrice, true
+		}
+
+		productRow := excelwriter.Row{
+			EntryDate: entryDate, DebtDays: coopDebtDays, OrderNumber: orderNumber(info.PONumber),
+			Status: "Chưa thực hiện", CancelDate: cancelDate, ShipTo: shipTo, CustomerCode: customerCode,
+			Description: description, SKU: product.Barcode, Warehouse: warehouse, VATPercent: 8,
+			RegionCode: region, StatCode: statCode, Qty: product.Qty, UnitPrice: finalPrice,
+			ProductName: productInfo.Name, CaseCount: caseCount, LineWeightKg: lineWeight, UseZFormula: true,
+		}
+		if !matched {
+			productRow.PriceMismatch = true
+			productRow.InvoicePrice = invoicePrice
+			productRow.PromoContent = matchedPromo
+			saigia++
+		}
+		rows = append(rows, productRow)
+		totalValue += finalPrice * product.Qty
+
+		for i, promoPart := range strings.Split(matchedPromo, "|") {
+			bonusRow, added := buildPromoBonusRow(p.Store, promoPart, product, i, entryDate, cancelDate, shipTo,
+				customerCode, description, warehouse, region, statCode, info.PONumber)
+			if !added {
+				continue
+			}
+			totalWeight += bonusRow.LineWeightKg
+			rows = append(rows, bonusRow)
+		}
+	}
+
+	if invoicePromo := priceIndex.FindInvoicePromotion(entryDate); invoicePromo != "" {
+		if bonusRow, added := buildInvoiceBonusRow(p.Store, invoicePromo, totalValue, entryDate, cancelDate,
+			shipTo, customerCode, description, warehouse, region, statCode, info.PONumber); added {
+			totalWeight += bonusRow.LineWeightKg
+			rows = append(rows, bonusRow)
+		}
+	}
+
+	headerDescription := fmt.Sprintf("%s (Tổng trọng lượng: %s)", description, coop.FormatWeightKg(totalWeight))
+	if err := excelwriter.WriteOrderRows(p.ExcelPath, rows, headerDescription); err != nil {
+		return OrderRow{}, err
+	}
+
+	statusKind := StatusKindDone
+	statusText := StatusDone
+	if saigia > 0 {
+		statusKind = StatusKindWarning
+		statusText = fmt.Sprintf("%s - Có %d mã sai giá", StatusWarning, saigia)
+	}
+
+	return OrderRow{
+		FileName: filepath.Base(filePath), Page: pageLabel, System: system, MaKhachHang: customerCode,
+		PO: info.PONumber, DonGia: fmt.Sprintf("%.0f", totalValue), Status: statusText, StatusKind: statusKind,
+	}, nil
+}
+
+// orderNumber mirrors write_to_dondathang's order-number field: it
+// always uses the literal vendor code "COOP" (the string
+// process_coop_invoice hardcodes when calling write_to_dondathang),
+// NOT the resolved system (COOPMART/COOPFOOD) — preserve exactly.
+func orderNumber(poNumber string) string {
+	return fmt.Sprintf("ĐĐHCOOP-%s", poNumber)
+}
+
+// regionInfo mirrors write_to_dondathang's warehouse/region branching:
+// customer codes starting with "MB" (Miền Bắc) map to the Hà Nội
+// warehouse; everything else defaults to Miền Nam / Long An.
+func regionInfo(customerCode string) (region, statCode, warehouse string) {
+	if strings.HasPrefix(customerCode, "MB") {
+		return "MT_MB", "HN", "TP_HN_12"
+	}
+	return "MT_MN", "LA", "LA_TP"
+}
+
+func closeEnough(a, b float64) bool {
+	const relTol = 1e-4
+	return math.Abs(a-b) <= relTol*math.Max(math.Abs(a), math.Abs(b))
+}
+
+func buildPromoBonusRow(store *productdata.Store, promoPart string, product coop.Product, index int,
+	entryDate, cancelDate, shipTo, customerCode, description, warehouse, region, statCode, poNumber string,
+) (excelwriter.Row, bool) {
+	skus := store.FindSkusMentioned(promoPart)
+	bonusMatch := xPlus1Pattern.FindStringSubmatch(promoPart)
+	bonusQty := product.Qty
+	bonusSku := ""
+	if len(skus) > 0 {
+		bonusSku = strings.Join(skus, ", ")
+	}
+	if bonusMatch != nil {
+		x, _ := strconv.Atoi(bonusMatch[1])
+		if bonusSku == "" {
+			bonusSku = product.Barcode
+		}
+		if x >= 2 {
+			bonusQty = math.Floor(bonusQty / float64(x))
+		}
+	}
+	if bonusSku == "" {
+		return excelwriter.Row{}, false
+	}
+
+	bonusInfo, _ := store.GetProductInfo(bonusSku)
+	bonusWeight := bonusInfo.WeightKg * bonusQty
+	bonusCase := 0
+	if bonusInfo.PackSize > 0 {
+		bonusCase = int(math.Ceil(bonusQty / bonusInfo.PackSize))
+	}
+
+	bundleNote := coop.ExtractBraceContent(promoPart)
+	if bundleNote == "" {
+		bundleNote = "KM Bó Kèm - Che Barcode"
+	}
+
+	row := excelwriter.Row{
+		EntryDate: entryDate, DebtDays: coopDebtDays, OrderNumber: orderNumber(poNumber),
+		Status: "Chưa thực hiện", CancelDate: cancelDate, ShipTo: shipTo, CustomerCode: customerCode,
+		Description: description, SKU: bonusSku, Warehouse: warehouse, VATPercent: 8, RegionCode: region,
+		StatCode: statCode, IsPromoItem: true, Qty: bonusQty, ProductName: bonusInfo.Name,
+		CaseCount: bonusCase, LineWeightKg: bonusWeight, UseZFormula: false,
+	}
+	if index == 0 {
+		row.PromoNote = bundleNote
+	}
+	lower := strings.ToLower(bundleNote)
+	if strings.Contains(lower, "bó kèm") || strings.Contains(lower, "quấn kèm") {
+		row.PromoBundleSku = fmt.Sprintf("%s_%s_1", coop.LastFourDigits(product.Barcode), coop.LastFourDigits(bonusSku))
+	}
+	return row, true
+}
+
+func buildInvoiceBonusRow(store *productdata.Store, invoicePromo string, totalValue float64,
+	entryDate, cancelDate, shipTo, customerCode, description, warehouse, region, statCode, poNumber string,
+) (excelwriter.Row, bool) {
+	skus := store.FindSkusMentioned(invoicePromo)
+	amount, ok := coop.ExtractMoneyAmount(invoicePromo)
+	if !ok || amount <= 0 || len(skus) == 0 {
+		return excelwriter.Row{}, false
+	}
+	bonusQty := math.Floor(totalValue / float64(amount))
+	bonusInfo, _ := store.GetProductInfo(skus[0])
+	bonusWeight := bonusInfo.WeightKg * bonusQty
+	bonusCase := 0
+	if bonusInfo.PackSize > 0 {
+		bonusCase = int(math.Ceil(bonusQty / bonusInfo.PackSize))
+	}
+	bundleNote := coop.ExtractBraceContent(invoicePromo)
+	if bundleNote == "" {
+		bundleNote = "KM Bó Kèm - Che Barcode"
+	}
+	return excelwriter.Row{
+		EntryDate: entryDate, DebtDays: coopDebtDays, OrderNumber: orderNumber(poNumber),
+		Status: "Chưa thực hiện", CancelDate: cancelDate, ShipTo: shipTo, CustomerCode: customerCode,
+		Description: description, SKU: strings.Join(skus, ", "), Warehouse: warehouse, VATPercent: 8,
+		RegionCode: region, StatCode: statCode, IsPromoItem: true, Qty: bonusQty, ProductName: bonusInfo.Name,
+		CaseCount: bonusCase, LineWeightKg: bonusWeight, PromoNote: bundleNote, PromoContent: invoicePromo,
+		UseZFormula: false,
+	}, true
+}
