@@ -223,3 +223,88 @@ func TestRealProcessor_PromoBonusRowFieldsMatchPythonRowTarget(t *testing.T) {
 		t.Errorf("bonus row 1 PromoBundleSku = %q, want empty", got)
 	}
 }
+
+// TestRealProcessor_LotteNoBraceBonusRowUsesGiaoRoiNote regression-tests a
+// bug a Task 9 review found: processLotteSegment reaches buildPromoBonusRow
+// (shared with Coop) whenever a Lotte promo yields a bonus SKU (via an
+// "X+1" match or a known-SKU mention), but that helper's no-{...}-brace
+// fallback is Coop's own default ("KM Bó Kèm - Che Barcode", which also
+// makes it write an AP bundle-SKU on both rows — xulydonhang.py:1198's
+// "... or 'KM Bó Kèm - Che Barcode'"). Lotte's write_to_dondathang_lotte
+// has a different no-brace branch (xulydonhang.py:2204-2217: "else:
+// sheet[f'AO{current_row}'] = 'KM Giao Rời - Không Che Barcode'") that
+// never writes AP at all. None of the 60 real golden fixtures exercise
+// this path (every non-null AO in that set originates from a real {...}
+// brace), so it needed its own synthetic regression test: a promo value
+// with an "X+1" match and a known bonus SKU mention but NO {...} braces.
+func TestRealProcessor_LotteNoBraceBonusRowUsesGiaoRoiNote(t *testing.T) {
+	store, err := productdata.Load("productdata/testdata/data.xlsx")
+	if err != nil {
+		t.Fatalf("Load productdata failed: %v", err)
+	}
+	excelPath := copyTestWorkbookForProcessor(t)
+
+	// No {...} braces here on purpose — sample_lotte_order.pdf's first
+	// real product barcode is "8936156730244" (per
+	// TestRealProcessor_ProcessesRealSampleLotteFile's comment); SP0002
+	// is a known internal SKU already present in the productdata test
+	// fixture (see TestFindSkusMentioned), so it's mentioned directly
+	// rather than needing a mapped barcode.
+	const promoValue = "2+1 SP0002"
+	priceCsv := [][]string{
+		{"STT", "Mã hàng", "Tên", "Giá", "1/1-31/12"},
+		{"1", "8936156730244", "Nước giặt", "500000", promoValue},
+	}
+	pricingSource := &fixturePricingSource{index: pricing.ParseIndex(priceCsv)}
+
+	rp := &RealProcessor{Store: store, Pricing: pricingSource, ExcelPath: excelPath}
+	if _, err := rp.Process(context.Background(), "testdata/sample_lotte_order.pdf", 1); err != nil {
+		t.Fatalf("Process returned error: %v", err)
+	}
+
+	f, err := excelize.OpenFile(excelPath)
+	if err != nil {
+		t.Fatalf("failed reopening written workbook: %v", err)
+	}
+	defer f.Close()
+	sheetRows, err := f.GetRows("Don dat hang")
+	if err != nil {
+		t.Fatalf("failed reading Don dat hang rows: %v", err)
+	}
+
+	// Column indices (0-based) matching excelwriter's Q/AO/AP layout,
+	// same as TestRealProcessor_PromoBonusRowFieldsMatchPythonRowTarget.
+	const colSKU, colPromoNote, colPromoBundleSku = 16, 40, 41
+	cell := func(row []string, idx int) string {
+		if idx < len(row) {
+			return row[idx]
+		}
+		return ""
+	}
+
+	var mainRow, bonusRow []string
+	for _, row := range sheetRows {
+		switch cell(row, colSKU) {
+		case "8936156730244":
+			mainRow = row
+		case "SP0002":
+			bonusRow = row
+		}
+	}
+	if mainRow == nil || bonusRow == nil {
+		t.Fatalf("missing expected rows: main=%v bonus=%v", mainRow, bonusRow)
+	}
+
+	if got := cell(mainRow, colPromoNote); got != "KM Giao Rời - Không Che Barcode" {
+		t.Errorf("main row PromoNote (AO) = %q, want %q (Lotte's own no-brace fallback, not Coop's)", got, "KM Giao Rời - Không Che Barcode")
+	}
+	if got := cell(mainRow, colPromoBundleSku); got != "" {
+		t.Errorf("main row PromoBundleSku (AP) = %q, want empty (Lotte's no-brace branch never writes AP)", got)
+	}
+	if got := cell(bonusRow, colPromoNote); got != "" {
+		t.Errorf("bonus row PromoNote (AO) = %q, want empty (Lotte's no-brace branch never touches the bonus row's own AO)", got)
+	}
+	if got := cell(bonusRow, colPromoBundleSku); got != "" {
+		t.Errorf("bonus row PromoBundleSku (AP) = %q, want empty (Lotte's no-brace branch never writes AP)", got)
+	}
+}

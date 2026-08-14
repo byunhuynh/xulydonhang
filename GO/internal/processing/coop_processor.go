@@ -593,7 +593,7 @@ func (p *RealProcessor) processLotteSegment(filePath, text, pageLabel string) (O
 		rows = append(rows, productRow)
 		totalValue += finalPrice * qty
 
-		// Unlike Coop's write_to_dondathang_coop (xulydonhang.py:1174,
+		// Unlike Coop's write_to_dondathang (xulydonhang.py:1174,
 		// "nhieuCtkm = khuyenmai.split('|')" followed by an
 		// enumerate-loop), Lotte's write_to_dondathang_lotte
 		// (xulydonhang.py:2196-2243, the single un-looped "if kiemtra:"
@@ -620,6 +620,26 @@ func (p *RealProcessor) processLotteSegment(filePath, text, pageLabel string) (O
 		if added {
 			bonusRow.OrderNumber = lotteOrderNumber(info.PONumber) // buildPromoBonusRow hardcodes Coop's order number
 			totalWeight += bonusRow.LineWeightKg
+
+			// buildPromoBonusRow's no-brace fallback ("KM Bó Kèm - Che
+			// Barcode", which also flips isBundle true and writes AP)
+			// is Coop's own default (xulydonhang.py:1198's "... or 'KM
+			// Bó Kèm - Che Barcode'") and must stay unchanged there —
+			// Coop's AP-writing behavior in that branch is verified,
+			// already-shipped behavior from an earlier phase. Lotte's
+			// write_to_dondathang_lotte has a different no-brace
+			// branch (xulydonhang.py:2204-2217's "else:
+			// sheet[f'AO{current_row}'] = 'KM Giao Rời - Không Che
+			// Barcode'") that never writes AP at all in this case.
+			// Override the shared helper's Coop-flavored result here,
+			// scoped to Lotte only, rather than changing
+			// buildPromoBonusRow itself.
+			if coop.ExtractBraceContent(lastExaminedPromo) == "" {
+				mainRowNote = "KM Giao Rời - Không Che Barcode"
+				mainRowBundleSku = ""
+				bonusRow.PromoBundleSku = ""
+			}
+
 			rows[productRowIndex].PromoNote = mainRowNote
 			if mainRowBundleSku != "" {
 				rows[productRowIndex].PromoBundleSku = mainRowBundleSku
