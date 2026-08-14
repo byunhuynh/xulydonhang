@@ -3,6 +3,7 @@ package lotte
 import (
 	"fmt"
 	"regexp"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -109,4 +110,53 @@ func ExtractStoreName(text, poNumber string) string {
 		return ""
 	}
 	return strings.TrimSpace(lines[endIndex-1])
+}
+
+// Product is one product line extracted from a Lotte order's product
+// table. Field names mirror tachsanpham_lotte's dict keys ("Qty-Box" ->
+// QtyBox is the unit count per box; "Box Quantity" -> BoxQty is the
+// number of boxes — write_to_dondathang_lotte computes total ordered
+// quantity as QtyBox * BoxQty). "Product Code" and "Loose Quantity" are
+// captured by Python's regex but never read anywhere in
+// write_to_dondathang_lotte — omitted here (YAGNI).
+type Product struct {
+	Barcode    string
+	QtyBox     int
+	BoxQty     int
+	TotalPrice float64
+}
+
+// productLinePattern mirrors tachsanpham_lotte's regex exactly
+// (xulydonhang.py:6076): group 1 = product code (unused), group 2 =
+// barcode, group 3 = unit count ("Qty-Box"), group 4 = box quantity
+// ("Box Quantity"), group 5 = loose quantity (unused), group 6 = total
+// price.
+var productLinePattern = regexp.MustCompile(`(\d{1,2}-\d{6}-\d{3})\s+(\d{12,13})[\s\S]*?(\d+)\s+BOX\s+(\d+)\s+(\d+)\s+[\d,]+\s+([\d,]+)`)
+
+// ExtractProducts mirrors tachsanpham_lotte (xulydonhang.py:6074-6091):
+// cleans the order text down to the block between "Sply qty" and
+// "Tot add tax" (lamsachdonhang_lotte, :6405-6423 — raw lines joined
+// back with newlines, no per-line filtering), then extracts every
+// product line matching productLinePattern.
+func ExtractProducts(text string) []Product {
+	between := LinesBetween(text, "Sply qty", "Tot add tax")
+	if between == nil {
+		return nil
+	}
+	cleaned := strings.Join(between, "\n")
+
+	matches := productLinePattern.FindAllStringSubmatch(cleaned, -1)
+	products := make([]Product, 0, len(matches))
+	for _, m := range matches {
+		qtyBox, _ := strconv.Atoi(m[3])
+		boxQty, _ := strconv.Atoi(m[4])
+		totalPrice, _ := strconv.ParseFloat(strings.ReplaceAll(m[6], ",", ""), 64)
+		products = append(products, Product{
+			Barcode:    m[2],
+			QtyBox:     qtyBox,
+			BoxQty:     boxQty,
+			TotalPrice: totalPrice,
+		})
+	}
+	return products
 }
