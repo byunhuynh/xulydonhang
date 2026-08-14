@@ -2,6 +2,7 @@ package lotte
 
 import (
 	"fmt"
+	"regexp"
 	"strings"
 	"time"
 )
@@ -59,4 +60,53 @@ func ParseOrderInfo(text string) (OrderInfo, error) {
 		EntryDate: entryDate.Format("02/01/2006"),
 		StoreCode: storeCode,
 	}, nil
+}
+
+var dateLinePattern = regexp.MustCompile(`\d{1,2}/\d{1,2}/\d{4}`)
+
+// ExtractCancelDate mirrors tachcancledate_lotte (xulydonhang.py:6051-6071):
+// scans the lines between the line starting with poNumber and the line
+// "00:00", keeping only lines that contain a d/m/yyyy-shaped date,
+// joined back with a single newline. Returns "" if the (start, end)
+// markers aren't both found (LinesBetween returns nil).
+func ExtractCancelDate(text, poNumber string) string {
+	between := LinesBetween(text, poNumber, "00:00")
+	if between == nil {
+		return ""
+	}
+	var filtered []string
+	for _, line := range between {
+		if dateLinePattern.MatchString(line) {
+			filtered = append(filtered, strings.TrimSpace(line))
+		}
+	}
+	return strings.Join(filtered, "\n")
+}
+
+// ExtractStoreName mirrors laytenstore_lotte (xulydonhang.py:6565-6584)
+// exactly, including its edge-case behavior when the "DOAN TUAN ANH"
+// anchor line and the poNumber line are adjacent — in that case Python's
+// lines[end_index-1] resolves to the anchor line itself, not "".
+//
+// Not implemented via LinesBetween: that helper's returned slice can't
+// distinguish "zero lines between the markers" from "the line
+// immediately before the end marker IS the start marker itself", which
+// this function needs to tell apart to match Python exactly.
+func ExtractStoreName(text, poNumber string) string {
+	lines := strings.Split(text, "\n")
+	startIndex := -1
+	endIndex := -1
+	for i, line := range lines {
+		if startIndex == -1 && strings.HasPrefix(line, "DOAN TUAN ANH") {
+			startIndex = i
+		}
+		if strings.TrimSpace(line) == poNumber {
+			endIndex = i
+			break
+		}
+	}
+	if startIndex == -1 || endIndex == -1 || startIndex >= endIndex {
+		return ""
+	}
+	return strings.TrimSpace(lines[endIndex-1])
 }
