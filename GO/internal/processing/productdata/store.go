@@ -172,6 +172,35 @@ func (s *Store) GetCustomerCode(poLocation string) string {
 	return "Không tìm thấy"
 }
 
+// GetCustomerCodeBySuffix mirrors get_makhachhang_lotte
+// (xulydonhang.py:307-321): filters customer rows to the given system
+// (column A, case-insensitive exact match), then returns the first
+// row's column C value whose trimmed content ends with storeCode.
+// Unlike GetCustomerCode (Coop's get_makhachhang, which has a genuine
+// double-read-column-C bug preserved from Python), this reads columns A
+// and C correctly — get_makhachhang_lotte also reads column B into a
+// variable but never actually uses it in its comparison, so that read is
+// simply omitted here (dead in the original, not a behavior to
+// replicate). Returns "" (not Python's None) when nothing matches;
+// callers that need a "Không xác định" placeholder apply that
+// themselves, mirroring where Python applies it — the caller
+// (xulydonhang.py:9128-9129), not this function.
+func (s *Store) GetCustomerCodeBySuffix(system, storeCode string) string {
+	system = strings.ToUpper(strings.TrimSpace(system))
+	storeCode = strings.TrimSpace(storeCode)
+	for _, row := range s.customerRows {
+		colA, colC := row[0], row[2]
+		if strings.ToUpper(strings.TrimSpace(colA)) != system {
+			continue
+		}
+		trimmedC := strings.TrimSpace(colC)
+		if trimmedC != "" && strings.HasSuffix(trimmedC, storeCode) {
+			return trimmedC
+		}
+	}
+	return ""
+}
+
 // GetSystemForCustomer mirrors layhethong_COOP: column C -> column A.
 func (s *Store) GetSystemForCustomer(customerCode string) string {
 	customerCode = strings.TrimSpace(customerCode)

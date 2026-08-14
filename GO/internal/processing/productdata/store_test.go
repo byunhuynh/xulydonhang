@@ -103,3 +103,22 @@ func TestFindSkusMentioned(t *testing.T) {
 		t.Fatalf("FindSkusMentioned(no match) = %v, want empty", got)
 	}
 }
+
+func TestGetCustomerCodeBySuffix_MatchesLotteBySystemAndSuffix(t *testing.T) {
+	store, err := Load(testDataPath)
+	if err != nil {
+		t.Fatalf("Load returned error: %v", err)
+	}
+	if got := store.GetCustomerCodeBySuffix("LOTTE", "003"); got != "KH-LOTTE-003" {
+		t.Fatalf("GetCustomerCodeBySuffix(LOTTE, 003) = %q, want %q", got, "KH-LOTTE-003")
+	}
+	// "001" is a real suffix of the COOP row's column C ("KH-COOP-001")
+	// — querying it under system "LOTTE" must NOT cross over and match
+	// that row; the system filter must be applied first.
+	if got := store.GetCustomerCodeBySuffix("LOTTE", "001"); got != "" {
+		t.Fatalf("GetCustomerCodeBySuffix(LOTTE, 001) = %q, want empty (system filter must exclude the COOP row)", got)
+	}
+	if got := store.GetCustomerCodeBySuffix("LOTTE", "999"); got != "" {
+		t.Fatalf("GetCustomerCodeBySuffix(LOTTE, 999) = %q, want empty (no matching suffix)", got)
+	}
+}
