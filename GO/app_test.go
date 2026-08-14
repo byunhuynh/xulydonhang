@@ -28,11 +28,11 @@ type stubProcessor struct {
 	failOn string
 }
 
-func (s *stubProcessor) Process(ctx context.Context, filePath string, stt int) (processing.OrderRow, error) {
+func (s *stubProcessor) Process(ctx context.Context, filePath string, stt int) ([]processing.OrderRow, error) {
 	if filePath == s.failOn {
-		return processing.OrderRow{}, errors.New("stub failure")
+		return nil, errors.New("stub failure")
 	}
-	return processing.OrderRow{FileName: filePath, PO: "PO1", Status: processing.StatusDone}, nil
+	return []processing.OrderRow{{FileName: filePath, PO: "PO1", Status: processing.StatusDone}}, nil
 }
 
 func TestRunBatch_EmitsLogRowPerFileThenDone(t *testing.T) {

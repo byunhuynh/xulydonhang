@@ -12,6 +12,8 @@ import (
 	"order-processor/internal/config"
 	"order-processor/internal/fileset"
 	"order-processor/internal/processing"
+	"order-processor/internal/processing/pricing"
+	"order-processor/internal/processing/productdata"
 )
 
 // Emitter trừu tượng hoá runtime.EventsEmit để logic của App test được mà
@@ -42,12 +44,21 @@ type App struct {
 }
 
 // NewApp creates a new App application struct
-func NewApp() *App {
-	return &App{
-		cfg:       config.NewStore(configFileName),
-		processor: processing.NewMockProcessor(),
-		orderDir:  orderFolderName,
+func NewApp() (*App, error) {
+	store, err := productdata.Load("data.xlsx")
+	if err != nil {
+		return nil, fmt.Errorf("app: load data.xlsx: %w", err)
 	}
+
+	return &App{
+		cfg: config.NewStore(configFileName),
+		processor: &processing.RealProcessor{
+			Store:     store,
+			Pricing:   pricing.NewHTTPSource("settings.ini"),
+			ExcelPath: "dondathang_test.xlsx",
+		},
+		orderDir: orderFolderName,
+	}, nil
 }
 
 // startup is called when the app starts. The context is saved
@@ -120,7 +131,7 @@ func (a *App) runBatch(emitter Emitter, files []string, stt int) {
 
 	for _, f := range files {
 		emitter.Emit("process:log", fmt.Sprintf("Đang xử lý %s...", filepath.Base(f)))
-		row, err := a.processOne(f, current)
+		rows, err := a.processOne(f, current)
 		if err != nil {
 			emitter.Emit("process:log", fmt.Sprintf("❌ Lỗi xử lý %s: %v", filepath.Base(f), err))
 			emitter.Emit("process:row", processing.OrderRow{
@@ -131,13 +142,15 @@ func (a *App) runBatch(emitter Emitter, files []string, stt int) {
 			current++
 			continue
 		}
-		emitter.Emit("process:row", row)
-		current++
+		for _, row := range rows {
+			emitter.Emit("process:row", row)
+			current++
+		}
 	}
 	_ = a.cfg.SetSTT(current)
 }
 
-func (a *App) processOne(f string, stt int) (row processing.OrderRow, err error) {
+func (a *App) processOne(f string, stt int) (rows []processing.OrderRow, err error) {
 	defer func() {
 		if r := recover(); r != nil {
 			err = fmt.Errorf("panic: %v", r)

@@ -12,9 +12,13 @@ import (
 var assets embed.FS
 
 func main() {
-	app := NewApp()
+	app, err := NewApp()
+	if err != nil {
+		println("Error:", err.Error())
+		return
+	}
 
-	err := wails.Run(&options.App{
+	err = wails.Run(&options.App{
 		Title:     "Blue Hà Thành - Order System v3.0",
 		Width:     1100,
 		Height:    850,

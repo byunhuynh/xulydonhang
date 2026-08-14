@@ -10,10 +10,14 @@ import (
 func TestMockProcessor_ReturnsRowWithKnownVendorAndPO(t *testing.T) {
 	p := &MockProcessor{Rand: rand.New(rand.NewSource(1)), Delay: 0}
 
-	row, err := p.Process(context.Background(), "/tmp/order1.pdf", 108)
+	rows, err := p.Process(context.Background(), "/tmp/order1.pdf", 108)
 	if err != nil {
 		t.Fatalf("Process returned error: %v", err)
 	}
+	if len(rows) != 1 {
+		t.Fatalf("Process returned %d rows, want 1", len(rows))
+	}
+	row := rows[0]
 	if row.FileName != "order1.pdf" {
 		t.Fatalf("FileName = %q, want %q", row.FileName, "order1.pdf")
 	}

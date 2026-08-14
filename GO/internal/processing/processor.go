@@ -9,12 +9,13 @@ import (
 	"time"
 )
 
-// Processor biến một file đầu vào thành một OrderRow. Phase 1 chỉ có
-// MockProcessor; phase sau sẽ thêm RealProcessor implement cùng interface
-// này để parse PDF thật theo từng vendor — App.ProcessFiles và frontend
-// không cần đổi khi đó xảy ra.
+// Processor biến một file đầu vào thành một hoặc nhiều OrderRow (một file
+// Coop PDF có thể chứa nhiều đơn hàng trên cùng một trang). Phase 1 chỉ có
+// MockProcessor; RealProcessor implement cùng interface này để parse PDF
+// thật theo từng vendor — App.ProcessFiles và frontend không cần đổi khi
+// đó xảy ra.
 type Processor interface {
-	Process(ctx context.Context, filePath string, stt int) (OrderRow, error)
+	Process(ctx context.Context, filePath string, stt int) ([]OrderRow, error)
 }
 
 var mockVendors = []string{
@@ -53,11 +54,11 @@ func NewMockProcessor() *MockProcessor {
 	}
 }
 
-func (m *MockProcessor) Process(ctx context.Context, filePath string, stt int) (OrderRow, error) {
+func (m *MockProcessor) Process(ctx context.Context, filePath string, stt int) ([]OrderRow, error) {
 	select {
 	case <-time.After(m.Delay):
 	case <-ctx.Done():
-		return OrderRow{}, ctx.Err()
+		return nil, ctx.Err()
 	}
 
 	m.mu.Lock()
@@ -66,7 +67,7 @@ func (m *MockProcessor) Process(ctx context.Context, filePath string, stt int) (
 	system := mockVendors[m.Rand.Intn(len(mockVendors))]
 	outcome := mockOutcomes[m.Rand.Intn(len(mockOutcomes))]
 
-	return OrderRow{
+	return []OrderRow{{
 		FileName:    filepath.Base(filePath),
 		Page:        "1",
 		System:      system,
@@ -75,5 +76,5 @@ func (m *MockProcessor) Process(ctx context.Context, filePath string, stt int) (
 		DonGia:      fmt.Sprintf("%d", 10000+m.Rand.Intn(90000)),
 		Status:      outcome.status,
 		StatusKind:  outcome.kind,
-	}, nil
+	}}, nil
 }
