@@ -11,12 +11,13 @@ import (
 
 	"order-processor/internal/processing/coop"
 	"order-processor/internal/processing/excelwriter"
+	"order-processor/internal/processing/lotte"
 	"order-processor/internal/processing/pricing"
 	"order-processor/internal/processing/productdata"
 	"order-processor/internal/processing/vendor"
 )
 
-const coopDebtDays = 60 // songayno_MT in xulydonhang.py
+const coopDebtDays = 60 // songayno_MT in xulydonhang.py — one global constant, shared by every vendor's write function, not Coop-specific
 
 // PricingSource abstracts fetching a vendor's price/promotion data for
 // one order, so tests substitute a fixture-backed implementation instead
@@ -50,7 +51,42 @@ func (p *RealProcessor) Process(ctx context.Context, filePath string, stt int) (
 	for pageIdx, text := range pageTexts {
 		pageLabel := fmt.Sprintf("%d/%d", pageIdx+1, len(pageTexts))
 		v := vendor.Identify(text)
-		if v != "Coop" {
+
+		switch v {
+		case "Coop":
+			segments, ok := splitPageIntoPOs(text)
+			if !ok {
+				rows = append(rows, OrderRow{
+					FileName: filepath.Base(filePath), Page: pageLabel, System: "Coop",
+					Status: StatusFailed + " - không đếm khớp số đơn trên trang", StatusKind: StatusKindFailed,
+				})
+				continue
+			}
+			for segIdx, segment := range segments {
+				segLabel := fmt.Sprintf("%d/%d", segIdx+1, len(segments))
+				row, err := p.processSegment(filePath, segment, segLabel)
+				if err != nil {
+					rows = append(rows, OrderRow{
+						FileName: filepath.Base(filePath), Page: segLabel, System: "Coop",
+						Status: fmt.Sprintf("%s - %v", StatusFailed, err), StatusKind: StatusKindFailed,
+					})
+					continue
+				}
+				rows = append(rows, row)
+			}
+
+		case "Lotte":
+			row, err := p.processLotteSegment(filePath, text, pageLabel)
+			if err != nil {
+				rows = append(rows, OrderRow{
+					FileName: filepath.Base(filePath), Page: pageLabel, System: "Lotte",
+					Status: fmt.Sprintf("%s - %v", StatusFailed, err), StatusKind: StatusKindFailed,
+				})
+				continue
+			}
+			rows = append(rows, row)
+
+		default:
 			reason := "không nhận diện được nhà cung cấp"
 			if v != "" {
 				reason = "nhà cung cấp " + v + " chưa được hỗ trợ"
@@ -59,29 +95,6 @@ func (p *RealProcessor) Process(ctx context.Context, filePath string, stt int) (
 				FileName: filepath.Base(filePath), Page: pageLabel, System: v,
 				Status: StatusFailed + " - " + reason, StatusKind: StatusKindFailed,
 			})
-			continue
-		}
-
-		segments, ok := splitPageIntoPOs(text)
-		if !ok {
-			rows = append(rows, OrderRow{
-				FileName: filepath.Base(filePath), Page: pageLabel, System: "Coop",
-				Status: StatusFailed + " - không đếm khớp số đơn trên trang", StatusKind: StatusKindFailed,
-			})
-			continue
-		}
-
-		for segIdx, segment := range segments {
-			segLabel := fmt.Sprintf("%d/%d", segIdx+1, len(segments))
-			row, err := p.processSegment(filePath, segment, segLabel)
-			if err != nil {
-				rows = append(rows, OrderRow{
-					FileName: filepath.Base(filePath), Page: segLabel, System: "Coop",
-					Status: fmt.Sprintf("%s - %v", StatusFailed, err), StatusKind: StatusKindFailed,
-				})
-				continue
-			}
-			rows = append(rows, row)
 		}
 	}
 
@@ -436,4 +449,214 @@ func buildInvoiceBonusRow(store *productdata.Store, invoicePromo string, totalVa
 		CaseCount: bonusCase, LineWeightKg: bonusWeight, PromoNote: bundleNote, PromoContent: invoicePromo,
 		UseZFormula: false,
 	}, true
+}
+
+// lotteOrderNumber mirrors write_to_dondathang_lotte's order-number
+// field (xulydonhang.py:2018): f'ĐĐH{vendor}{STT_donhang_str}' where
+// vendor is the uppercased literal "LOTTE" and STT_donhang_str is
+// f"-{po_number}".
+func lotteOrderNumber(poNumber string) string {
+	return fmt.Sprintf("ĐĐHLOTTE-%s", poNumber)
+}
+
+// processLotteSegment mirrors the Lotte branch of process_file
+// (xulydonhang.py:9079-9139) plus write_to_dondathang_lotte
+// (:1968-2318). Structurally identical to processSegment's promo-
+// matching/bonus-row logic — write_to_dondathang_lotte calls the exact
+// same helper functions Coop's write_to_dondathang does
+// (find_price_by_sku, find_all_promotions_by_sku_and_time,
+// extract_discount, check_value_in_sanpham, laycachbo_khuyenmai,
+// tachtien_khuyenmai, layduoi_mahang), just with vendor="LOTTE" instead
+// of "COOPMART"/"COOPFOOD". Two confirmed differences from Coop's path:
+// (1) Lotte's promo value is used as-is — no SplitPromoText (that's
+// Coop's cm/cf-bundling convention only, write_to_dondathang_lotte never
+// calls tachkhuyenmai_coop); (2) no ShipTo-address special-casing (no
+// COOPFOOD-equivalent concept for Lotte).
+func (p *RealProcessor) processLotteSegment(filePath, text, pageLabel string) (OrderRow, error) {
+	// Normalize before handing text to the lotte package: this repo's Go
+	// PDF library (github.com/ledongthuc/pdf, unlike the PyMuPDF the
+	// original Python used) inserts spurious blank lines into
+	// GetPlainText's output for real Lotte PDFs — confirmed on the sample
+	// fixture (đơn hàng/08-2026/260727-01013-00057.pdf): raw extraction
+	// yields "", "", "", "Ord sheet", "", "2607270101300057", ... instead
+	// of PyMuPDF's clean "Ord sheet", "2607270101300057", ... with no
+	// blank lines at all. lotte.ExtractCancelDate/ExtractStoreName/
+	// ExtractProducts locate content by marker match so blank lines don't
+	// affect them, but lotte.ParseOrderInfo indexes the raw second line
+	// directly (mirroring Python's lines[1], which is only correct
+	// against PyMuPDF-shaped text) — stripping blank lines here
+	// reconstructs that exact shape without touching the already-shipped
+	// lotte package or the shared, Coop-tested extractPageTexts.
+	text = stripBlankLines(text)
+
+	info, err := lotte.ParseOrderInfo(text)
+	if err != nil {
+		return OrderRow{}, err
+	}
+
+	cancelDate := lotte.ExtractCancelDate(text, info.PONumber)
+	storeName := lotte.ExtractStoreName(text, info.PONumber)
+	shipTo := "Lotte " + storeName
+
+	products := lotte.ExtractProducts(text)
+	if len(products) == 0 {
+		return OrderRow{}, fmt.Errorf("không trích xuất được sản phẩm nào")
+	}
+
+	// get_makhachhang_lotte(store_code[1:]) — the leading digit of the
+	// 5-digit store code is dropped before matching (xulydonhang.py:9109).
+	customerCode := ""
+	if len(info.StoreCode) > 1 {
+		customerCode = p.Store.GetCustomerCodeBySuffix("LOTTE", info.StoreCode[1:])
+	}
+	if customerCode == "" {
+		customerCode = "Không xác định"
+	}
+
+	priceIndex, err := p.Pricing.FetchIndex("LOTTE")
+	if err != nil {
+		return OrderRow{}, fmt.Errorf("không tải được giá/khuyến mãi: %w", err)
+	}
+
+	region, statCode, warehouse := regionInfo(customerCode)
+	description := fmt.Sprintf("LOTTE PO%s", info.PONumber)
+
+	var rows []excelwriter.Row
+	rows = append(rows, excelwriter.Row{
+		EntryDate: info.EntryDate, DebtDays: coopDebtDays, OrderNumber: lotteOrderNumber(info.PONumber),
+		Status: "Chưa thực hiện", CancelDate: cancelDate, ShipTo: shipTo, CustomerCode: customerCode,
+		Description: description, Warehouse: warehouse, VATPercent: 8, RegionCode: region,
+		StatCode: statCode, IsNoteRow: true, ProductName: description,
+	})
+
+	saigia := 0
+	totalWeight := 0.0
+	totalValue := 0.0
+
+	for _, rawProduct := range products {
+		barcode := p.Store.ResolveSku(rawProduct.Barcode)
+		productInfo, _ := p.Store.GetProductInfo(barcode)
+		qty := float64(rawProduct.QtyBox * rawProduct.BoxQty)
+		lineWeight := productInfo.WeightKg * qty
+		caseCount := 0
+		if productInfo.PackSize > 0 {
+			caseCount = int(math.Ceil(qty / productInfo.PackSize))
+		}
+		totalWeight += lineWeight
+
+		invoicePrice := rawProduct.TotalPrice / qty
+		realPriceStr, _ := priceIndex.FindPrice(barcode)
+		realPrice, _ := strconv.ParseFloat(strings.ReplaceAll(realPriceStr, ",", ""), 64)
+
+		promos := priceIndex.FindPromotions(barcode, info.EntryDate)
+		lastExaminedPromo := ""
+		matched := false
+		finalPrice := realPrice
+
+		// No SplitPromoText here (see function doc): Lotte's promo cell
+		// is used exactly as returned, not split into cm/cf variants.
+		for _, promo := range promos {
+			value := promo.Value
+			lastExaminedPromo = value
+			if value == "" {
+				continue
+			}
+			candidatePrice := realPrice
+			if discount := coop.ExtractDiscount(value); discount != 0 {
+				candidatePrice = realPrice - (realPrice * discount / 100)
+			}
+			finalPrice = candidatePrice
+			if closeEnough(invoicePrice, candidatePrice) {
+				matched = true
+				break
+			}
+		}
+		if len(promos) == 0 && closeEnough(invoicePrice, realPrice) {
+			matched = true
+		}
+
+		productRow := excelwriter.Row{
+			EntryDate: info.EntryDate, DebtDays: coopDebtDays, OrderNumber: lotteOrderNumber(info.PONumber),
+			Status: "Chưa thực hiện", CancelDate: cancelDate, ShipTo: shipTo, CustomerCode: customerCode,
+			Description: description, SKU: barcode, Warehouse: warehouse, VATPercent: 8,
+			RegionCode: region, StatCode: statCode, Qty: qty, UnitPrice: finalPrice,
+			ProductName: productInfo.Name, CaseCount: caseCount, LineWeightKg: lineWeight, UseZFormula: true,
+			PromoContent: lastExaminedPromo,
+		}
+		if !matched {
+			productRow.PriceMismatch = true
+			productRow.InvoicePrice = invoicePrice
+			saigia++
+		}
+
+		productRowIndex := len(rows)
+		rows = append(rows, productRow)
+		totalValue += finalPrice * qty
+
+		currentRowIndex := productRowIndex
+		for i, promoPart := range strings.Split(lastExaminedPromo, "|") {
+			rows[currentRowIndex].PromoContent = lastExaminedPromo
+
+			bonusRow, mainRowNote, mainRowBundleSku, added := buildPromoBonusRow(p.Store, promoPart,
+				coop.Product{Barcode: barcode, Qty: qty}, i, info.EntryDate, cancelDate, shipTo,
+				customerCode, description, warehouse, region, statCode, info.PONumber)
+			if !added {
+				continue
+			}
+			bonusRow.OrderNumber = lotteOrderNumber(info.PONumber) // buildPromoBonusRow hardcodes Coop's order number
+			totalWeight += bonusRow.LineWeightKg
+			if i == 0 {
+				rows[productRowIndex].PromoNote = mainRowNote
+				if mainRowBundleSku != "" {
+					rows[productRowIndex].PromoBundleSku = mainRowBundleSku
+				}
+			}
+			rows = append(rows, bonusRow)
+			currentRowIndex = len(rows) - 1
+		}
+	}
+
+	if invoicePromo := priceIndex.FindInvoicePromotion(info.EntryDate); invoicePromo != "" {
+		if bonusRow, added := buildInvoiceBonusRow(p.Store, invoicePromo, totalValue, info.EntryDate, cancelDate,
+			shipTo, customerCode, description, warehouse, region, statCode, info.PONumber); added {
+			bonusRow.OrderNumber = lotteOrderNumber(info.PONumber) // buildInvoiceBonusRow hardcodes Coop's order number
+			totalWeight += bonusRow.LineWeightKg
+			rows = append(rows, bonusRow)
+		}
+	}
+
+	headerDescription := fmt.Sprintf("%s (Tổng trọng lượng: %s)", description, coop.FormatWeightKg(totalWeight))
+	if err := excelwriter.WriteOrderRows(p.ExcelPath, rows, headerDescription); err != nil {
+		return OrderRow{}, err
+	}
+
+	statusKind := StatusKindDone
+	statusText := StatusDone
+	if saigia > 0 {
+		statusKind = StatusKindWarning
+		statusText = fmt.Sprintf("%s - Có %d mã sai giá", StatusWarning, saigia)
+	}
+
+	return OrderRow{
+		FileName: filepath.Base(filePath), Page: pageLabel, System: "Lotte", MaKhachHang: customerCode,
+		PO: info.PONumber, DonGia: fmt.Sprintf("%.0f", totalValue), Status: statusText, StatusKind: statusKind,
+	}, nil
+}
+
+// stripBlankLines drops every line that is empty or all-whitespace,
+// rejoining the rest with "\n". See processLotteSegment's comment for
+// why this is needed: it reconstructs the blank-line-free shape
+// PyMuPDF's text extraction produces (and that the lotte package's
+// position-dependent parsing, ParseOrderInfo in particular, assumes)
+// from this repo's Go PDF library's GetPlainText output, which inserts
+// extra blank lines on real Lotte PDFs that PyMuPDF does not.
+func stripBlankLines(text string) string {
+	lines := strings.Split(text, "\n")
+	filtered := make([]string, 0, len(lines))
+	for _, line := range lines {
+		if strings.TrimSpace(line) != "" {
+			filtered = append(filtered, line)
+		}
+	}
+	return strings.Join(filtered, "\n")
 }
