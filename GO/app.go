@@ -85,7 +85,7 @@ func NewApp() (*App, error) {
 		processor: &processing.RealProcessor{
 			Store:     store,
 			Pricing:   pricing.NewHTTPSource(resolveRepoFile("settings.ini")),
-			ExcelPath: "dondathang_test.xlsx",
+			ExcelPath: resolveRepoFile("dondathang_test.xlsx"),
 		},
 		orderDir: orderFolderName,
 	}, nil
