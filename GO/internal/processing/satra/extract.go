@@ -2,6 +2,7 @@ package satra
 
 import (
 	"regexp"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -99,4 +100,104 @@ func ParseCancelDate(text string) (string, bool) {
 		}
 	}
 	return "", false
+}
+
+var shipToAddressPattern = regexp.MustCompile(`(?s)Địa chỉ giao hàng:\s*((?:.*\n)+?)Địa chỉ thanh toán:`)
+
+// ParseShipToAddress mirrors xulydonhang.py:9312-9314: the block of
+// lines between "Địa chỉ giao hàng:" and "Địa chỉ thanh toán:", joined
+// into one line (newlines replaced with a single space), with any
+// double-space collapsed to one.
+func ParseShipToAddress(text string) (string, bool) {
+	m := shipToAddressPattern.FindStringSubmatch(text)
+	if m == nil {
+		return "", false
+	}
+	joined := strings.TrimSpace(strings.ReplaceAll(m[1], "\n", " "))
+	return strings.ReplaceAll(joined, "  ", " "), true
+}
+
+// Product is one product line extracted from a Satra order's product
+// table.
+type Product struct {
+	Barcode    string
+	Qty        float64
+	TotalPrice float64
+}
+
+var totalCutoffPattern = regexp.MustCompile(`\bTổng cộng\b`)
+var productBlockStartPattern = regexp.MustCompile(`(?m)^\s*\d+\s+\d+\s*\n\s*(\d{13})`)
+var quantityLinePattern = regexp.MustCompile(`\b(\d{1,3}),000\b`)
+var trailingZeroCentsPattern = regexp.MustCompile(`,00$`)
+
+// ExtractProducts mirrors trichxuatsanpham_satra (xulydonhang.py:6492-6529):
+// cuts the text at the first "Tổng cộng", finds every position where a
+// line matching "STT count" is immediately followed by a 13-digit
+// barcode line, and treats each such position as the start of one
+// product's block (ending where the next one starts, or at the cutoff).
+// Within each block, spaces are stripped from every line; the first line
+// matching "N,000" (1-3 digits before the literal ",000") is the
+// quantity (with ",000" replaced by just the digits), and the line right
+// after it is the total price (with a trailing ",00" stripped). A block
+// with no quantity-shaped line, or whose price fails to parse as a
+// non-zero number, is skipped entirely.
+func ExtractProducts(text string) []Product {
+	cut := totalCutoffPattern.Split(text, 2)[0]
+	cut = strings.TrimSpace(cut)
+
+	matches := productBlockStartPattern.FindAllStringSubmatchIndex(cut, -1)
+	if matches == nil {
+		return nil
+	}
+
+	type position struct {
+		start   int
+		barcode string
+	}
+	positions := make([]position, 0, len(matches)+1)
+	for _, m := range matches {
+		positions = append(positions, position{start: m[0], barcode: cut[m[2]:m[3]]})
+	}
+	positions = append(positions, position{start: len(cut), barcode: ""})
+
+	var products []Product
+	for i := 0; i < len(positions)-1; i++ {
+		start, barcode := positions[i].start, positions[i].barcode
+		end := positions[i+1].start
+		block := strings.TrimSpace(cut[start:end])
+
+		var lines []string
+		for _, line := range strings.Split(block, "\n") {
+			line = strings.ReplaceAll(line, " ", "")
+			if line != "" {
+				lines = append(lines, line)
+			}
+		}
+
+		qtyIndex := -1
+		for i, line := range lines {
+			if quantityLinePattern.MatchString(line) {
+				qtyIndex = i
+				break
+			}
+		}
+		if qtyIndex == -1 || qtyIndex+1 >= len(lines) {
+			continue
+		}
+
+		qtyStr := quantityLinePattern.FindStringSubmatch(lines[qtyIndex])[1]
+		qty, err := strconv.ParseFloat(qtyStr, 64)
+		if err != nil {
+			continue
+		}
+
+		priceStr := trailingZeroCentsPattern.ReplaceAllString(lines[qtyIndex+1], "")
+		price, err := strconv.ParseFloat(strings.ReplaceAll(priceStr, ",", ""), 64)
+		if err != nil || price == 0 {
+			continue
+		}
+
+		products = append(products, Product{Barcode: barcode, Qty: qty, TotalPrice: price})
+	}
+	return products
 }
