@@ -7,6 +7,7 @@ import (
 	"strconv"
 	"strings"
 
+	fuzzywuzzy "github.com/paul-mannino/go-fuzzywuzzy"
 	"github.com/xuri/excelize/v2"
 )
 
@@ -275,4 +276,62 @@ func (s *Store) FindSkusMentioned(text string) []string {
 		return nil
 	}
 	return s.skuAlternation.FindAllString(text, -1)
+}
+
+var normalizeTextPattern = regexp.MustCompile(`[^a-z0-9\s]`)
+var normalizeWhitespacePattern = regexp.MustCompile(`\s+`)
+
+// NormalizeText mirrors normalize_text (xulydonhang.py:217-222) exactly:
+// lowercase, then strip every character that is not an ASCII letter,
+// digit, or whitespace (this deliberately removes Vietnamese diacritic
+// letters entirely, not just their diacritic marks — e.g. "Huệ" becomes
+// "hu", not "hue" — because Python's [^a-z0-9\s] character class only
+// allows literal ASCII a-z/0-9, and re operates on Unicode code points,
+// so any non-ASCII letter is stripped whole), then collapse runs of
+// whitespace to one space and trim.
+func NormalizeText(s string) string {
+	lower := strings.ToLower(s)
+	stripped := normalizeTextPattern.ReplaceAllString(lower, "")
+	return strings.TrimSpace(normalizeWhitespacePattern.ReplaceAllString(stripped, " "))
+}
+
+// GetCustomerCodeByFuzzyAddress mirrors laymakhachhang_satra
+// (xulydonhang.py:263-287): filters customer rows to those whose column
+// A (system), uppercased and trimmed, is a SUBSTRING of the given system
+// string (Python: `col_A.upper() in hethong` — NOT equality; preserved
+// exactly, since Satra's real call site passes the literal system name
+// itself as `hethong`, e.g. laymakhachhang_satra(diachi, "SATRA"), so a
+// column A of "SATRA" is trivially "in" it, but this is a real substring
+// check, not coincidentally equivalent to equality for every possible
+// input), then finds the row whose column D (address), both sides run
+// through NormalizeText, has the highest PartialRatio score against the
+// given address — returns that row's column C if the best score is
+// STRICTLY greater than 95, mirroring Python's `best_score > 95` (not
+// >=). Returns ("", false) if no row exceeds the threshold — mirrors
+// Python returning None; the caller applies any "Không xác định"-style
+// placeholder itself.
+func (s *Store) GetCustomerCodeByFuzzyAddress(system, address string) (string, bool) {
+	systemUpper := strings.ToUpper(system)
+	addressNorm := NormalizeText(address)
+
+	bestScore := 0
+	bestCode := ""
+	for _, row := range s.customerRows {
+		colA, colC, colD := row[0], row[2], row[3]
+		if !strings.Contains(systemUpper, strings.ToUpper(strings.TrimSpace(colA))) {
+			continue
+		}
+		if colD == "" {
+			continue
+		}
+		score := fuzzywuzzy.PartialRatio(addressNorm, NormalizeText(colD))
+		if score > bestScore {
+			bestScore = score
+			bestCode = colC
+		}
+	}
+	if bestScore > 95 {
+		return bestCode, true
+	}
+	return "", false
 }

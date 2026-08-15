@@ -104,6 +104,27 @@ func TestFindSkusMentioned(t *testing.T) {
 	}
 }
 
+func TestGetCustomerCodeByFuzzyAddress_MatchesSatraByAddress(t *testing.T) {
+	store, err := Load(testDataPath)
+	if err != nil {
+		t.Fatalf("Load returned error: %v", err)
+	}
+	// Exact match (after normalization) must resolve with a high score.
+	got, ok := store.GetCustomerCodeByFuzzyAddress("SATRA", "123 Nguyễn Huệ, Phường Bến Nghé, Quận 1, Tp.HCM, VNM")
+	if !ok || got != "MN_MT_TESTSTF" {
+		t.Fatalf("GetCustomerCodeByFuzzyAddress(SATRA, exact) = (%q, %v), want (%q, true)", got, ok, "MN_MT_TESTSTF")
+	}
+	// A wildly different address must not match (score well under the 95 threshold).
+	if _, ok := store.GetCustomerCodeByFuzzyAddress("SATRA", "999 Đường Không Tồn Tại, Xã Lạ, Tỉnh Khác"); ok {
+		t.Fatal("GetCustomerCodeByFuzzyAddress(SATRA, unrelated) = matched, want no match")
+	}
+	// System filter: querying under a system that has no rows must not match,
+	// even with the exact same address text.
+	if _, ok := store.GetCustomerCodeByFuzzyAddress("BIGC", "123 Nguyễn Huệ, Phường Bến Nghé, Quận 1, Tp.HCM, VNM"); ok {
+		t.Fatal("GetCustomerCodeByFuzzyAddress(BIGC, exact SATRA address) = matched, want no match (system filter)")
+	}
+}
+
 func TestGetCustomerCodeBySuffix_MatchesLotteBySystemAndSuffix(t *testing.T) {
 	store, err := Load(testDataPath)
 	if err != nil {
