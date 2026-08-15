@@ -18,7 +18,10 @@ import (
 // chứng"). Empty until a real, hand-verified case is found; add entries
 // here only with a comment citing the specific PDF evidence that proves
 // Python is wrong on that cell — never to silence an unexplained diff.
-// Key format: "<fixture row index>:<column>", e.g. "0:D".
+// Key format: "<source PDF filename>:<fixture row index>:<column>", e.g.
+// "260727-01013-00057.pdf:0:D". The source PDF filename is required so an
+// entry added as evidence for one specific PDF's cell doesn't silently
+// suppress the same row/column check on every other fixture too.
 var knownDivergences_Lotte = map[string]bool{}
 
 func loadFrozenLottePricingSource(t *testing.T) *fixturePricingSource {

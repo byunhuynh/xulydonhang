@@ -165,7 +165,7 @@ func compareRowsAgainstFixture(t *testing.T, excelPath string, fixture fixtureDa
 		if allowedDivergences == nil {
 			return false
 		}
-		return allowedDivergences[fmt.Sprintf("%d:%s", rowIdx, col)]
+		return allowedDivergences[fmt.Sprintf("%s:%d:%s", fixture.SourcePDF, rowIdx, col)]
 	}
 
 	for i, expectedRow := range fixture.Rows {
