@@ -45,3 +45,23 @@ func TestIdentify_RecognizesLotteByVendorTaxID(t *testing.T) {
 		})
 	}
 }
+
+func TestIdentify_RecognizesSatraByVDCode(t *testing.T) {
+	cases := []struct {
+		name string
+		text string
+		want string
+	}{
+		{"VD code form 1", "Mã số thuế: VD-00002345 Satra Group", "Satra"},
+		{"VD code form 2", "VD-00002547", "Satra"},
+		{"unrelated VD code", "VD-00009999", ""},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			got := Identify(c.text)
+			if got != c.want {
+				t.Fatalf("Identify(%q) = %q, want %q", c.text, got, c.want)
+			}
+		})
+	}
+}
