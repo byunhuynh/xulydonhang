@@ -2,8 +2,10 @@ package processing
 
 import (
 	"context"
+	"math"
 	"os"
 	"path/filepath"
+	"strconv"
 	"testing"
 
 	"github.com/xuri/excelize/v2"
@@ -306,5 +308,127 @@ func TestRealProcessor_LotteNoBraceBonusRowUsesGiaoRoiNote(t *testing.T) {
 	}
 	if got := cell(bonusRow, colPromoBundleSku); got != "" {
 		t.Errorf("bonus row PromoBundleSku (AP) = %q, want empty (Lotte's no-brace branch never writes AP)", got)
+	}
+}
+
+// TestRealProcessor_LotteInvoiceBonusRowFromFrozenPricing regression-tests
+// the invoice-level bonus-row path in processLotteSegment (buildInvoiceBonusRow,
+// reached via priceIndex.FindInvoicePromotion(info.EntryDate) — see
+// coop_processor.go's call site right after the products loop). None of
+// the 60 real Lotte golden fixtures exercise this path: every one of them
+// is dated in a range the frozen pricing sheet's "Hóa Đơn" row has no
+// matching promo column for (confirmed by inspecting
+// lotte/testdata/fixtures/_frozen_pricing.json during the final
+// whole-branch review), so it had zero test coverage even though it's the
+// same class of "Coop-authored helper reused on the Lotte path" as the
+// no-brace bonus-row case above. buildInvoiceBonusRow is shared verbatim
+// with Coop and was verified correct for Lotte against
+// xulydonhang.py:2251-2298 during that review — this test proves it, it
+// doesn't just assert a no-op.
+//
+// The synthetic price CSV gives sample_lotte_order.pdf's two real product
+// barcodes (8936156730244, 8936156730329 — see
+// TestRealProcessor_ProcessesRealSampleLotteFile) fixed prices with no
+// promo column, and a "Hóa Đơn" row with a promo active across the whole
+// year (so it covers the sample PDF's entry date, 27/07/2026) mentioning
+// SP0001, a known internal SKU already present in the productdata test
+// fixture (see TestFindSkusMentioned), with a bare 5-digit money amount
+// ExtractMoneyAmount recognizes. Rather than hardcoding an expected Qty
+// (which would require knowing the PDF's exact box quantities), this
+// reads back the actual total order value RealProcessor computed (OrderRow
+// .DonGia, which coop_processor.go sets to fmt.Sprintf("%.0f", totalValue)
+// right before the invoice-bonus check runs) and derives the expected
+// floor(totalValue/amount) from that, matching buildInvoiceBonusRow's own
+// bonusQty formula (coop_processor.go: math.Floor(totalValue/float64(amount))).
+func TestRealProcessor_LotteInvoiceBonusRowFromFrozenPricing(t *testing.T) {
+	store, err := productdata.Load("productdata/testdata/data.xlsx")
+	if err != nil {
+		t.Fatalf("Load productdata failed: %v", err)
+	}
+	excelPath := copyTestWorkbookForProcessor(t)
+
+	const invoicePromoValue = "50000 SP0001"
+	const invoicePromoAmount = 50000.0
+	priceCsv := [][]string{
+		{"STT", "Mã hàng", "Tên", "Giá", "1/1-31/12"},
+		{"1", "8936156730244", "Nước giặt", "100000", ""},
+		{"2", "8936156730329", "Nước xả", "200000", ""},
+		{"3", "Hóa Đơn", "", "0", invoicePromoValue},
+	}
+	pricingSource := &fixturePricingSource{index: pricing.ParseIndex(priceCsv)}
+
+	rp := &RealProcessor{Store: store, Pricing: pricingSource, ExcelPath: excelPath}
+	rows, err := rp.Process(context.Background(), "testdata/sample_lotte_order.pdf", 1)
+	if err != nil {
+		t.Fatalf("Process returned error: %v", err)
+	}
+	if len(rows) != 1 {
+		t.Fatalf("Process returned %d rows, want 1: %+v", len(rows), rows)
+	}
+	totalValue, err := strconv.ParseFloat(rows[0].DonGia, 64)
+	if err != nil {
+		t.Fatalf("failed parsing DonGia %q as float: %v", rows[0].DonGia, err)
+	}
+	expectedQty := math.Floor(totalValue / invoicePromoAmount)
+	if expectedQty <= 0 {
+		t.Fatalf("expectedQty = %v (from totalValue %v / amount %v), want > 0 for this test to exercise a real bonus row", expectedQty, totalValue, invoicePromoAmount)
+	}
+
+	f, err := excelize.OpenFile(excelPath)
+	if err != nil {
+		t.Fatalf("failed reopening written workbook: %v", err)
+	}
+	defer f.Close()
+	sheetRows, err := f.GetRows("Don dat hang")
+	if err != nil {
+		t.Fatalf("failed reading Don dat hang rows: %v", err)
+	}
+
+	// Column indices (0-based), same layout as
+	// TestRealProcessor_LotteNoBraceBonusRowUsesGiaoRoiNote: Q=SKU (16),
+	// U=IsPromoItem (20), X=Qty (23), Z=Thành tiền formula (25).
+	const colSKU, colIsPromoItem, colQty, colZFormula = 16, 20, 23, 25
+	cell := func(row []string, idx int) string {
+		if idx < len(row) {
+			return row[idx]
+		}
+		return ""
+	}
+
+	var bonusRow []string
+	var bonusRowNum int
+	for i, row := range sheetRows {
+		if cell(row, colSKU) == "SP0001" {
+			bonusRow = row
+			bonusRowNum = i + 1 // excelize rows are 1-indexed
+			break
+		}
+	}
+	if bonusRow == nil {
+		t.Fatalf("no row with SKU (Q) = %q found; sheet rows: %+v", "SP0001", sheetRows)
+	}
+
+	if got := cell(bonusRow, colIsPromoItem); got != "Có" {
+		t.Errorf("bonus row IsPromoItem (U) = %q, want %q", got, "Có")
+	}
+	gotQtyStr := cell(bonusRow, colQty)
+	gotQty, err := strconv.ParseFloat(gotQtyStr, 64)
+	if err != nil {
+		t.Fatalf("failed parsing Qty (X) %q as float: %v", gotQtyStr, err)
+	}
+	if gotQty != expectedQty {
+		t.Errorf("bonus row Qty (X) = %v, want %v (floor(totalValue=%v / amount=%v))", gotQty, expectedQty, totalValue, invoicePromoAmount)
+	}
+
+	gotFormula, err := f.GetCellFormula("Don dat hang", "Z"+strconv.Itoa(bonusRowNum))
+	if err != nil {
+		t.Fatalf("failed reading Z formula: %v", err)
+	}
+	if gotFormula != "" {
+		t.Errorf("bonus row Z formula = %q, want no formula (UseZFormula: false -> literal 0)", gotFormula)
+	}
+	gotZ := cell(bonusRow, 25)
+	if gotZ != "0" {
+		t.Errorf("bonus row Z literal value = %q, want %q", gotZ, "0")
 	}
 }
