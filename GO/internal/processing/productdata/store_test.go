@@ -125,6 +125,26 @@ func TestGetCustomerCodeByFuzzyAddress_MatchesSatraByAddress(t *testing.T) {
 	}
 }
 
+func TestGetCustomerCodeByFuzzyAddress_BlankColumnANeverMatches(t *testing.T) {
+	store, err := Load(testDataPath)
+	if err != nil {
+		t.Fatalf("Load returned error: %v", err)
+	}
+	// The fixture's blank-column-A row (colC="BLANK_A_TESTCODE") has a
+	// populated column D that would otherwise fuzzy-match its own address
+	// text perfectly. Mirrors Python's `if col_A and ...` truthiness guard
+	// (laymakhachhang_satra, xulydonhang.py:278): a row whose column A is
+	// blank must never match, for ANY system queried — since
+	// strings.Contains(x, "") is always true in Go, this guard must be
+	// explicit, not incidental.
+	address := "456 Le Loi, Phuong Ben Thanh, Quan 1, Tp.HCM, VNM"
+	for _, system := range []string{"SATRA", "BIGC", "COOP", ""} {
+		if got, ok := store.GetCustomerCodeByFuzzyAddress(system, address); ok {
+			t.Fatalf("GetCustomerCodeByFuzzyAddress(%q, blank-column-A address) = (%q, true), want no match", system, got)
+		}
+	}
+}
+
 func TestGetCustomerCodeBySuffix_MatchesLotteBySystemAndSuffix(t *testing.T) {
 	store, err := Load(testDataPath)
 	if err != nil {

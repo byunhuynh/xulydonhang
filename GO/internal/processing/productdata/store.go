@@ -297,19 +297,23 @@ func NormalizeText(s string) string {
 
 // GetCustomerCodeByFuzzyAddress mirrors laymakhachhang_satra
 // (xulydonhang.py:263-287): filters customer rows to those whose column
-// A (system), uppercased and trimmed, is a SUBSTRING of the given system
-// string (Python: `col_A.upper() in hethong` — NOT equality; preserved
-// exactly, since Satra's real call site passes the literal system name
-// itself as `hethong`, e.g. laymakhachhang_satra(diachi, "SATRA"), so a
-// column A of "SATRA" is trivially "in" it, but this is a real substring
-// check, not coincidentally equivalent to equality for every possible
-// input), then finds the row whose column D (address), both sides run
-// through NormalizeText, has the highest PartialRatio score against the
-// given address — returns that row's column C if the best score is
-// STRICTLY greater than 95, mirroring Python's `best_score > 95` (not
-// >=). Returns ("", false) if no row exceeds the threshold — mirrors
-// Python returning None; the caller applies any "Không xác định"-style
-// placeholder itself.
+// A (system) is non-blank (Python: `if col_A and ...` — a row with a
+// blank column A never participates, regardless of what system is being
+// searched for; without this guard, Go's strings.Contains(x, "") is
+// always true and a blank column A would wrongly pass the filter for
+// every query) AND, uppercased and trimmed, is a SUBSTRING of the given
+// system string (Python: `col_A.upper() in hethong` — NOT equality;
+// preserved exactly, since Satra's real call site passes the literal
+// system name itself as `hethong`, e.g. laymakhachhang_satra(diachi,
+// "SATRA"), so a column A of "SATRA" is trivially "in" it, but this is a
+// real substring check, not coincidentally equivalent to equality for
+// every possible input), then finds the row whose column D (address),
+// both sides run through NormalizeText, has the highest PartialRatio
+// score against the given address — returns that row's column C if the
+// best score is STRICTLY greater than 95, mirroring Python's
+// `best_score > 95` (not >=). Returns ("", false) if no row exceeds the
+// threshold — mirrors Python returning None; the caller applies any
+// "Không xác định"-style placeholder itself.
 func (s *Store) GetCustomerCodeByFuzzyAddress(system, address string) (string, bool) {
 	systemUpper := strings.ToUpper(system)
 	addressNorm := NormalizeText(address)
@@ -318,7 +322,11 @@ func (s *Store) GetCustomerCodeByFuzzyAddress(system, address string) (string, b
 	bestCode := ""
 	for _, row := range s.customerRows {
 		colA, colC, colD := row[0], row[2], row[3]
-		if !strings.Contains(systemUpper, strings.ToUpper(strings.TrimSpace(colA))) {
+		trimmedA := strings.TrimSpace(colA)
+		if trimmedA == "" {
+			continue
+		}
+		if !strings.Contains(systemUpper, strings.ToUpper(trimmedA)) {
 			continue
 		}
 		if colD == "" {
