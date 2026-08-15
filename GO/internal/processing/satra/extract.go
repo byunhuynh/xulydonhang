@@ -102,12 +102,15 @@ func ParseCancelDate(text string) (string, bool) {
 	return "", false
 }
 
-var shipToAddressPattern = regexp.MustCompile(`(?s)Địa chỉ giao hàng:\s*((?:.*\n)+?)Địa chỉ thanh toán:`)
+var shipToAddressPattern = regexp.MustCompile(`Địa chỉ giao hàng:\s*((?:.*\n)+?)Địa chỉ thanh toán:`)
 
 // ParseShipToAddress mirrors xulydonhang.py:9312-9314: the block of
 // lines between "Địa chỉ giao hàng:" and "Địa chỉ thanh toán:", joined
 // into one line (newlines replaced with a single space), with any
-// double-space collapsed to one.
+// double-space collapsed to one. The regex has NO DOTALL flag (no (?s)),
+// matching Python's re.search with no flags argument at xulydonhang.py:9311;
+// this ensures . does NOT match newline, so the lazy repetition (?:.*\n)+?
+// stops at the FIRST occurrence of the terminator, not a later one.
 func ParseShipToAddress(text string) (string, bool) {
 	m := shipToAddressPattern.FindStringSubmatch(text)
 	if m == nil {

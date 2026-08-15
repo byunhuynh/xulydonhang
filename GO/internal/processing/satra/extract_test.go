@@ -73,6 +73,24 @@ func TestParseShipToAddress_NoMatchReturnsFalse(t *testing.T) {
 	}
 }
 
+func TestParseShipToAddress_StopsAtFirstMarkerOccurrence(t *testing.T) {
+	// Regression test for the DOTALL flag bug: when the terminator marker
+	// "Địa chỉ thanh toán:" appears multiple times in the input, the regex
+	// MUST stop at the FIRST occurrence, not skip past it to a later one.
+	// This test fails if (?s) is present (lazy repetition can let . match
+	// multiple lines, causing it to jump past the first marker) and passes
+	// without (?s) (. does not match newline, so repetition stops correctly).
+	text := "Địa chỉ giao hàng:\nline1\nĐịa chỉ thanh toán:\nmiddle\nĐịa chỉ thanh toán:\nend"
+	got, ok := ParseShipToAddress(text)
+	if !ok {
+		t.Fatal("ParseShipToAddress: no match, want match")
+	}
+	want := "line1"
+	if got != want {
+		t.Fatalf("ParseShipToAddress = %q, want %q (must stop at FIRST marker occurrence, not skip past it)", got, want)
+	}
+}
+
 func TestExtractProducts_ParsesBarcodeAnchoredBlocks(t *testing.T) {
 	// Shape mirrors trichxuatsanpham_satra's expectations: a line with
 	// "N D" (STT + something) followed by a 13-digit barcode line, then
