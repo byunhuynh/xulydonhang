@@ -510,6 +510,12 @@ func (p *RealProcessor) processLotteSegment(filePath, text, pageLabel string) (O
 		customerCode = p.Store.GetCustomerCodeBySuffix("LOTTE", info.StoreCode[1:])
 	}
 	if customerCode == "" {
+		// Applied here, before any row is built — earlier and more
+		// defensively than Python, which never actually reaches a
+		// placeholder substitution on this input; it crashes first
+		// (xulydonhang.py:1992). Deliberate divergence, not a parity
+		// gap — see GetCustomerCodeBySuffix's doc comment in
+		// productdata/store.go for the full reasoning.
 		customerCode = "Không xác định"
 	}
 

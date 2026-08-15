@@ -183,8 +183,20 @@ func (s *Store) GetCustomerCode(poLocation string) string {
 // simply omitted here (dead in the original, not a behavior to
 // replicate). Returns "" (not Python's None) when nothing matches;
 // callers that need a "Không xác định" placeholder apply that
-// themselves, mirroring where Python applies it — the caller
-// (xulydonhang.py:9128-9129), not this function.
+// themselves — but this does NOT mirror where Python applies it.
+// Python's write_to_dondathang_lotte (xulydonhang.py:9128-9139) is
+// called with the raw, possibly-None store_code BEFORE any placeholder
+// substitution; the substitution only happens afterward, and only
+// feeds a UI status-table signal, never the row-building call. If
+// get_makhachhang_lotte returns None, Python crashes with an unhandled
+// TypeError inside write_to_dondathang_lotte on `makhachhang[:2] ==
+// "MB"` (xulydonhang.py:1992) before it ever reaches a placeholder. Go's
+// processLotteSegment (coop_processor.go) applies "Không xác định"
+// earlier and more defensively than Python does — before building any
+// row, so the placeholder lands in Excel column G and feeds regionInfo
+// — a deliberate, documented divergence under this plan's "correct main
+// flow, no bug-for-bug parity owed" policy, not a mirror of Python's
+// (crashing) behavior on this input.
 func (s *Store) GetCustomerCodeBySuffix(system, storeCode string) string {
 	system = strings.ToUpper(strings.TrimSpace(system))
 	storeCode = strings.TrimSpace(storeCode)
