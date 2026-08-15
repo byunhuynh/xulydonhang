@@ -73,8 +73,18 @@ func rawDateBeforeMarker(text string, blockPattern *regexp.Regexp) (string, bool
 	return strings.TrimSpace(lines[len(lines)-1]), true
 }
 
+// formatMDYtoDMYChecked parses raw as M/D/YYYY and reformats DD/MM/YYYY.
+// The reference layout "1/2/2006" (not "01/02/2006") is deliberate:
+// real Satra PDFs render single-digit months/days with no leading zero
+// (e.g. "8/3/2026"), and Python's datetime.strptime(raw, "%m/%d/%Y") —
+// the function this mirrors (xulydonhang.py:9329/9336/9346) — accepts
+// both zero-padded and non-padded numeric fields. Go's time.Parse with
+// a zero-padded reference field ("01"/"02") requires exactly two digits
+// and rejects "8/3/2026" outright, which is not equivalent to Python's
+// leniency here; "1/2/2006" accepts both widths in Go, matching
+// strptime's actual behavior.
 func formatMDYtoDMYChecked(raw string) (string, bool) {
-	t, err := time.Parse("01/02/2006", raw)
+	t, err := time.Parse("1/2/2006", raw)
 	if err != nil {
 		return "", false
 	}

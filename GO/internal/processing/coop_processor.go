@@ -87,6 +87,17 @@ func (p *RealProcessor) Process(ctx context.Context, filePath string, stt int) (
 			}
 			rows = append(rows, row)
 
+		case "Satra":
+			row, err := p.processSatraSegment(filePath, text, pageLabel)
+			if err != nil {
+				rows = append(rows, OrderRow{
+					FileName: filepath.Base(filePath), Page: pageLabel, System: "Satra",
+					Status: fmt.Sprintf("%s - %v", StatusFailed, err), StatusKind: StatusKindFailed,
+				})
+				continue
+			}
+			rows = append(rows, row)
+
 		default:
 			reason := "không nhận diện được nhà cung cấp"
 			if v != "" {
