@@ -65,3 +65,38 @@ func TestIdentify_RecognizesSatraByVDCode(t *testing.T) {
 		})
 	}
 }
+
+func TestIdentify_RecognizesBigCByCodeOrCompanyString(t *testing.T) {
+	cases := []struct {
+		name string
+		text string
+		want string
+	}{
+		{"3005382 substring", "PO Number 3005382 something else", "BigC"},
+		{"CTY TNHH DV EB, case-insensitive", "cty tnhh dv eb ThuanKieu", "BigC"},
+		{"CTY TNHH DV EB, real casing", "Header CTY TNHH DV EB Footer", "BigC"},
+		{"unrelated text", "nothing matches here", ""},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			got := Identify(c.text)
+			if got != c.want {
+				t.Fatalf("Identify(%q) = %q, want %q", c.text, got, c.want)
+			}
+		})
+	}
+}
+
+func TestIdentify_BigCCheckedBeforeLotte(t *testing.T) {
+	// A page whose text happens to contain both BigC's "3005382" marker
+	// and (hypothetically) some other vendor's marker must resolve to
+	// BigC first, matching Python's real check order (Coop -> BigC ->
+	// Lotte -> Satra -> ...). This test only has BigC's own marker
+	// available to construct with today, but documents the intent so a
+	// future vendor addition that touches this ordering notices the
+	// contract.
+	got := Identify("3005382 unrelated content")
+	if got != "BigC" {
+		t.Fatalf("Identify with BigC marker = %q, want %q", got, "BigC")
+	}
+}
