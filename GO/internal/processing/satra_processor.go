@@ -237,11 +237,10 @@ func (p *RealProcessor) processSatraSegment(filePath, text, pageLabel string) (O
 
 			bonusRow, mainRowNote, mainRowBundleSku, added := buildPromoBonusRow(p.Store, promoPart,
 				coop.Product{Barcode: barcode, Qty: qty}, i, entryDate, cancelDate, shipTo,
-				customerCode, noteText, warehouse, region, statCode, poNumber)
+				customerCode, noteText, warehouse, region, statCode, satraOrderNumber(poNumber))
 			if !added {
 				continue
 			}
-			bonusRow.OrderNumber = satraOrderNumber(poNumber) // buildPromoBonusRow hardcodes Coop's order number
 			totalWeight += bonusRow.LineWeightKg
 			if i == 0 {
 				rows[productRowIndex].PromoNote = mainRowNote
@@ -256,8 +255,7 @@ func (p *RealProcessor) processSatraSegment(filePath, text, pageLabel string) (O
 
 	if invoicePromo := priceIndex.FindInvoicePromotion(entryDate); invoicePromo != "" {
 		if bonusRow, added := buildInvoiceBonusRow(p.Store, invoicePromo, totalValue, entryDate, cancelDate,
-			shipTo, customerCode, noteText, warehouse, region, statCode, poNumber); added {
-			bonusRow.OrderNumber = satraOrderNumber(poNumber)
+			shipTo, customerCode, noteText, warehouse, region, statCode, satraOrderNumber(poNumber)); added {
 			totalWeight += bonusRow.LineWeightKg
 			rows = append(rows, bonusRow)
 		}

@@ -183,9 +183,8 @@ func (p *RealProcessor) processLotteSegment(filePath, text, pageLabel string) (O
 		// regardless of where "|" appears in it.
 		bonusRow, mainRowNote, mainRowBundleSku, added := buildPromoBonusRow(p.Store, lastExaminedPromo,
 			coop.Product{Barcode: barcode, Qty: qty}, 0, info.EntryDate, cancelDate, shipTo,
-			customerCode, description, warehouse, region, statCode, info.PONumber)
+			customerCode, description, warehouse, region, statCode, lotteOrderNumber(info.PONumber))
 		if added {
-			bonusRow.OrderNumber = lotteOrderNumber(info.PONumber) // buildPromoBonusRow hardcodes Coop's order number
 			totalWeight += bonusRow.LineWeightKg
 
 			// buildPromoBonusRow's no-brace fallback ("KM Bó Kèm - Che
@@ -217,8 +216,7 @@ func (p *RealProcessor) processLotteSegment(filePath, text, pageLabel string) (O
 
 	if invoicePromo := priceIndex.FindInvoicePromotion(info.EntryDate); invoicePromo != "" {
 		if bonusRow, added := buildInvoiceBonusRow(p.Store, invoicePromo, totalValue, info.EntryDate, cancelDate,
-			shipTo, customerCode, description, warehouse, region, statCode, info.PONumber); added {
-			bonusRow.OrderNumber = lotteOrderNumber(info.PONumber) // buildInvoiceBonusRow hardcodes Coop's order number
+			shipTo, customerCode, description, warehouse, region, statCode, lotteOrderNumber(info.PONumber)); added {
 			totalWeight += bonusRow.LineWeightKg
 			rows = append(rows, bonusRow)
 		}
