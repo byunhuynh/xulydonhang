@@ -56,8 +56,15 @@ func winmartOrderNumber(poNumber string) string {
 // Winmart's identify marker are silently skipped as "Unknown" by the
 // existing per-page dispatch loop, exactly as intended — no BigC-style
 // whole-document state is needed). The per-item promo bonus-row block
-// reuses the shared buildPromoBonusRow helper unmodified (confirmed
-// structurally identical to Coop's index==0 case) — but the
+// reuses the shared buildPromoBonusRow helper (same field mapping, same
+// "AO on product row, AP on both rows" placement, same X+1
+// quantity-divide logic as Coop's index==0 case) but overrides its
+// no-{...}-brace fallback at the call site below — see that call site's
+// own comment, and this repo's identical fix already applied to Lotte
+// (lotte_processor.go), for why the shared helper's Coop-flavored
+// default isn't a fit here. Winmart has no multi-CTKM-per-item loop
+// (xulydonhang.py's per-item block never splits khuyenmai on "|"), so
+// there is only ever one bonus attempt per item, always at index 0. The
 // invoice-level ("Hóa Đơn") bonus row does NOT reuse buildInvoiceBonusRow,
 // because Winmart's version writes only the FIRST matched SKU to column
 // Q (xulydonhang.py:4537, kiemtra[0]), not buildInvoiceBonusRow's
@@ -102,12 +109,15 @@ func (p *RealProcessor) processWinmartSegment(filePath, text, pageLabel string) 
 	// The header row's S column (xulydonhang.py:4275) re-splits the
 	// note-appended po_number on the first "-" and keeps only what's
 	// before it — for a real Winmart PO number (always plain digits,
-	// confirmed during planning) this exactly cancels the " - <note>"
-	// suffix back off, reproducing the original po_number. Faithfully
-	// ported as a literal split, not "fixed" to just reuse the original
-	// po_number directly — if a future PO number ever contains a literal
-	// "-" itself, this would truncate early, matching Python's own
-	// behavior exactly (not something to guard against here).
+	// confirmed during planning) this recovers the original po_number
+	// EXCEPT for a trailing space left over from the " - <note>"
+	// separator (e.g. "4194002858 ", not "4194002858") — Python's own
+	// `.split('-')[0]` has this exact same imprecision, so it is
+	// faithfully reproduced here, not "fixed" to trim it or to just
+	// reuse the original po_number directly. If a future PO number ever
+	// contains a literal "-" itself, this would also truncate early,
+	// again matching Python's own behavior exactly (not something to
+	// guard against here).
 	headerProductName := fmt.Sprintf("WINMART PO%s", strings.SplitN(descriptionPO, "-", 2)[0])
 
 	var rows []excelwriter.Row
@@ -211,18 +221,31 @@ func (p *RealProcessor) processWinmartSegment(filePath, text, pageLabel string) 
 		rows = append(rows, productRow)
 		totalValue += finalPrice * ouQty
 
-		// Per-item promo bonus row: confirmed structurally identical to
-		// buildPromoBonusRow's index==0 case (same field mapping, same
-		// "AO on product row, AP on both rows" placement, same X+1
-		// quantity-divide logic) — reused unmodified. Winmart has no
-		// multi-CTKM-per-item loop (xulydonhang.py's per-item block never
-		// splits khuyenmai on "|"), so there is only ever one bonus
-		// attempt per item, always at index 0.
+		// Per-item promo bonus row via the shared buildPromoBonusRow
+		// helper (see processWinmartSegment's doc comment for the general
+		// shape). write_to_dondathang_winmart's own no-brace fallback
+		// (xulydonhang.py:4477-4485's "else: sheet[f'AO{current_row}'] =
+		// 'KM Giao Rời - Không Che Barcode'") never writes AP at all —
+		// unlike buildPromoBonusRow's Coop-flavored no-brace default
+		// ("KM Bó Kèm - Che Barcode", xulydonhang.py:1198), which DOES
+		// write AP on both rows and is verified, already-shipped Coop
+		// behavior that must stay unchanged for Coop's own call site.
+		// This is the exact same divergence already fixed for Lotte
+		// (lotte_processor.go's own call site, xulydonhang.py:2204-2217)
+		// — override the shared helper's result here, scoped to Winmart
+		// only, rather than changing buildPromoBonusRow itself.
 		bonusRow, mainRowNote, mainRowBundleSku, added := buildPromoBonusRow(p.Store, khuyenmai,
 			coop.Product{Barcode: barcode, Qty: ouQty}, 0, entryDate, cancelDate, deliveryAddress,
 			customerCode, description, warehouse, region, statCode, orderNum)
 		if added {
 			totalWeight += bonusRow.LineWeightKg
+
+			if coop.ExtractBraceContent(khuyenmai) == "" {
+				mainRowNote = "KM Giao Rời - Không Che Barcode"
+				mainRowBundleSku = ""
+				bonusRow.PromoBundleSku = ""
+			}
+
 			rows[productRowIndex].PromoNote = mainRowNote
 			if mainRowBundleSku != "" {
 				rows[productRowIndex].PromoBundleSku = mainRowBundleSku

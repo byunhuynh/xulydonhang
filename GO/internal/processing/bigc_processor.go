@@ -451,7 +451,9 @@ func (p *RealProcessor) processBigcStorePage(storePageText string, priceList []b
 // (xulydonhang.py:4632-4640) and to a fetched price string — returns 0
 // on any parse failure rather than panicking, since a malformed numeric
 // field should surface as a price mismatch / zero quantity downstream,
-// not crash the whole store page.
+// not crash the whole store page. Also reused by Winmart's own numeric-
+// field parsing (xulydonhang.py:4327-4337's equivalent "strip commas,
+// coerce to float" pattern applied to OU Qty and Total Price).
 func parseNumericField(s string) float64 {
 	v, err := strconv.ParseFloat(strings.ReplaceAll(s, ",", ""), 64)
 	if err != nil {
