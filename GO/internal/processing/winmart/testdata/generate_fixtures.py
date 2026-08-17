@@ -20,6 +20,15 @@ finished writing every Winmart page in the file — each write call commits
 its rows to the sheet immediately, so the snapshot reflects the union of
 every page's rows as soon as the loop completes.
 
+4 of the 16 real Winmart PDFs found under đơn hàng/08-2026/ crash the
+real, unmodified xulydonhang.py itself with "unsupported operand
+type(s) for +=: 'float' and 'str'" inside write_to_dondathang_winmart —
+a genuine, pre-existing bug in the legacy Python system, not something
+this harness or the Go port is responsible for fixing. They are SKIPped
+with that exact error printed, not silently dropped. As of this
+writing the 4 are: 4194159303.pdf, 4194159910.pdf, 4194159918.pdf,
+4901307989.pdf — all 4 have zero golden fixture coverage.
+
 Run from the repo root:
     .venv/Scripts/python.exe GO/internal/processing/winmart/testdata/generate_fixtures.py
 """

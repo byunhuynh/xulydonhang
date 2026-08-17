@@ -22,6 +22,17 @@ import (
 // this may be needed for, and the zero-price-skip design decision that
 // may produce AO/AP divergences on real fixtures containing a zero-price
 // product as the first or second item of an order.
+//
+// Coverage gap, not a divergence: of the 16 real Winmart PDFs found
+// under đơn hàng/08-2026/ during fixture generation
+// (winmart/testdata/generate_fixtures.py), 4 have NO fixture and
+// therefore no golden coverage at all: 4194159303.pdf, 4194159910.pdf,
+// 4194159918.pdf, and 4901307989.pdf. Each crashes the real, unmodified
+// xulydonhang.py itself with "unsupported operand type(s) for +=:
+// 'float' and 'str'" inside write_to_dondathang_winmart — a genuine,
+// pre-existing bug in the legacy Python system (not something this Go
+// port introduced, reproduces, or is responsible for fixing). See
+// generate_fixtures.py's own module docstring for the same note.
 var knownDivergences_Winmart = map[string]bool{}
 
 func loadFrozenWinmartPricingSource(t *testing.T) *fixturePricingSource {

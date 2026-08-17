@@ -202,9 +202,12 @@ var horizontalWhitespaceRunPattern = regexp.MustCompile(`[ \t]+`)
 // package has no re.VERBOSE mode (which lets Python's pattern span
 // multiple source lines with embedded whitespace/comments ignored) — the
 // pattern below is the same shape with the VERBOSE-only whitespace
-// removed, functionally identical to what Python's compiled pattern
-// actually matches against real text.
-var productLinePattern = regexp.MustCompile(`(?m)^(\d+)\s*\n(\d+)\s*\n(\d+)\s*\n([\d,]+)\s*\n[A-Z0-9]{2,4}\s*\n([\d,]+)\s*\n([\d,]+)`)
+// removed, with no other change: Python's pattern has no "^" anchor and
+// is not compiled with re.MULTILINE, so a match may begin anywhere
+// (including mid-line) that the 7-field shape occurs — this pattern
+// intentionally does not add a "^"/(?m) anchor either, to stay a true,
+// unnarrowed mirror.
+var productLinePattern = regexp.MustCompile(`(\d+)\s*\n(\d+)\s*\n(\d+)\s*\n([\d,]+)\s*\n[A-Z0-9]{2,4}\s*\n([\d,]+)\s*\n([\d,]+)`)
 
 // ExtractProducts mirrors trichxuatsanpham_winmart (xulydonhang.py:6774-6805):
 // collapses runs of spaces/tabs to a single space (re.sub(r"[ \t]+", " ", text),

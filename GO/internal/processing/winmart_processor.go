@@ -49,13 +49,53 @@ func winmartOrderNumber(poNumber string) string {
 	return fmt.Sprintf("ĐĐHWINMART-%s", poNumber)
 }
 
+// winmartZeroPriceSkip mirrors the zero-price "giao rời" skip block
+// (xulydonhang.py:4299-4304). Python's condition checks an ABSOLUTE
+// sheet row number ("current_row - 2 >= 9"), which in a real production
+// sheet (always far more than 9 rows deep from prior orders) is nearly
+// always true regardless of THIS order's own row count — so a zero-price
+// item that's the very first thing processed for its own order would, in
+// Python, read/overwrite a PREVIOUS, unrelated order's AO/AP cells. This
+// port deliberately checks only THIS order's own accumulated rows
+// instead: current_row - start_row and len(rows) stay in exact lockstep
+// throughout processWinmartSegment's product loop (both start at 1 right
+// after the header row is appended, and both advance by 1 or 2 per
+// product processed, matching Python's current_row += 1 calls exactly —
+// see processWinmartSegment's own zero-price comment for the full
+// derivation), so rows[len(rows)-2] and rows[len(rows)-1] are always the
+// exact same two rows Python's current_row-2/current_row-1 would target,
+// for any len(rows) >= 2 — including the len(rows) == 2 case, where
+// rows[len(rows)-2] is this order's OWN HEADER ROW, not a cross-order
+// reach (a header-marking case real Python does perform; verified by
+// direct current_row arithmetic, not observed in any of the 12 real
+// fixtures used to validate this port). Only len(rows) < 2 (the
+// zero-price item is the very first thing processed for this order, so
+// there is no row of this order's own to mark) is the genuine
+// cross-order-reach case Python has and this port deliberately does not
+// reproduce.
+//
+// Returns true if a prior row was marked, false if there was no
+// same-order row to mark and the caller should skip cleanly.
+func winmartZeroPriceSkip(rows []excelwriter.Row) bool {
+	if len(rows) < 2 {
+		return false
+	}
+	rows[len(rows)-2].PromoNote = "KM Giao Rời - Không Che"
+	rows[len(rows)-2].PromoBundleSku = ""
+	rows[len(rows)-1].PromoBundleSku = ""
+	return true
+}
+
 // processWinmartSegment mirrors the Winmart branch of process_file
 // (xulydonhang.py:8984-9160) plus write_to_dondathang_winmart
 // (:4203-4579). Winmart is "1 page = 1 order", the same family as Coop/
-// Lotte/Satra (confirmed during planning: trailing PDF pages that lack
-// Winmart's identify marker are silently skipped as "Unknown" by the
-// existing per-page dispatch loop, exactly as intended — no BigC-style
-// whole-document state is needed). The per-item promo bonus-row block
+// Lotte/Satra (confirmed during planning: no BigC-style whole-document
+// state is needed). A trailing PDF page that lacks Winmart's identify
+// marker falls through to the shared per-page dispatch loop's default
+// case (coop_processor.go), which emits a Failed/"Thất bại" OrderRow for
+// that page — matching Python's own "❌Thất bại / Không xác định" row
+// for an unrecognized page (xulydonhang.py:9620-9625) — rather than
+// silently dropping it. The per-item promo bonus-row block
 // reuses the shared buildPromoBonusRow helper (same field mapping, same
 // "AO on product row, AP on both rows" placement, same X+1
 // quantity-divide logic as Coop's index==0 case) but overrides its
@@ -139,24 +179,11 @@ func (p *RealProcessor) processWinmartSegment(filePath, text, pageLabel string) 
 		ouQty := parseNumericField(rawProduct.OUQty)
 		totalPrice := parseNumericField(rawProduct.TotalPrice)
 
-		// Zero-price "giao rời" skip (xulydonhang.py:4299-4304): Python's
-		// condition is an ABSOLUTE sheet row number ("current_row - 2 >=
-		// 9"), which in a real production sheet is nearly always true
-		// regardless of THIS order's own row count — meaning a zero-price
-		// item that's the first or second product of its own order would
-		// read/overwrite a PREVIOUS order's AO/AP cells. This port
-		// deliberately checks only THIS order's own accumulated rows
-		// instead (see this plan's Global Constraints) — if there's no
-		// prior row in `rows` to mark (fewer than 2 rows accumulated so
-		// far, i.e. only the header row or nothing yet), skip the
-		// zero-price item cleanly rather than reaching outside this
-		// order's row set.
+		// Zero-price "giao rời" skip — see winmartZeroPriceSkip's own
+		// doc comment for the full derivation of why len(rows) >= 2 is
+		// the correct, no-cross-order-reach threshold.
 		if totalPrice == 0 {
-			if len(rows) >= 3 { // header row + at least 2 product/bonus rows already appended
-				rows[len(rows)-2].PromoNote = "KM Giao Rời - Không Che"
-				rows[len(rows)-2].PromoBundleSku = ""
-				rows[len(rows)-1].PromoBundleSku = ""
-			}
+			winmartZeroPriceSkip(rows)
 			continue
 		}
 
@@ -185,10 +212,10 @@ func (p *RealProcessor) processWinmartSegment(filePath, text, pageLabel string) 
 
 		for _, promo := range promos {
 			value := promo.Value
-			khuyenmai = value
 			if value == "" {
 				continue
 			}
+			khuyenmai = value
 			candidatePrice := realPrice
 			if discount := coop.ExtractDiscount(value); discount != 0 {
 				candidatePrice = realPrice - (realPrice * discount / 100)

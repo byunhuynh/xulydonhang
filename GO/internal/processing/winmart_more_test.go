@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/xuri/excelize/v2"
+	"order-processor/internal/processing/excelwriter"
 	"order-processor/internal/processing/pricing"
 	"order-processor/internal/processing/productdata"
 )
@@ -229,4 +230,73 @@ func TestRealProcessor_WinmartInvoiceLevelPromoBonusRow(t *testing.T) {
 			t.Errorf("found a row with SKU (Q) = %q, want none (only the first mentioned SKU, SP0001, should get an invoice bonus row)", "SP0002")
 		}
 	}
+}
+
+// TestWinmartZeroPriceSkip directly covers winmartZeroPriceSkip's
+// len(rows) threshold with synthetic rows — no PDF or regex parsing
+// needed, since the function is a pure transform on []excelwriter.Row.
+// This is the dedicated test for both branches of the zero-price "giao
+// rời" skip (this plan's design decision, see winmartZeroPriceSkip's own
+// doc comment): the skip-cleanly branch (no same-order row to mark) and
+// the mark-a-prior-row branch, including the len(rows) == 2 case (marks
+// the order's own header row) that the real 12-fixture golden corpus
+// never happens to exercise.
+func TestWinmartZeroPriceSkip(t *testing.T) {
+	t.Run("no rows: skips cleanly, no panic", func(t *testing.T) {
+		rows := []excelwriter.Row{}
+		if got := winmartZeroPriceSkip(rows); got != false {
+			t.Errorf("winmartZeroPriceSkip(empty) = %v, want false", got)
+		}
+	})
+
+	t.Run("only header row: skips cleanly, no cross-order reach", func(t *testing.T) {
+		rows := []excelwriter.Row{
+			{ProductName: "header"},
+		}
+		if got := winmartZeroPriceSkip(rows); got != false {
+			t.Errorf("winmartZeroPriceSkip(len 1) = %v, want false", got)
+		}
+		if rows[0].PromoNote != "" {
+			t.Errorf("header row PromoNote = %q, want untouched (empty) — marking it here would be a cross-order reach", rows[0].PromoNote)
+		}
+	})
+
+	t.Run("header + one product, no bonus row yet: marks the header row itself", func(t *testing.T) {
+		rows := []excelwriter.Row{
+			{ProductName: "header"},
+			{SKU: "PROD1", PromoBundleSku: "shouldbeCleared"},
+		}
+		if got := winmartZeroPriceSkip(rows); got != true {
+			t.Errorf("winmartZeroPriceSkip(len 2) = %v, want true", got)
+		}
+		if rows[0].PromoNote != "KM Giao Rời - Không Che" {
+			t.Errorf("header row (rows[0]) PromoNote = %q, want %q", rows[0].PromoNote, "KM Giao Rời - Không Che")
+		}
+		if rows[0].PromoBundleSku != "" {
+			t.Errorf("header row (rows[0]) PromoBundleSku = %q, want empty", rows[0].PromoBundleSku)
+		}
+		if rows[1].PromoBundleSku != "" {
+			t.Errorf("product row (rows[1]) PromoBundleSku = %q, want cleared to empty", rows[1].PromoBundleSku)
+		}
+	})
+
+	t.Run("header + 2+ products: marks the last two accumulated rows, not the header", func(t *testing.T) {
+		rows := []excelwriter.Row{
+			{ProductName: "header"},
+			{SKU: "PROD1"},
+			{SKU: "PROD2", PromoBundleSku: "shouldbeCleared"},
+		}
+		if got := winmartZeroPriceSkip(rows); got != true {
+			t.Errorf("winmartZeroPriceSkip(len 3) = %v, want true", got)
+		}
+		if rows[0].PromoNote != "" {
+			t.Errorf("header row (rows[0]) PromoNote = %q, want untouched (empty) — only the last 2 rows should be marked", rows[0].PromoNote)
+		}
+		if rows[1].PromoNote != "KM Giao Rời - Không Che" {
+			t.Errorf("rows[1] PromoNote = %q, want %q", rows[1].PromoNote, "KM Giao Rời - Không Che")
+		}
+		if rows[2].PromoBundleSku != "" {
+			t.Errorf("rows[2] PromoBundleSku = %q, want cleared to empty", rows[2].PromoBundleSku)
+		}
+	})
 }
