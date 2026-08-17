@@ -166,3 +166,72 @@ func TestParseFuzzyMatchAddress_NoMarkerReturnsFalse(t *testing.T) {
 		t.Fatal("ParseFuzzyMatchAddress: matched, want no match")
 	}
 }
+
+func TestExtractProducts_ParsesSevenFieldBlocks(t *testing.T) {
+	// Shape mirrors trichxuatsanpham_winmart's expectation: STT, article
+	// code, barcode, qty, unit code (2-4 uppercase letters/digits), unit
+	// price, amount -- each on its own line.
+	text := "1\n" +
+		"100234\n" +
+		"8936156731203\n" +
+		"4\n" +
+		"CS\n" +
+		"162,272\n" +
+		"649,088\n" +
+		"2\n" +
+		"100567\n" +
+		"8936156732767\n" +
+		"12\n" +
+		"PC\n" +
+		"71,600\n" +
+		"859,200\n"
+	got := ExtractProducts(text)
+	want := []Product{
+		{Barcode: "8936156731203", OUQty: "4", TotalPrice: "649088"},
+		{Barcode: "8936156732767", OUQty: "12", TotalPrice: "859200"},
+	}
+	if len(got) != len(want) {
+		t.Fatalf("ExtractProducts returned %d products, want %d: %+v", len(got), len(want), got)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("ExtractProducts()[%d] = %+v, want %+v", i, got[i], want[i])
+		}
+	}
+}
+
+func TestExtractProducts_CollapsesRunsOfSpacesAndTabsFirst(t *testing.T) {
+	// Python does re.sub(r"[ \t]+", " ", text) before matching -- confirm
+	// the Go port does the same (this does NOT collapse newlines, only
+	// horizontal whitespace runs within a line).
+	text := "1\n100234\n8936156731203\n4\nCS\n162,272\n649,088\n"
+	// Inject extra horizontal whitespace mid-line (should not break the match).
+	text = "1  \n100234\t\n8936156731203\n4\nCS\n162,272\n649,088\n"
+	got := ExtractProducts(text)
+	if len(got) != 1 || got[0].Barcode != "8936156731203" {
+		t.Fatalf("ExtractProducts(extra horizontal whitespace) = %+v, want 1 product with barcode 8936156731203", got)
+	}
+}
+
+func TestExtractProducts_NoMatchesReturnsEmpty(t *testing.T) {
+	if got := ExtractProducts("no product-shaped lines here"); len(got) != 0 {
+		t.Fatalf("ExtractProducts = %+v, want empty", got)
+	}
+}
+
+func TestExtractProducts_AcceptsJoinedMultiPageText(t *testing.T) {
+	// trichxuatsanpham_winmart accepts either a string or a list of page
+	// strings (joined with "\n" first) -- xulydonhang.py:6774-6776. This
+	// Go port only takes a single string; callers are responsible for
+	// joining multi-page text themselves before calling ExtractProducts
+	// (Task 4's processWinmartSegment operates per-page, per this plan's
+	// confirmed "1 page = 1 order" architecture, so joining is not
+	// actually needed in practice -- this test just confirms the
+	// underlying regex has no per-page assumption baked in).
+	text := "1\n100234\n8936156731203\n4\nCS\n162,272\n649,088\n" +
+		"2\n100567\n8936156732767\n12\nPC\n71,600\n859,200\n"
+	got := ExtractProducts(text)
+	if len(got) != 2 {
+		t.Fatalf("ExtractProducts(joined text) returned %d products, want 2: %+v", len(got), got)
+	}
+}

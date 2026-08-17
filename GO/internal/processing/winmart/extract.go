@@ -1,6 +1,9 @@
 package winmart
 
-import "strings"
+import (
+	"regexp"
+	"strings"
+)
 
 // ParseOrderInfo mirrors the PO-number/date/note extraction inline in
 // process_file's Winmart branch (xulydonhang.py:8989-9004ish — line-scan
@@ -175,4 +178,52 @@ func ParseFuzzyMatchAddress(text string) (string, bool) {
 		collected = append(collected, strings.TrimSpace(line))
 	}
 	return strings.Join(collected, " "), true
+}
+
+// Product is one row of Winmart's product table. Only the 3 fields
+// trichxuatsanpham_winmart actually returns (xulydonhang.py:6794-6798) —
+// "no" (STT), "article", and "unit_price" are matched by the regex but
+// deliberately discarded, matching Python's returned dict shape exactly
+// (no per-unit-price field survives extraction; Task 4 derives a unit
+// price from TotalPrice/OUQty for Winmart specifically, per the
+// giahoadon formula at xulydonhang.py:4347-4351).
+type Product struct {
+	Barcode    string
+	OUQty      string
+	TotalPrice string
+}
+
+var horizontalWhitespaceRunPattern = regexp.MustCompile(`[ \t]+`)
+
+// productLinePattern mirrors trichxuatsanpham_winmart's re.VERBOSE
+// pattern (xulydonhang.py:6779-6789) exactly: 7 fields, each on its own
+// line — STT, article code, barcode, quantity, a 2-4 character unit code
+// (uppercase letters/digits), unit price, and amount. Go's regexp
+// package has no re.VERBOSE mode (which lets Python's pattern span
+// multiple source lines with embedded whitespace/comments ignored) — the
+// pattern below is the same shape with the VERBOSE-only whitespace
+// removed, functionally identical to what Python's compiled pattern
+// actually matches against real text.
+var productLinePattern = regexp.MustCompile(`(?m)^(\d+)\s*\n(\d+)\s*\n(\d+)\s*\n([\d,]+)\s*\n[A-Z0-9]{2,4}\s*\n([\d,]+)\s*\n([\d,]+)`)
+
+// ExtractProducts mirrors trichxuatsanpham_winmart (xulydonhang.py:6774-6805):
+// collapses runs of spaces/tabs to a single space (re.sub(r"[ \t]+", " ", text),
+// NOT touching newlines), then extracts every matching 7-field block.
+// Group 1 (STT/"no"), group 2 ("article"), and group 5 ("unit_price")
+// are matched but discarded — only Barcode (group 3), OUQty (group 4,
+// commas stripped), and TotalPrice (group 6, commas stripped) survive
+// into the returned Product, exactly matching Python's returned dict
+// keys ("Barcode", "OU Qty", "Total Price").
+func ExtractProducts(text string) []Product {
+	collapsed := horizontalWhitespaceRunPattern.ReplaceAllString(text, " ")
+
+	var products []Product
+	for _, m := range productLinePattern.FindAllStringSubmatch(collapsed, -1) {
+		products = append(products, Product{
+			Barcode:    m[3],
+			OUQty:      strings.ReplaceAll(m[4], ",", ""),
+			TotalPrice: strings.ReplaceAll(m[6], ",", ""),
+		})
+	}
+	return products
 }
