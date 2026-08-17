@@ -179,6 +179,103 @@ func ExtractPriceList(pageZeroText string) []Product {
 // operator is likewise a literal substring check with no whitespace-class
 // awareness. There is no Go/Python divergence to fix (unlike
 // ExtractPriceList's \s-heavy regex above).
+var storeNamePattern = regexp.MustCompile(`(?s)(FM LOGISTIC VSIP 2|LINFOX WAREHOUSE \(802\)).*?Vietnam\s*\n(.*?)\n`)
+
+// ExtractStoreName mirrors lay_ten_store (xulydonhang.py:5878-5884): the
+// line immediately following the first "Vietnam" occurrence after the
+// warehouse name (FM LOGISTIC VSIP 2 or LINFOX WAREHOUSE (802)) on a
+// single store page. Returns ("", false) if no match — mirrors Python
+// returning None.
+//
+// IMPORTANT: Go's RE2 engine treats \s as ASCII-only whitespace, while
+// Python's re module treats \s as Unicode-aware and matches non-breaking
+// space (U+00A0 / \xa0). lay_ten_store's own pattern (xulydonhang.py:5880)
+// never strips \xa0 from its input either — it just relies on Python's
+// Unicode-aware \s to silently swallow it in "Vietnam\s*\n". This is a
+// confirmed real artifact in this project's PDF-extracted text (see
+// xulydonhang.py's demsodonhang1trang_coop, which explicitly does
+// text.replace("\xa0", " ") before further processing), and this
+// function's pattern is exposed to the same risk ParseOrderInfo's and
+// ExtractPriceList's patterns were, so this function normalizes U+00A0
+// to a regular space before matching too, for the same reason.
+func ExtractStoreName(storePageText string) (string, bool) {
+	storePageText = strings.ReplaceAll(storePageText, string(rune(0x00A0)), " ")
+	m := storeNamePattern.FindStringSubmatch(storePageText)
+	if m == nil {
+		return "", false
+	}
+	return strings.TrimSpace(m[2]), true
+}
+
+// StoreItem is one line of a single store page's item list. UnitPrice is
+// zero until JoinItemsWithPrices fills it in from the page-0 master
+// list — ExtractStoreItems alone never sets it (mirrors
+// trichxuatdanhsachforstore_bigc producing dicts with no price field at
+// all, xulydonhang.py:5906).
+type StoreItem struct {
+	Barcode        string
+	SKUOrUnit      string
+	OrderedUnitQty string
+	UnitPrice      float64
+}
+
+// storeItemPattern mirrors trichxuatdanhsachforstore_bigc's regex
+// (xulydonhang.py:5902): r"(?<=\n)(\d{13})\s*\n(.*?)\s*\nPack\s*\n\d+\s*\n(\d+)\s*\n(\d+)"
+// with re.DOTALL. Go's RE2 engine has no lookbehind support, so
+// "(?<=\n)" is replaced with "(?:^|\n)" (non-capturing, doesn't shift
+// group numbering) — equivalent for this use, since both only need to
+// confirm the barcode starts at a line boundary. Group 2 (the
+// description line between the barcode and "Pack") is matched but
+// deliberately discarded, matching Python's list comprehension only
+// keeping groups 1, 3, 4 (xulydonhang.py:5906: m[0], m[2], m[3] from a
+// 0-indexed findall tuple).
+var storeItemPattern = regexp.MustCompile(`(?s)(?:^|\n)(\d{13})\s*\n(.*?)\s*\nPack\s*\n\d+\s*\n(\d+)\s*\n(\d+)`)
+
+// ExtractStoreItems mirrors trichxuatdanhsachforstore_bigc
+// (xulydonhang.py:5900-5907).
+//
+// IMPORTANT: Go's RE2 engine treats \s as ASCII-only whitespace, while
+// Python's re module treats \s as Unicode-aware and matches non-breaking
+// space (U+00A0 / \xa0). trichxuatdanhsachforstore_bigc's own pattern
+// (xulydonhang.py:5902) never strips \xa0 from its input either — it
+// just relies on Python's Unicode-aware \s to silently swallow it across
+// its several \s* runs. This is the same confirmed real artifact
+// documented on ParseOrderInfo/ExtractPriceList/ExtractStoreName above,
+// so this function normalizes U+00A0 to a regular space before matching
+// too, for the same reason.
+func ExtractStoreItems(storePageText string) []StoreItem {
+	storePageText = strings.ReplaceAll(storePageText, string(rune(0x00A0)), " ")
+	var items []StoreItem
+	for _, m := range storeItemPattern.FindAllStringSubmatch(storePageText, -1) {
+		items = append(items, StoreItem{Barcode: m[1], SKUOrUnit: m[3], OrderedUnitQty: m[4]})
+	}
+	return items
+}
+
+// JoinItemsWithPrices mirrors ghepgia_donhangbigc (xulydonhang.py:5888-5897):
+// looks up each item's UnitPrice from the page-0 price list by barcode.
+// An item whose barcode isn't in the price list silently gets UnitPrice
+// 0 — Python's Vietnamese comment claims this "reports an error" but the
+// actual code does not; faithfully reproduced, not "fixed" — a resulting
+// 0 price surfaces downstream in bigc_processor.go as a price mismatch,
+// same as any other genuinely-zero real price would.
+//
+// No NBSP normalization here: this function does a plain map lookup by
+// barcode string, with no regex involved — no Go/Python divergence to
+// fix (same reasoning as ResolveCustomerCode above).
+func JoinItemsWithPrices(items []StoreItem, priceList []Product) []StoreItem {
+	prices := make(map[string]float64, len(priceList))
+	for _, p := range priceList {
+		prices[p.Barcode] = p.UnitPrice
+	}
+	joined := make([]StoreItem, len(items))
+	for i, item := range items {
+		item.UnitPrice = prices[item.Barcode] // zero value if not found — matches Python's dict.get(article, 0)
+		joined[i] = item
+	}
+	return joined
+}
+
 func ResolveCustomerCode(pageZeroText string) (customerCode, deliveryWarehouse string) {
 	has3006900 := strings.Contains(pageZeroText, "3006900")
 	has3005382 := strings.Contains(pageZeroText, "3005382")

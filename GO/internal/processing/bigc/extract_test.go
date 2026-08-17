@@ -197,3 +197,138 @@ func TestExtractPriceList_NonBreakingSpaceInLine(t *testing.T) {
 		t.Fatalf("ExtractPriceList(NBSP) = %+v, want %+v", got, want)
 	}
 }
+
+func TestExtractStoreName_FindsLineAfterWarehouseAndVietnam(t *testing.T) {
+	cases := []struct {
+		name string
+		text string
+		want string
+	}{
+		{"FM LOGISTIC", "header\nFM LOGISTIC VSIP 2, Binh Duong, Vietnam\nGO! DONG NAI\nfooter", "GO! DONG NAI"},
+		{"LINFOX", "header\nLINFOX WAREHOUSE (802), Hanoi, Vietnam\nGO! AN LAC\nfooter", "GO! AN LAC"},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			got, ok := ExtractStoreName(c.text)
+			if !ok || got != c.want {
+				t.Fatalf("ExtractStoreName(%q) = (%q, %v), want (%q, true)", c.text, got, ok, c.want)
+			}
+		})
+	}
+}
+
+func TestExtractStoreName_NoMatchReturnsFalse(t *testing.T) {
+	if _, ok := ExtractStoreName("no warehouse marker here"); ok {
+		t.Fatal("ExtractStoreName: matched, want no match")
+	}
+}
+
+func TestExtractStoreName_HandlesNonBreakingSpaceBeforeVietnamAndLineEnd(t *testing.T) {
+	// Go's RE2 \s is ASCII-only; Python's \s is Unicode-aware and matches
+	// U+00A0 (non-breaking space) — a confirmed real artifact in this
+	// project's PDF-extracted text (see xulydonhang.py's
+	// demsodonhang1trang_coop, which explicitly replaces "\xa0" with " ").
+	// lay_ten_store (xulydonhang.py:5878-5884) never normalizes \xa0 out
+	// of its input either — Python's Unicode-aware \s just swallows it
+	// silently in "Vietnam\s*\n" — so ExtractStoreName must normalize NBSP
+	// itself to match that (implicit) Python behavior.
+	nbsp := string(rune(0x00A0))
+	text := "header\nFM LOGISTIC VSIP 2, Binh Duong, Vietnam" + nbsp + "\nGO! DONG NAI\nfooter"
+	got, ok := ExtractStoreName(text)
+	if !ok || got != "GO! DONG NAI" {
+		t.Fatalf("ExtractStoreName(NBSP) = (%q, %v), want (%q, true)", got, ok, "GO! DONG NAI")
+	}
+}
+
+func TestExtractStoreItems_ParsesBarcodeAnchoredLines(t *testing.T) {
+	// Shape mirrors trichxuatdanhsachforstore_bigc's expectation:
+	// "<13-digit barcode>\n<description>\nPack\n<level>\n<SKU/OU>\n<qty>".
+	text := "8936156730879\nNuoc giat Blue 3.8kg\nPack\n1\n4\n20\n" +
+		"8936156730992\nNuoc xa Pink 2L\nPack\n1\n6\n12\n"
+	got := ExtractStoreItems(text)
+	want := []StoreItem{
+		{Barcode: "8936156730879", SKUOrUnit: "4", OrderedUnitQty: "20"},
+		{Barcode: "8936156730992", SKUOrUnit: "6", OrderedUnitQty: "12"},
+	}
+	if len(got) != len(want) {
+		t.Fatalf("ExtractStoreItems returned %d items, want %d: %+v", len(got), len(want), got)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("ExtractStoreItems()[%d] = %+v, want %+v", i, got[i], want[i])
+		}
+	}
+}
+
+func TestExtractStoreItems_MatchesAtStartOfTextToo(t *testing.T) {
+	// Go's port uses "(?:^|\n)" in place of Python's lookbehind
+	// "(?<=\n)" (RE2 has no lookbehind support) — confirm a barcode at
+	// the very start of the text (no preceding newline at all) still
+	// matches, same as Python's lookbehind would at position 0... wait,
+	// Python's (?<=\n) actually requires a literal preceding newline, so
+	// it would NOT match at true position 0 of the whole page text
+	// either. This test documents the Go port matches Python exactly:
+	// position 0 DOES match here because Go's "^" (no multiline flag)
+	// anchors the start of the whole string, same effective behavior as
+	// every real store page having some preceding header text before
+	// the first item line in practice. If this ever diverges from a
+	// real fixture in Task 7/8, treat Python's literal (?<=\n) as
+	// authoritative and adjust the Go pattern.
+	text := "8936156730879\nNuoc giat Blue\nPack\n1\n4\n20\n"
+	got := ExtractStoreItems(text)
+	if len(got) != 1 || got[0].Barcode != "8936156730879" {
+		t.Fatalf("ExtractStoreItems(text starting with barcode) = %+v, want 1 item with barcode 8936156730879", got)
+	}
+}
+
+func TestExtractStoreItems_NoMatchesReturnsEmpty(t *testing.T) {
+	if got := ExtractStoreItems("no item lines here"); len(got) != 0 {
+		t.Fatalf("ExtractStoreItems = %+v, want empty", got)
+	}
+}
+
+func TestExtractStoreItems_NonBreakingSpaceAroundDescriptionAndPack(t *testing.T) {
+	// Go's RE2 \s is ASCII-only; Python's \s is Unicode-aware and matches
+	// U+00A0 (non-breaking space) — a confirmed real artifact in this
+	// project's PDF-extracted text (see xulydonhang.py's
+	// demsodonhang1trang_coop, which explicitly replaces "\xa0" with " ").
+	// trichxuatdanhsachforstore_bigc (xulydonhang.py:5900-5907) never
+	// normalizes \xa0 out of its input either — Python's Unicode-aware \s
+	// just swallows it silently in the "\s*\nPack\s*\n" portions of the
+	// pattern — so ExtractStoreItems must normalize NBSP itself to match
+	// that (implicit) Python behavior.
+	nbsp := string(rune(0x00A0))
+	text := "8936156730879\nNuoc giat Blue" + nbsp + "\nPack\n1\n4\n20\n"
+	got := ExtractStoreItems(text)
+	want := []StoreItem{{Barcode: "8936156730879", SKUOrUnit: "4", OrderedUnitQty: "20"}}
+	if len(got) != 1 || got[0] != want[0] {
+		t.Fatalf("ExtractStoreItems(NBSP) = %+v, want %+v", got, want)
+	}
+}
+
+func TestJoinItemsWithPrices_LooksUpByBarcode(t *testing.T) {
+	items := []StoreItem{
+		{Barcode: "8936156730879", SKUOrUnit: "4", OrderedUnitQty: "20"},
+		{Barcode: "8936156730992", SKUOrUnit: "6", OrderedUnitQty: "12"},
+	}
+	priceList := []Product{
+		{Barcode: "8936156730879", UnitPrice: 37188},
+		{Barcode: "8936156730992", UnitPrice: 25000},
+	}
+	got := JoinItemsWithPrices(items, priceList)
+	if got[0].UnitPrice != 37188 || got[1].UnitPrice != 25000 {
+		t.Fatalf("JoinItemsWithPrices = %+v, want prices 37188 and 25000", got)
+	}
+}
+
+func TestJoinItemsWithPrices_MissingBarcodeSilentlyDefaultsToZero(t *testing.T) {
+	// Mirrors ghepgia_donhangbigc's product_dict.get(article, 0) — the
+	// Python comment claims this "reports an error" but the real code
+	// does not; port the silent-zero behavior faithfully.
+	items := []StoreItem{{Barcode: "9999999999999", SKUOrUnit: "1", OrderedUnitQty: "1"}}
+	priceList := []Product{{Barcode: "8936156730879", UnitPrice: 37188}}
+	got := JoinItemsWithPrices(items, priceList)
+	if got[0].UnitPrice != 0 {
+		t.Fatalf("JoinItemsWithPrices(unmatched barcode) = %+v, want UnitPrice 0", got)
+	}
+}
