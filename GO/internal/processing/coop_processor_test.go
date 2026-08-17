@@ -2,35 +2,12 @@ package processing
 
 import (
 	"context"
-	"os"
-	"path/filepath"
 	"testing"
 
 	"github.com/xuri/excelize/v2"
 	"order-processor/internal/processing/pricing"
 	"order-processor/internal/processing/productdata"
 )
-
-type fixturePricingSource struct {
-	index *pricing.Index
-}
-
-func (f *fixturePricingSource) FetchIndex(sheetKey string) (*pricing.Index, error) {
-	return f.index, nil
-}
-
-func copyTestWorkbookForProcessor(t *testing.T) string {
-	t.Helper()
-	data, err := os.ReadFile("testdata/dondathang.xlsx")
-	if err != nil {
-		t.Fatalf("failed reading test workbook fixture: %v", err)
-	}
-	path := filepath.Join(t.TempDir(), "dondathang.xlsx")
-	if err := os.WriteFile(path, data, 0o644); err != nil {
-		t.Fatalf("failed writing temp workbook: %v", err)
-	}
-	return path
-}
 
 func TestRealProcessor_ProcessesRealSampleCoopFile(t *testing.T) {
 	store, err := productdata.Load("productdata/testdata/data.xlsx")

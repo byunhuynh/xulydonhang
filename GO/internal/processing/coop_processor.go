@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"math"
 	"path/filepath"
-	"regexp"
 	"strconv"
 	"strings"
 
@@ -15,8 +14,6 @@ import (
 	"order-processor/internal/processing/productdata"
 	"order-processor/internal/processing/vendor"
 )
-
-const coopDebtDays = 60 // songayno_MT in xulydonhang.py — one global constant, shared by every vendor's write function, not Coop-specific
 
 // PricingSource abstracts fetching a vendor's price/promotion data for
 // one order, so tests substitute a fixture-backed implementation instead
@@ -127,10 +124,6 @@ func splitPageIntoPOs(text string) ([]string, bool) {
 	}
 	return segments, true
 }
-
-// xPlus1Pattern mirrors the "(\d+)\s*\+\s*1" match inside
-// write_to_dondathang's promo-bonus-quantity logic.
-var xPlus1Pattern = regexp.MustCompile(`(\d+)\s*\+\s*1`)
 
 func (p *RealProcessor) processSegment(filePath, text, pageLabel string) (OrderRow, error) {
 	info := coop.ParseInvoiceInfo(text)
@@ -302,7 +295,7 @@ func (p *RealProcessor) processSegment(filePath, text, pageLabel string) (OrderR
 			rows[currentRowIndex].PromoContent = lastExaminedPromo
 
 			bonusRow, mainRowNote, mainRowBundleSku, added := buildPromoBonusRow(p.Store, promoPart, product, i, entryDate, cancelDate, shipTo,
-				customerCode, description, warehouse, region, statCode, info.PONumber)
+				customerCode, description, warehouse, region, statCode, orderNumber(info.PONumber))
 			if !added {
 				continue
 			}
@@ -320,7 +313,7 @@ func (p *RealProcessor) processSegment(filePath, text, pageLabel string) (OrderR
 
 	if invoicePromo := priceIndex.FindInvoicePromotion(entryDate); invoicePromo != "" {
 		if bonusRow, added := buildInvoiceBonusRow(p.Store, invoicePromo, totalValue, entryDate, cancelDate,
-			shipTo, customerCode, description, warehouse, region, statCode, info.PONumber); added {
+			shipTo, customerCode, description, warehouse, region, statCode, orderNumber(info.PONumber)); added {
 			totalWeight += bonusRow.LineWeightKg
 			rows = append(rows, bonusRow)
 		}
@@ -350,115 +343,4 @@ func (p *RealProcessor) processSegment(filePath, text, pageLabel string) (OrderR
 // NOT the resolved system (COOPMART/COOPFOOD) — preserve exactly.
 func orderNumber(poNumber string) string {
 	return fmt.Sprintf("ĐĐHCOOP-%s", poNumber)
-}
-
-// regionInfo mirrors write_to_dondathang's warehouse/region branching:
-// customer codes starting with "MB" (Miền Bắc) map to the Hà Nội
-// warehouse; everything else defaults to Miền Nam / Long An.
-func regionInfo(customerCode string) (region, statCode, warehouse string) {
-	if strings.HasPrefix(customerCode, "MB") {
-		return "MT_MB", "HN", "TP_HN_12"
-	}
-	return "MT_MN", "LA", "LA_TP"
-}
-
-func closeEnough(a, b float64) bool {
-	const relTol = 1e-4
-	return math.Abs(a-b) <= relTol*math.Max(math.Abs(a), math.Abs(b))
-}
-
-func buildPromoBonusRow(store *productdata.Store, promoPart string, product coop.Product, index int,
-	entryDate, cancelDate, shipTo, customerCode, description, warehouse, region, statCode, poNumber string,
-) (row excelwriter.Row, mainRowNote string, mainRowBundleSku string, added bool) {
-	skus := store.FindSkusMentioned(promoPart)
-	bonusMatch := xPlus1Pattern.FindStringSubmatch(promoPart)
-	bonusQty := product.Qty
-	bonusSku := ""
-	if len(skus) > 0 {
-		bonusSku = strings.Join(skus, ", ")
-	}
-	if bonusMatch != nil {
-		x, _ := strconv.Atoi(bonusMatch[1])
-		if bonusSku == "" {
-			bonusSku = product.Barcode
-		}
-		if x >= 2 {
-			bonusQty = math.Floor(bonusQty / float64(x))
-		}
-	}
-	if bonusSku == "" {
-		return excelwriter.Row{}, "", "", false
-	}
-
-	bonusInfo, _ := store.GetProductInfo(bonusSku)
-	bonusWeight := bonusInfo.WeightKg * bonusQty
-	bonusCase := 0
-	if bonusInfo.PackSize > 0 {
-		bonusCase = int(math.Ceil(bonusQty / bonusInfo.PackSize))
-	}
-
-	bundleNote := coop.ExtractBraceContent(promoPart)
-	if bundleNote == "" {
-		bundleNote = "KM Bó Kèm - Che Barcode"
-	}
-	lower := strings.ToLower(bundleNote)
-	isBundle := strings.Contains(lower, "bó kèm") || strings.Contains(lower, "quấn kèm")
-	bundleSkuValue := ""
-	if isBundle {
-		bundleSkuValue = fmt.Sprintf("%s_%s_1", coop.LastFourDigits(product.Barcode), coop.LastFourDigits(bonusSku))
-	}
-
-	row = excelwriter.Row{
-		EntryDate: entryDate, DebtDays: coopDebtDays, OrderNumber: orderNumber(poNumber),
-		Status: "Chưa thực hiện", CancelDate: cancelDate, ShipTo: shipTo, CustomerCode: customerCode,
-		Description: description, SKU: bonusSku, Warehouse: warehouse, VATPercent: 8, RegionCode: region,
-		StatCode: statCode, IsPromoItem: true, Qty: bonusQty, ProductName: bonusInfo.Name,
-		CaseCount: bonusCase, LineWeightKg: bonusWeight, UseZFormula: false,
-	}
-	if isBundle {
-		row.PromoBundleSku = bundleSkuValue
-	}
-
-	if index == 0 {
-		// Python (xulydonhang.py:1201) writes the first promo item's AO
-		// note onto the MAIN PRODUCT ROW, not this bonus row; AP goes
-		// onto both the main row and this bonus row (already set above).
-		mainRowNote = bundleNote
-		mainRowBundleSku = bundleSkuValue
-	} else {
-		// Python (xulydonhang.py:1211) writes AO for i>0 onto that
-		// item's own bonus row.
-		row.PromoNote = bundleNote
-	}
-
-	return row, mainRowNote, mainRowBundleSku, true
-}
-
-func buildInvoiceBonusRow(store *productdata.Store, invoicePromo string, totalValue float64,
-	entryDate, cancelDate, shipTo, customerCode, description, warehouse, region, statCode, poNumber string,
-) (excelwriter.Row, bool) {
-	skus := store.FindSkusMentioned(invoicePromo)
-	amount, ok := coop.ExtractMoneyAmount(invoicePromo)
-	if !ok || amount <= 0 || len(skus) == 0 {
-		return excelwriter.Row{}, false
-	}
-	bonusQty := math.Floor(totalValue / float64(amount))
-	bonusInfo, _ := store.GetProductInfo(skus[0])
-	bonusWeight := bonusInfo.WeightKg * bonusQty
-	bonusCase := 0
-	if bonusInfo.PackSize > 0 {
-		bonusCase = int(math.Ceil(bonusQty / bonusInfo.PackSize))
-	}
-	bundleNote := coop.ExtractBraceContent(invoicePromo)
-	if bundleNote == "" {
-		bundleNote = "KM Bó Kèm - Che Barcode"
-	}
-	return excelwriter.Row{
-		EntryDate: entryDate, DebtDays: coopDebtDays, OrderNumber: orderNumber(poNumber),
-		Status: "Chưa thực hiện", CancelDate: cancelDate, ShipTo: shipTo, CustomerCode: customerCode,
-		Description: description, SKU: strings.Join(skus, ", "), Warehouse: warehouse, VATPercent: 8,
-		RegionCode: region, StatCode: statCode, IsPromoItem: true, Qty: bonusQty, ProductName: bonusInfo.Name,
-		CaseCount: bonusCase, LineWeightKg: bonusWeight, PromoNote: bundleNote, PromoContent: invoicePromo,
-		UseZFormula: false,
-	}, true
 }

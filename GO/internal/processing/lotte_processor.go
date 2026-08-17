@@ -241,21 +241,3 @@ func (p *RealProcessor) processLotteSegment(filePath, text, pageLabel string) (O
 		PO: info.PONumber, DonGia: fmt.Sprintf("%.0f", totalValue), Status: statusText, StatusKind: statusKind,
 	}, nil
 }
-
-// stripBlankLines drops every line that is empty or all-whitespace,
-// rejoining the rest with "\n". See processLotteSegment's comment for
-// why this is needed: it reconstructs the blank-line-free shape
-// PyMuPDF's text extraction produces (and that the lotte package's
-// position-dependent parsing, ParseOrderInfo in particular, assumes)
-// from this repo's Go PDF library's GetPlainText output, which inserts
-// extra blank lines on real Lotte PDFs that PyMuPDF does not.
-func stripBlankLines(text string) string {
-	lines := strings.Split(text, "\n")
-	filtered := make([]string, 0, len(lines))
-	for _, line := range lines {
-		if strings.TrimSpace(line) != "" {
-			filtered = append(filtered, line)
-		}
-	}
-	return strings.Join(filtered, "\n")
-}
