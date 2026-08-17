@@ -213,7 +213,20 @@ func (p *RealProcessor) processBigcStorePage(storePageText string, priceList []b
 
 	for _, item := range items {
 		barcode := p.Store.ResolveSku(item.Barcode)
-		productInfo, _ := p.Store.GetProductInfo(barcode)
+		// xulydonhang.py:4606-4607: `if timten_sanpham(item["Barcode"]) ==
+		// "Không thấy tên sản phẩm": continue` — skip the item entirely (no
+		// row, no weight/tongtien/saigia contribution) when its resolved
+		// barcode doesn't match a known product. Checked against
+		// item["Barcode"] AFTER Python's earlier replace_sku_numbers pass
+		// (xulydonhang.py:4564), i.e. the already-resolved barcode —
+		// mirrored here by checking `found` right after ResolveSku, not
+		// against the raw item.Barcode. This exact "not found -> continue"
+		// check exists at only one other place in the whole Python file —
+		// genuinely BigC-specific, no Coop/Lotte/Satra counterpart.
+		productInfo, found := p.Store.GetProductInfo(barcode)
+		if !found {
+			continue
+		}
 
 		skuOU := parseNumericField(item.SKUOrUnit)
 		ouQty := parseNumericField(item.OrderedUnitQty)
@@ -235,25 +248,25 @@ func (p *RealProcessor) processBigcStorePage(storePageText string, priceList []b
 			if promo.Value == "" {
 				continue
 			}
-			// Normalize literal CR to LF here, matching Python's
-			// actual EFFECTIVE output for this column rather than its
-			// raw fetch. Root cause (confirmed by hand-tracing the
-			// xlsx XML): openpyxl silently normalizes '\r' -> '\n' (and
-			// '\r\n' -> '\n\n') on the write/read round-trip that Task
-			// 7's fixture-generation harness performs when it captures
-			// promo text into the frozen golden fixtures — Go's
+			// Normalize literal CR to LF here, matching Python's actual
+			// EFFECTIVE output for this column rather than its raw fetch.
+			// Root cause (confirmed by hand-tracing the xlsx XML): openpyxl
+			// silently normalizes '\r' -> '\n' (and '\r\n' -> '\n\n') on
+			// ANY write/read round-trip through an .xlsx file — Go's
 			// excelize instead escapes '\r' as "&#xD;", which survives
-			// untouched, so without this normalization Go's AQ output
-			// (raw CR preserved) diverges from Python's fixture-
-			// captured AQ output (CR silently mangled to LF) even
-			// though both started from the identical raw CSV cell
-			// value. This is a BigC-fixture-capture-path artifact, not
-			// a live-fetch-timing issue — see bigc_golden_test.go's
-			// former Category C comment / task-8-report.md Fix Round 1
-			// for the full investigation. Scoped to BigC only: applying
-			// it here (not in the shared excelwriter write site) avoids
-			// touching Coop/Lotte/Satra, whose golden tests already
-			// pass without this normalization.
+			// untouched. This is a genuine behavioral difference between
+			// the two libraries' CR-handling, not merely a quirk of how
+			// Task 7's fixture-generation harness captures golden fixtures:
+			// the SAME openpyxl round-trip happens in the real production
+			// app too, so production Python's real dondathang.xlsx output
+			// ALSO silently mangles bare '\r' to '\n'. Normalizing here
+			// therefore makes Go match Python's actual effective behavior
+			// in BOTH the test-fixture-capture path AND real production
+			// output, not just the test. Scoped to BigC only: applying it
+			// here (not in the shared excelwriter write site) avoids
+			// touching Coop/Lotte/Satra, whose golden tests already pass
+			// without this normalization — moving it to the shared layer is
+			// a deliberately deferred, larger architectural change.
 			khuyenmai = strings.ReplaceAll(promo.Value, "\r", "\n")
 			if discount := coop.ExtractDiscount(promo.Value); discount != 0 {
 				// xulydonhang.py:4685 recomputes from the ORIGINAL
@@ -327,7 +340,7 @@ func (p *RealProcessor) processBigcStorePage(storePageText string, priceList []b
 					// observed in any of the 29 real fixtures (cachbokem
 					// is always empty for BigC's actual promo data), but
 					// ported for fidelity in case it's ever hit.
-					promoBundleSku = fmt.Sprintf("%s_%s_1", layduoiMahang(barcode), layduoiMahang(bonusBarcode))
+					promoBundleSku = fmt.Sprintf("%s_%s_1", coop.LastFourDigits(barcode), coop.LastFourDigits(bonusBarcode))
 				}
 			} else {
 				// BigC's per-item no-brace fallback text is genuinely
@@ -371,6 +384,65 @@ func (p *RealProcessor) processBigcStorePage(storePageText string, priceList []b
 		}
 	}
 
+	// Invoice-level ("Hóa Đơn") promo bonus row (xulydonhang.py:4810-4848).
+	// Unlike the per-item bonus row above, this is checked ONCE PER STORE
+	// PAGE using THIS page's own local tongtien/weightKg accumulators —
+	// write_to_dondathang_bigc is called once per store page, each with
+	// its own tongtien reset to 0 at the top of the call
+	// (xulydonhang.py:4565-4566), so this block genuinely differs in
+	// scope from Coop/Lotte/Satra's buildInvoiceBonusRow (processor_shared.go),
+	// which checks this once for the whole order. Reuses
+	// priceIndex.FindInvoicePromotion, matching
+	// find_all_promotions_by_sku_and_time("Hóa Đơn", entry_date, vendor)
+	// + take the first match's value (kmhoadon[0][1]) exactly.
+	if invoicePromo := priceIndex.FindInvoicePromotion(entryDate); invoicePromo != "" {
+		// Same CR normalization as the per-item khuyenmai above, same root
+		// cause (openpyxl's write/read round-trip silently turns '\r' into
+		// '\n') — applied before every downstream use, mirroring the
+		// per-item block's own ordering.
+		invoicePromo = strings.ReplaceAll(invoicePromo, "\r", "\n")
+
+		// kiemtra[0] (xulydonhang.py:4826): Python writes ONLY the FIRST
+		// mentioned SKU to column Q here — deliberately NOT the
+		// comma-joined list buildInvoiceBonusRow uses for Coop/Lotte/Satra.
+		// Confirmed real difference, do not "fix" this to match the shared
+		// helper's shape.
+		invoiceSkus := p.Store.FindSkusMentioned(invoicePromo)
+		amount, amountOK := coop.ExtractMoneyAmount(invoicePromo)
+
+		// Python has no guard before indexing kiemtra[0] or dividing by
+		// tachtien_khuyenmai(kmhoadon) here — an empty SKU match or an
+		// unparseable money amount would raise in real Python. Skipping
+		// cleanly instead of replicating an undefined crash, per this
+		// port's error-handling policy.
+		if len(invoiceSkus) > 0 && amountOK && amount > 0 {
+			bonusSKU := invoiceSkus[0]
+			bonusQty := math.Floor(tongtien / float64(amount))
+			bonusInfo, _ := p.Store.GetProductInfo(bonusSKU)
+			bonusWeight := bonusInfo.WeightKg * bonusQty
+			weightKg += bonusWeight
+
+			// laycachbo_khuyenmai(kmhoadon), falling back to the SAME
+			// default text Coop/Satra use ("KM Bó Kèm - Che Barcode",
+			// xulydonhang.py:4845) — NOT this file's per-item fallback
+			// ("KM Rời - Không Che Barcode"), which is a different branch
+			// entirely and stays untouched.
+			promoNote := coop.ExtractBraceContent(invoicePromo)
+			if promoNote == "" {
+				promoNote = "KM Bó Kèm - Che Barcode"
+			}
+
+			rows = append(rows, excelwriter.Row{
+				EntryDate: entryDate, DebtDays: coopDebtDays, OrderNumber: orderNum,
+				Status: "Chưa thực hiện", CancelDate: cancelDate, ShipTo: shipTo, CustomerCode: customerCode,
+				Description: description, SKU: bonusSKU, Warehouse: warehouse, VATPercent: 8,
+				RegionCode: region, StatCode: statCode, IsPromoItem: true, Qty: bonusQty,
+				ProductName: bonusInfo.Name, LineWeightKg: bonusWeight, PromoNote: promoNote,
+				PromoContent: invoicePromo, UseZFormula: false, NoCaseCount: true,
+			})
+		}
+	}
+
 	return storePageResult{rows: rows, weightKg: weightKg, saigia: saigia, tongtien: tongtien}
 }
 
@@ -386,16 +458,4 @@ func parseNumericField(s string) float64 {
 		return 0
 	}
 	return v
-}
-
-// layduoiMahang mirrors layduoi_mahang(text) (xulydonhang.py:885-887):
-// split on "_", take the part before the first underscore, then return
-// its last 4 characters (fewer if the string is shorter).
-func layduoiMahang(text string) string {
-	base := strings.SplitN(text, "_", 2)[0]
-	r := []rune(base)
-	if len(r) <= 4 {
-		return base
-	}
-	return string(r[len(r)-4:])
 }

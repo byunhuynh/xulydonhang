@@ -6,6 +6,7 @@ import (
 
 	"github.com/xuri/excelize/v2"
 
+	"order-processor/internal/processing/bigc"
 	"order-processor/internal/processing/pricing"
 	"order-processor/internal/processing/productdata"
 )
@@ -17,9 +18,17 @@ func TestRealProcessor_ProcessesRealSampleBigcFile(t *testing.T) {
 	}
 	excelPath := copyTestWorkbookForProcessor(t)
 
-	// Empty price index on purpose: this file's real barcodes aren't in
-	// the small test fixture, so products are expected to come back as
-	// price mismatches (Warning), not Done.
+	// Empty price index on purpose. This file's real barcodes also aren't
+	// in the small test fixture's product database (only synthetic
+	// SP0001/SP0002/BigC-test entries) — with the xulydonhang.py:4606-4607
+	// "skip item if product name not found" guard (bigc_processor.go),
+	// every real item on every page is therefore filtered out before it
+	// can ever reach price matching, leaving each page with zero saigia
+	// and Done status rather than Warning. Real-data correctness
+	// (including genuine price mismatches) is covered exhaustively by
+	// TestRealProcessor_MatchesGoldenFixtures_BigC, which loads the real
+	// production data.xlsx; this test only exercises PDF text extraction
+	// end-to-end.
 	pricingSource := &fixturePricingSource{index: pricing.ParseIndex(nil)}
 
 	rp := &RealProcessor{Store: store, Pricing: pricingSource, ExcelPath: excelPath}
@@ -42,8 +51,8 @@ func TestRealProcessor_ProcessesRealSampleBigcFile(t *testing.T) {
 		if row.PO != "2631057733376" {
 			t.Fatalf("rows[%d].PO = %q, want %q", i, row.PO, "2631057733376")
 		}
-		if row.StatusKind != StatusKindWarning {
-			t.Fatalf("rows[%d].StatusKind = %v, want %v (empty price index -> every product mismatches)", i, row.StatusKind, StatusKindWarning)
+		if row.StatusKind != StatusKindDone {
+			t.Fatalf("rows[%d].StatusKind = %v, want %v (test fixture's product database has none of this file's real barcodes -> every item skipped by the not-found guard -> no mismatches possible)", i, row.StatusKind, StatusKindDone)
 		}
 	}
 }
@@ -207,5 +216,188 @@ func TestRealProcessor_ProcessesBigcDocument_IsolatesPerPageErrors(t *testing.T)
 	}
 	if !hasSKU("8934563112230") {
 		t.Errorf("written sheet is missing store 3's item SKU 8934563112230 — a mid-file failure must not block later successful pages' rows from landing in the combined write; new rows' SKUs: %v", skuValues)
+	}
+}
+
+// TestRealProcessor_BigcInvoiceLevelPromoBonusRow covers the invoice-level
+// ("Hóa Đơn") promo bonus row that write_to_dondathang_bigc adds once per
+// store page (xulydonhang.py:4810-4848) — a real feature gap this Go port
+// initially missed entirely (see bigc_processor.go's block right after
+// the per-item loop in processBigcStorePage). None of the 29 real BigC
+// golden fixtures exercise this path (no "Hóa Đơn" row in the real
+// pricing sheet on any fixture's entry date), so it needs a synthetic
+// priceIndex built directly via pricing.ParseIndex, following the same
+// pattern as TestRealProcessor_LotteInvoiceBonusRowFromFrozenPricing
+// (lotte_processor_test.go).
+//
+// productdata/testdata/data.xlsx carries two rows added specifically for
+// BigC tests, keyed directly by 13-digit barcode (no sku_mapping
+// indirection needed): "8934563112223" -> BigC Test Product A (weight
+// 2.5kg) and "8934563112230" -> BigC Test Product B (weight 1.5kg) — the
+// same two barcodes TestRealProcessor_ProcessesBigcDocument_IsolatesPerPageErrors
+// already used before this fixture change (that test's hasSKU assertions
+// still pass unmodified, since a barcode with no sku_mapping entry
+// resolves to itself).
+func TestRealProcessor_BigcInvoiceLevelPromoBonusRow(t *testing.T) {
+	store, err := productdata.Load("productdata/testdata/data.xlsx")
+	if err != nil {
+		t.Fatalf("Load productdata failed: %v", err)
+	}
+
+	// "Hóa Đơn" row active all year, mentioning SP0001 (a known internal
+	// SKU already present in the fixture, see TestFindSkusMentioned) with
+	// a bare 5-digit money amount ExtractMoneyAmount recognizes as 20000.
+	// The one real product row (8934563112223) gets a matching real price
+	// of 1000, so its 100 ordered units sum to a known tongtien of
+	// 100000 -> floor(100000/20000) = 5 expected bonus units.
+	priceCsv := [][]string{
+		{"STT", "Mã hàng", "Tên", "Giá", "1/1-31/12"},
+		{"1", "8934563112223", "Test Product", "1000", ""},
+		{"2", "Hóa Đơn", "", "0", "20000 SP0001"},
+	}
+	priceIndex := pricing.ParseIndex(priceCsv)
+	priceList := []bigc.Product{{Barcode: "8934563112223", UnitPrice: 1000}}
+
+	storeText := "FM LOGISTIC VSIP 2 (806)\n" +
+		"Some Address Line\n" +
+		"Vietnam\n" +
+		"Store One\n" +
+		"8934563112223\n" +
+		"Product One Description\n" +
+		"Pack\n" +
+		"1\n" +
+		"100\n" +
+		"1\n"
+
+	rp := &RealProcessor{Store: store}
+	result := rp.processBigcStorePage(storeText, priceList, priceIndex,
+		"ĐĐHBIGC-2631099999999", "15/08/2026", "20/08/2026",
+		"MN_MT_BIGCAC", "FM LOGISTIC VSIP 2 (806)", "BIGC PO2631099999999",
+		"LA_KHO2026", "MT_MN", "LA", false)
+
+	// Expect exactly 2 rows: the one real product row (no per-item promo,
+	// so no per-item bonus row), plus the invoice-level bonus row.
+	if len(result.rows) != 2 {
+		t.Fatalf("processBigcStorePage returned %d rows, want 2 (product row + invoice bonus row): %+v", len(result.rows), result.rows)
+	}
+	bonusRow := result.rows[1]
+	if bonusRow.SKU != "SP0001" {
+		t.Errorf("invoice bonus row SKU (Q) = %q, want %q (kiemtra[0] — the FIRST mentioned SKU only, not a joined list)", bonusRow.SKU, "SP0001")
+	}
+	if bonusRow.Qty != 5 {
+		t.Errorf("invoice bonus row Qty (X) = %v, want 5 (floor(tongtien=100000 / amount=20000))", bonusRow.Qty)
+	}
+	if bonusRow.PromoContent != "20000 SP0001" {
+		t.Errorf("invoice bonus row PromoContent (AQ) = %q, want %q", bonusRow.PromoContent, "20000 SP0001")
+	}
+	if bonusRow.PromoNote != "KM Bó Kèm - Che Barcode" {
+		t.Errorf("invoice bonus row PromoNote (AO) = %q, want %q (same default fallback as Coop/Satra, NOT this file's per-item \"KM Rời - Không Che Barcode\" fallback)", bonusRow.PromoNote, "KM Bó Kèm - Che Barcode")
+	}
+	if !bonusRow.IsPromoItem {
+		t.Errorf("invoice bonus row IsPromoItem (U) = false, want true")
+	}
+	if !bonusRow.NoCaseCount {
+		t.Errorf("invoice bonus row NoCaseCount = false, want true (BigC never writes AU on any row)")
+	}
+	if bonusRow.UseZFormula {
+		t.Errorf("invoice bonus row UseZFormula = true, want false (Y=0, Z=0, matching xulydonhang.py:4829-4830)")
+	}
+	wantWeight := 3.6 * 5 // SP0001's WeightKg * bonusQty
+	if bonusRow.LineWeightKg != wantWeight {
+		t.Errorf("invoice bonus row LineWeightKg (AT) = %v, want %v", bonusRow.LineWeightKg, wantWeight)
+	}
+}
+
+// TestRealProcessor_BigcInvoiceLevelPromoBonusRow_SkippedWithoutMatch
+// proves the invoice-level bonus row is skipped cleanly (not a crash, not
+// a zero-value row) when find_all_promotions_by_sku_and_time("Hóa Đơn",
+// ...) returns nothing, matching xulydonhang.py:4812's `if kmhoadon:`
+// guard — the ordinary, overwhelmingly common case for all 29 real
+// fixtures today.
+func TestRealProcessor_BigcInvoiceLevelPromoBonusRow_SkippedWithoutMatch(t *testing.T) {
+	store, err := productdata.Load("productdata/testdata/data.xlsx")
+	if err != nil {
+		t.Fatalf("Load productdata failed: %v", err)
+	}
+	priceIndex := pricing.ParseIndex(nil) // no "Hóa Đơn" row at all
+	priceList := []bigc.Product{{Barcode: "8934563112223", UnitPrice: 0}}
+
+	storeText := "FM LOGISTIC VSIP 2 (806)\n" +
+		"Some Address Line\n" +
+		"Vietnam\n" +
+		"Store One\n" +
+		"8934563112223\n" +
+		"Product One Description\n" +
+		"Pack\n" +
+		"1\n" +
+		"6\n" +
+		"1\n"
+
+	rp := &RealProcessor{Store: store}
+	result := rp.processBigcStorePage(storeText, priceList, priceIndex,
+		"ĐĐHBIGC-2631099999999", "15/08/2026", "20/08/2026",
+		"MN_MT_BIGCAC", "FM LOGISTIC VSIP 2 (806)", "BIGC PO2631099999999",
+		"LA_KHO2026", "MT_MN", "LA", false)
+
+	if len(result.rows) != 1 {
+		t.Fatalf("processBigcStorePage returned %d rows, want 1 (product row only, no invoice bonus row): %+v", len(result.rows), result.rows)
+	}
+}
+
+// TestRealProcessor_BigcSkipsItemWithUnknownProduct covers the
+// BigC-specific "skip item if product name not found" guard
+// (xulydonhang.py:4606-4607): an item whose (resolved) barcode has no
+// entry in the product database must be dropped entirely — no row, no
+// weight/tongtien contribution — while leaving every OTHER item on the
+// same page unaffected. This exact check exists nowhere else in the
+// whole Python file.
+func TestRealProcessor_BigcSkipsItemWithUnknownProduct(t *testing.T) {
+	store, err := productdata.Load("productdata/testdata/data.xlsx")
+	if err != nil {
+		t.Fatalf("Load productdata failed: %v", err)
+	}
+	priceIndex := pricing.ParseIndex(nil)
+
+	// Two items on the same store page: 8934563112223 resolves to a real
+	// product (BigC Test Product A, added to the test fixture), while
+	// 8934563112299 deliberately matches no product at all.
+	storeText := "FM LOGISTIC VSIP 2 (806)\n" +
+		"Some Address Line\n" +
+		"Vietnam\n" +
+		"Store One\n" +
+		"8934563112223\n" +
+		"Known Product Description\n" +
+		"Pack\n" +
+		"1\n" +
+		"6\n" +
+		"1\n" +
+		"8934563112299\n" +
+		"Unknown Product Description\n" +
+		"Pack\n" +
+		"1\n" +
+		"6\n" +
+		"1\n"
+
+	rp := &RealProcessor{Store: store}
+	result := rp.processBigcStorePage(storeText, nil, priceIndex,
+		"ĐĐHBIGC-2631099999999", "15/08/2026", "20/08/2026",
+		"MN_MT_BIGCAC", "FM LOGISTIC VSIP 2 (806)", "BIGC PO2631099999999",
+		"LA_KHO2026", "MT_MN", "LA", false)
+
+	// Exactly ONE row: the known item. The unknown item contributes no
+	// row at all — not a row with a blank/zero product name.
+	if len(result.rows) != 1 {
+		t.Fatalf("processBigcStorePage returned %d rows, want 1 (unknown-product item must be skipped entirely): %+v", len(result.rows), result.rows)
+	}
+	if result.rows[0].SKU != "8934563112223" {
+		t.Errorf("rows[0].SKU = %q, want %q (the known item)", result.rows[0].SKU, "8934563112223")
+	}
+	if result.rows[0].ProductName != "BigC Test Product A" {
+		t.Errorf("rows[0].ProductName = %q, want %q", result.rows[0].ProductName, "BigC Test Product A")
+	}
+	// The skipped item's weight (1.5kg * 6 = 9kg) must NOT be counted.
+	wantWeight := 2.5 * 6 // only the known item's contribution
+	if result.weightKg != wantWeight {
+		t.Errorf("weightKg = %v, want %v (unknown item's weight must not be counted)", result.weightKg, wantWeight)
 	}
 }

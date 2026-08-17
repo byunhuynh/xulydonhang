@@ -165,20 +165,6 @@ func ExtractPriceList(pageZeroText string) []Product {
 	return products
 }
 
-// ResolveCustomerCode mirrors the 4-branch customer-code lookup inline
-// in process_file's BigC branch (xulydonhang.py:9419-9433): a
-// cross-product of 2 supplier codes x 2 warehouse names, checked via
-// plain substring containment against page-0's raw text, in this exact
-// order, with a default fallback matching Python's else branch. Returns
-// both the resolved customer code AND the delivery-warehouse string
-// (diachigiao, xulydonhang.py's second assigned variable in every
-// branch — written to Excel column E downstream).
-//
-// No NBSP normalization here: this function only does plain
-// strings.Contains literal substring checks, and Python's own `in`
-// operator is likewise a literal substring check with no whitespace-class
-// awareness. There is no Go/Python divergence to fix (unlike
-// ExtractPriceList's \s-heavy regex above).
 var storeNamePattern = regexp.MustCompile(`(?s)(FM LOGISTIC VSIP 2|LINFOX WAREHOUSE \(802\)).*?Vietnam\s*\n(.*?)\n`)
 
 // ExtractStoreName mirrors lay_ten_store (xulydonhang.py:5878-5884): the
@@ -223,12 +209,16 @@ type StoreItem struct {
 // (xulydonhang.py:5902): r"(?<=\n)(\d{13})\s*\n(.*?)\s*\nPack\s*\n\d+\s*\n(\d+)\s*\n(\d+)"
 // with re.DOTALL. Go's RE2 engine has no lookbehind support, so
 // "(?<=\n)" is replaced with "(?:^|\n)" (non-capturing, doesn't shift
-// group numbering) — equivalent for this use, since both only need to
-// confirm the barcode starts at a line boundary. Group 2 (the
-// description line between the barcode and "Pack") is matched but
-// deliberately discarded, matching Python's list comprehension only
-// keeping groups 1, 3, 4 (xulydonhang.py:5906: m[0], m[2], m[3] from a
-// 0-indexed findall tuple).
+// group numbering) — deliberately broader than Python's lookbehind:
+// Go's version also matches at true string offset 0, which Python's
+// "(?<=\n)" would not (it requires a literal preceding newline). Harmless
+// in practice since every real BigC store page has header text preceding
+// the first item row, so offset-0 matching never actually fires (see
+// TestExtractStoreItems_MatchesAtStartOfTextToo for the test that
+// documents this same finding). Group 2 (the description line between
+// the barcode and "Pack") is matched but deliberately discarded, matching
+// Python's list comprehension only keeping groups 1, 3, 4
+// (xulydonhang.py:5906: m[0], m[2], m[3] from a 0-indexed findall tuple).
 var storeItemPattern = regexp.MustCompile(`(?s)(?:^|\n)(\d{13})\s*\n(.*?)\s*\nPack\s*\n\d+\s*\n(\d+)\s*\n(\d+)`)
 
 // ExtractStoreItems mirrors trichxuatdanhsachforstore_bigc
@@ -276,6 +266,20 @@ func JoinItemsWithPrices(items []StoreItem, priceList []Product) []StoreItem {
 	return joined
 }
 
+// ResolveCustomerCode mirrors the 4-branch customer-code lookup inline
+// in process_file's BigC branch (xulydonhang.py:9419-9433): a
+// cross-product of 2 supplier codes x 2 warehouse names, checked via
+// plain substring containment against page-0's raw text, in this exact
+// order, with a default fallback matching Python's else branch. Returns
+// both the resolved customer code AND the delivery-warehouse string
+// (diachigiao, xulydonhang.py's second assigned variable in every
+// branch — written to Excel column E downstream).
+//
+// No NBSP normalization here: this function only does plain
+// strings.Contains literal substring checks, and Python's own `in`
+// operator is likewise a literal substring check with no whitespace-class
+// awareness. There is no Go/Python divergence to fix (unlike
+// ExtractPriceList's \s-heavy regex above).
 func ResolveCustomerCode(pageZeroText string) (customerCode, deliveryWarehouse string) {
 	has3006900 := strings.Contains(pageZeroText, "3006900")
 	has3005382 := strings.Contains(pageZeroText, "3005382")
