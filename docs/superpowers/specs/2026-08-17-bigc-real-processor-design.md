@@ -76,9 +76,22 @@ thông tin), BigC có cấu trúc **dàn trải theo vị trí trang trong 1 fil
   trang store khác, không cần nhánh riêng.
 
 Điều này phá vỡ giả định của `RealProcessor.Process`'s vòng lặp per-page
-hiện tại: `vendor.Identify(text)` chạy độc lập trên từng trang, nhưng chỉ
-trang 0 mang dấu hiệu nhận diện BigC — các trang store (1..N-1) sẽ không
-khớp `Identify` nếu xét riêng từng trang.
+hiện tại: mỗi trang store phụ thuộc dữ liệu đã trích từ trang 0 (bảng
+giá, mã khách hàng, PO/ngày) — trạng thái xuyên trang thật sự, không thể
+xử lý từng trang độc lập.
+
+**Đính chính sau khi đọc kỹ (lúc viết plan):** lý do ban đầu ghi ở đây
+("dấu hiệu nhận diện BigC chỉ xuất hiện ở trang 0") **sai** — pattern
+nhận diện thật (`xulydonhang.py:99`) là
+`"3005382" in text or "CTY TNHH DV EB" in text` (không phân biệt hoa
+thường), và `"CTY TNHH DV EB"` thực ra xuất hiện ở **mọi trang**, kể cả
+trang store (xác nhận trên cả 6 file mẫu kiểm tra). Vậy `vendor.Identify`
+per-page vẫn sẽ nhận đúng BigC ở mọi trang nếu xét riêng — **đây không
+phải lý do kiến trúc cần pre-check + handler riêng**. Lý do thật sự (và
+vẫn đứng vững) là **trạng thái xuyên trang**: trang store cần dữ liệu đã
+trích từ trang 0 (bảng giá theo barcode, mã khách hàng, PO/ngày) mà một
+lệnh gọi `Identify`+dispatch độc lập trên riêng trang đó không thể tự có
+được.
 
 ### Quyết định kiến trúc: pre-check toàn file + handler riêng (không đổi luồng per-page hiện có)
 
@@ -100,33 +113,54 @@ vendor đó — rủi ro/công sức không tương xứng với lợi ích tron
 
 ### Xử lý lỗi
 
+**Đã xác nhận khi viết plan: Python thật KHÔNG cô lập lỗi theo trang —
+đây là quyết định chủ động mới bên Go, đã được xác nhận rõ ràng, không
+phải port hành vi cũ.** `process_file`'s vòng lặp `for page_num in
+range(len(doc))` (`:7210`) không có try/except nào bao quanh (khối
+try/except cấp file từng có đã bị comment-out ở `:7196`/`:10302-10304`).
+Lỗi duy nhất được bắt là ở `App.py`'s `ProcessThread.run()` (`:80-87`),
+bọc quanh **toàn bộ** `process_file(file, stt)` — tức 1 trang lỗi
+(exception nào cũng được, kể cả `TypeError` khi `entry_date=None` lọt
+vào `convert_entry_date`) sẽ làm crash và **bỏ qua hoàn toàn** mọi trang
+sau đó trong cùng file (không phải "cô lập", mà là "mất luôn"), chỉ các
+trang trước đó (đã `wb.save()` xong) mới giữ được kết quả.
+
+Go sẽ **chủ động cải thiện** hành vi này (đúng chính sách "đúng luồng
+chính, không cần giữ bug cũ" của Phase 2b):
+
 - **Trang 0 lỗi** (không trích được PO/ngày/bảng giá) → **fail cả file**
   (1 `OrderRow` Failed duy nhất) — vì mọi trang store đều phụ thuộc dữ
   liệu trang 0, không thể xử lý tiếp một cách có ý nghĩa.
 - **Một trang store lỗi** (danh sách hàng dị dạng, không ghép được giá,
   ...) → **cô lập lỗi theo từng trang** — 1 `OrderRow` Failed riêng cho
-  trang đó, các trang store khác trong cùng file vẫn xử lý bình thường.
-  Nhất quán với cách Coop hiện cô lập lỗi theo từng segment/order. **Cần
-  xác nhận lại hành vi thật của Python** (`process_file`,
-  `xulydonhang.py:9404-9536`) khi viết plan — thiết kế này là quyết định
-  chủ động theo policy "đúng luồng chính" của Phase 2b, không nhất thiết
-  phải giống Python 100% nếu Python thật sự fail cả file khi 1 trang lỗi.
+  trang đó, các trang store khác (kể cả các trang SAU trang lỗi) vẫn xử
+  lý bình thường. Đây là điểm khác biệt thật sự so với Python, đã xác
+  nhận và quyết định chủ động.
 
 ## Mã khách hàng: bảng tra cứu cứng, KHÔNG so khớp mờ
 
 Khác Satra (fuzzy match `data.xlsx`), BigC dùng logic if/elif cứng dựa
-trên 2 tín hiệu ở trang 0, **không tra `data.xlsx`, không fuzzy match**
-(`xulydonhang.py:9419-9433`):
+trên text trang 0, **không tra `data.xlsx`, không fuzzy match**. **Đã
+đính chính khi viết plan — bảng thật là phép chéo (cross) giữa 2 mã nhà
+cung cấp × 2 tên kho, kiểm tra bằng `in` (substring) trên toàn bộ text
+trang 0** (`xulydonhang.py:9419-9433`, biến `trangdaubigc = text`):
 
-| Tín hiệu 1 (chuỗi) | Tín hiệu 2 (kho) | Mã khách hàng |
-|---|---|---|
-| `"3006900"` | `"LINFOX WAREHOUSE (802)"` | `MB_GC_BIGC` |
-| `"3006900"` | khác | `MB_MT_BIGC` |
-| `"3005382"` | `"FM LOGISTIC VSIP 2 (806)"` | `MN_GC_BIGCAC` |
-| `"3005382"` | khác | `MN_MT_BIGCAC` |
-| (không khớp cả 2) | — | `MN_MT_BIGCAC` (mặc định) |
+```python
+if "3006900" in trangdaubigc and "LINFOX WAREHOUSE (802)" in trangdaubigc:
+    makhachhang = "MB_GC_BIGC";   diachigiao = "LINFOX WAREHOUSE (802)"
+elif "3005382" in trangdaubigc and "LINFOX WAREHOUSE (802)" in trangdaubigc:
+    makhachhang = "MB_MT_BIGC";   diachigiao = "LINFOX WAREHOUSE (802)"
+elif "3005382" in trangdaubigc and "FM LOGISTIC VSIP 2 (806)" in trangdaubigc:
+    makhachhang = "MN_MT_BIGCAC"; diachigiao = "FM LOGISTIC VSIP 2 (806)"
+elif "3006900" in trangdaubigc and "FM LOGISTIC VSIP 2 (806)" in trangdaubigc:
+    makhachhang = "MN_GC_BIGCAC"; diachigiao = "FM LOGISTIC VSIP 2 (806)"
+else:
+    makhachhang = "MN_MT_BIGCAC"; diachigiao = "FM LOGISTIC VSIP 2 (806)"
+```
 
-Port thành 1 hàm thuần Go `bigc.ResolveCustomerCode(pageZeroText string) string`
+**Quan trọng:** hàm trả về **2 giá trị** — `makhachhang` (mã khách hàng)
+VÀ `diachigiao` (địa chỉ kho giao hàng, dùng cho cột `E` khi ghi Excel).
+Port thành 1 hàm thuần Go `bigc.ResolveCustomerCode(pageZeroText string) (customerCode, deliveryWarehouse string)`
 trong package `bigc` — không đưa vào `productdata.Store` vì không truy
 vấn `data.xlsx`.
 
@@ -158,11 +192,36 @@ vấn `data.xlsx`.
     barcode (`JoinItemsWithPrices`, mirror `ghepgia_donhangbigc`,
     `:5888-5897`).
 - `bigc_processor.go` (mới) — `processBigcDocument`, tái dùng
-  `regionInfo`/`closeEnough`/`buildPromoBonusRow`/`buildInvoiceBonusRow`
-  (đã parameterize orderNumber ở Task 1) — cần xác nhận lại khi viết plan
-  liệu logic khuyến mãi/bonus-row của `write_to_dondathang_bigc`
-  (`:4541-4897`) có "giống hệt cấu trúc Coop/Satra" như quan sát ban đầu
-  hay có khác biệt cần override riêng (kiểu Lotte).
+  `regionInfo`/`closeEnough` (đã parameterize orderNumber ở Task 1)
+  nhưng **KHÔNG tái dùng thẳng** `buildPromoBonusRow`/
+  `buildInvoiceBonusRow` — **đã xác nhận khi viết plan (đọc kỹ
+  `write_to_dondathang_bigc`, `:4541-4897`): cấu trúc khác thật sự với
+  Coop/Satra**, cần bộ dựng row riêng kiểu Lotte:
+  - **Không có** vòng lặp tách `khuyenmai.split('|')` + `enumerate` —
+    chỉ xử lý 1 chuỗi khuyến mãi trực tiếp mỗi item.
+  - Text mặc định khi không "che barcode" là `"KM Rời - Không Che Barcode"`
+    (khác `"KM Bó Kèm - Che Barcode"` của Coop/Satra) cho nhánh per-item;
+    riêng nhánh khuyến mãi cấp đơn hàng (`kmhoadon`) thì dùng lại đúng
+    `"KM Bó Kèm - Che Barcode"` như Coop/Satra.
+  - **Không hề ghi cột `AU`** (số kiện hàng) ở bất kỳ đâu trong hàm — Go
+    KHÔNG được port hành vi ghi AU của `buildInvoiceBonusRow` vào bộ
+    dựng row của BigC.
+  - Dòng header/tổng chỉ ghi **1 lần duy nhất cho cả file** (khi
+    `page_num == 1`, tức trang store đầu tiên) — các trang store sau chỉ
+    nối thêm row sản phẩm, không có row header riêng. Tổng khối lượng
+    (`bat_dau`) chỉ tính ở trang cuối, cộng dồn từ `start_row` (ghi nhận
+    lúc trang 0) đến `current_row` hiện tại — ghi đè lại vào ô `L` của
+    dòng header (đã ghi từ trang 1).
+  - Giá ghi cột `Y` khi khớp là `giathucte` (giá hệ thống tính) — **giống
+    Coop, khác Satra** (Satra ghi giá hóa đơn).
+  - Không có nhánh đặc biệt kiểu "Không giao thứ 7" của Satra.
+  - `kho`/`khuvuc`/`mien`: `MB_GC_BIGC` và `MB_MT_BIGC` **dùng chung** 1
+    nhánh (`makhachhang[:2] == "MB"`) — không phân biệt GC/MT ở tầng
+    vùng miền dù mã khách hàng có encode khác nhau. Không có nhánh `else`
+    trong Python (sẽ crash `UnboundLocalError` nếu lọt) — Go cần có
+    default tường minh (báo lỗi rõ ràng, không panic ngầm) vì
+    `ResolveCustomerCode` chỉ trả về 4 giá trị cố định nên về lý thuyết
+    không bao giờ lọt vào default, nhưng vẫn nên viết phòng thủ.
 - `bigc_processor_test.go`, `bigc_golden_test.go`.
 - Mở rộng dispatch của `Process` — pre-check + gọi `processBigcDocument`
   (mô tả ở mục "Quyết định kiến trúc" trên).
@@ -190,8 +249,10 @@ GO/internal/processing/
                               # (Task 2)
   bigc/
     extract.go                 # ParsePOAndEntryDate, ExtractPriceList,
-                              # ResolveCustomerCode, ExtractStoreName,
-                              # ExtractStoreItems, JoinItemsWithPrices
+                              # ResolveCustomerCode (trả về 2 giá trị:
+                              # customerCode, deliveryWarehouse),
+                              # ExtractStoreName, ExtractStoreItems,
+                              # JoinItemsWithPrices
   bigc_processor.go            # processBigcDocument — nhận toàn bộ
                               # []string (pageTexts), trả về []OrderRow
   bigc_processor_test.go
@@ -233,18 +294,23 @@ Tái dùng nguyên `StatusDone/StatusWarning/StatusFailed`.
 
 - **Rủi ro kiến trúc lớn nhất**: đây là vendor đầu tiên cần trạng thái
   xuyên trang (trang 0 → mọi trang store) — khác hẳn mọi vendor trước.
-  Nếu về sau phát hiện các trang store cũng cần biết trang có phải trang
-  cuối hay không (để làm gì đó khác upload Drive), thiết kế hiện tại (xử
-  lý trang cuối y hệt trang giữa) sẽ cần xem lại — nhưng hiện chưa có
-  bằng chứng nào cho việc này ngoài upload Drive.
-- **Chưa xác nhận cấu trúc chính xác của `write_to_dondathang_bigc`**
-  (`:4541-4897`, khá dài — 356 dòng) so với Coop/Satra — quan sát ban đầu
-  là "giống cấu trúc", nhưng cần đọc kỹ khi viết plan trước khi khẳng
-  định tái dùng `buildPromoBonusRow`/`buildInvoiceBonusRow` nguyên vẹn
-  không cần override (Lotte đã từng cần override, Satra thì không).
-- **Chưa xác nhận hành vi lỗi thật của Python** khi 1 trang store lỗi
-  giữa chừng — thiết kế "cô lập lỗi theo từng trang" là quyết định chủ
-  động theo policy Phase 2b, cần đối chiếu lại khi viết plan/golden test.
+  Trang cuối được xử lý y hệt trang giữa (không port bước upload Drive) —
+  **đã xác nhận thêm 1 khác biệt thật sự ở trang cuối**: tổng khối lượng
+  (`bat_dau`) chỉ được tính và ghi đè vào dòng header ở trang cuối cùng
+  (xem mục "Kiến trúc" → `bigc_processor.go`), nên trang cuối KHÔNG hoàn
+  toàn giống trang giữa như spec bản đầu giả định — cần port đúng bước
+  "tổng kết cuối file" này.
+- `laydanhsachsanpham_bigc`'s dict key `"Total Price"` thực ra chứa
+  **đơn giá** (`net_price`, đã trim `","`), không phải tổng tiền dòng —
+  tên khóa gây hiểu nhầm nhưng phải port đúng tên/ý nghĩa này khi viết
+  Go struct (đặt tên field Go rõ ràng hơn, ví dụ `UnitPrice`, kèm comment
+  trỏ về tên khóa Python gốc).
+- `ghepgia_donhangbigc`: nếu barcode của 1 item trong trang store không
+  có trong bảng giá trang 0, Python **âm thầm gán giá = 0** (comment
+  Python nói "báo lỗi" nhưng code thật không báo gì cả) — port đúng hành
+  vi im lặng này, không tự ý thêm cảnh báo/lỗi mới ở bước ghép giá (có
+  thể xử lý ở bước sau, ví dụ đánh dấu sai giá, tùy vào cách
+  `closeEnough`/so khớp giá hiện có phản ứng với giá 0).
 - 29 file mẫu hiện có — nếu tương lai có thêm file BigC, hành vi kỳ vọng
   vẫn là dòng "Thất bại" rõ ràng khi không parse được, không phải giá trị
   đoán mò.
