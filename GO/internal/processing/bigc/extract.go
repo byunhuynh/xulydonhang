@@ -28,6 +28,14 @@ var twoDigitDMYPattern = regexp.MustCompile(`^(\d{2})/(\d{2})/(\d{2})$`)
 // :5333-5340, applied to both entry_date and cancel_date at the end of
 // the Python function).
 //
+// IMPORTANT: Go's RE2 engine treats \s as ASCII-only whitespace (space, tab,
+// newline, etc.), while Python's re module treats \s as Unicode-aware and
+// matches non-breaking space (U+00A0 / \xa0). This function normalizes
+// U+00A0 to regular space before regex processing to match Python's implicit
+// behavior. This is a confirmed real artifact in PDF-extracted text from
+// this codebase — see xulydonhang.py's demsodonhang1trang_coop function,
+// which explicitly does text.replace("\xa0", " ") before further processing.
+//
 // ok=false only when no PO/entry-date match is found at all, or the
 // matched entry-date text isn't a real calendar date. Python's
 // equivalent failure mode (entry_date stays None, or convert_entry_date
@@ -42,6 +50,9 @@ var twoDigitDMYPattern = regexp.MustCompile(`^(\d{2})/(\d{2})/(\d{2})$`)
 // best-effort, matching how ParseCancelDate works for other vendors in
 // this codebase.
 func ParseOrderInfo(text string) (poNumber, entryDate, cancelDate string, ok bool) {
+	// Normalize non-breaking space (U+00A0 / \xa0) to regular space before regex processing
+	// to match Python's re.sub behavior, which treats \s as Unicode-aware.
+	text = strings.ReplaceAll(text, string(rune(0x00A0)), " ")
 	cleaned := strings.TrimSpace(whitespaceCollapsePattern.ReplaceAllString(text, " "))
 
 	m := poEntryDatePattern.FindStringSubmatch(cleaned)

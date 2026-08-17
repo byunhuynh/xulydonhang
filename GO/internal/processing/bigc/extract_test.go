@@ -69,3 +69,27 @@ func TestParseOrderInfo_WhitespaceIsCollapsedBeforeMatching(t *testing.T) {
 			po, entry, cancel, ok, "2631057733376", "31/07/2026", "04/08/2026")
 	}
 }
+
+func TestParseOrderInfo_HandlesNonBreakingSpaceBetweenPOAndDate(t *testing.T) {
+	// Python's re module treats \s as Unicode-aware and matches non-breaking space (U+00A0).
+	// Go's RE2 engine treats \s as ASCII-only, so ParseOrderInfo must normalize U+00A0
+	// to regular space before regex processing. This test verifies the normalization works
+	// with real non-breaking space characters from PDF extraction.
+	// This is a confirmed artifact in this codebase's PDF-extracted text.
+
+	// Use literal non-breaking space character (U+00A0 / \xa0) between PO number and date
+	text := "Header\n2631057733376" + string(rune(0x00A0)) + "31/07/26\nsome content\nTotal Net Purchase Price\n04/08/26\nfooter"
+	po, entry, cancel, ok := ParseOrderInfo(text)
+	if !ok {
+		t.Fatal("ParseOrderInfo with NBSP: no match, want match")
+	}
+	if po != "2631057733376" {
+		t.Fatalf("po = %q, want %q", po, "2631057733376")
+	}
+	if entry != "31/07/2026" {
+		t.Fatalf("entry = %q, want %q", entry, "31/07/2026")
+	}
+	if cancel != "04/08/2026" {
+		t.Fatalf("cancel = %q, want %q", cancel, "04/08/2026")
+	}
+}
