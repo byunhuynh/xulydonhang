@@ -107,7 +107,17 @@ func (p *RealProcessor) Process(ctx context.Context, filePath string, stt int) (
 			rows = append(rows, row)
 
 		case "Winmart":
-			row, err := p.processWinmartSegment(filePath, text, pageLabel)
+			// Re-extract this page's text with extractWinmartPageText
+			// instead of using the shared pass's `text` directly — see
+			// that function's doc comment (winmart_pdftext.go) for why
+			// Winmart specifically needs it. Best-effort: if re-parsing
+			// fails for any reason, fall back to the already-extracted
+			// `text` rather than failing the whole page.
+			winmartText := text
+			if improved, wErr := extractWinmartPageTextFromFile(filePath, pageIdx); wErr == nil {
+				winmartText = improved
+			}
+			row, err := p.processWinmartSegment(filePath, winmartText, pageLabel)
 			if err != nil {
 				rows = append(rows, OrderRow{
 					FileName: filepath.Base(filePath), Page: pageLabel, System: "Winmart",

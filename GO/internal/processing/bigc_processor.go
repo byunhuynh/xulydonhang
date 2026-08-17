@@ -454,8 +454,29 @@ func (p *RealProcessor) processBigcStorePage(storePageText string, priceList []b
 // not crash the whole store page. Also reused by Winmart's own numeric-
 // field parsing (xulydonhang.py:4327-4337's equivalent "strip commas,
 // coerce to float" pattern applied to OU Qty and Total Price).
+//
+// Also strips surrounding whitespace before parsing — confirmed a real
+// Go bug, not a style choice: Python's own equivalent conversions
+// (xulydonhang.py:4356 `giathuctegoc.replace(",", "").strip()`, and
+// repeated identically at :4389-4390, :4400, :4422 for giathucte) always
+// call .strip() immediately before float(...). This matters because
+// pricing.Index.FindPrice's returned price string can carry real
+// leading/trailing whitespace straight from the source sheet (e.g. the
+// real frozen Winmart pricing fixture's raw row for SKU TP31203 has
+// price "  162.272   ", confirmed in
+// winmart/testdata/fixtures/_frozen_pricing.json) — Index.FindPrice
+// intentionally preserves that whitespace (mirroring
+// find_price_by_sku's own `return price` with only a .strip()-based
+// non-empty CHECK, not a stripped return value, xulydonhang.py:5687-
+// 5690), so the trim has to happen here, at the float-conversion site,
+// exactly where Python's own .strip() calls live. Without this,
+// strconv.ParseFloat rejects the untrimmed string outright and silently
+// returns 0 — confirmed as the root cause of every real-fixture Y-column
+// "got 0, want <price>" mismatch for Winmart's golden test (SKUs
+// TP31203, TP31630, TP32767, TP30992_02, all of which have this same
+// whitespace-padded price cell in the real frozen pricing data).
 func parseNumericField(s string) float64 {
-	v, err := strconv.ParseFloat(strings.ReplaceAll(s, ",", ""), 64)
+	v, err := strconv.ParseFloat(strings.TrimSpace(strings.ReplaceAll(s, ",", "")), 64)
 	if err != nil {
 		return 0
 	}
