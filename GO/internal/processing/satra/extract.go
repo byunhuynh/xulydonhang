@@ -27,36 +27,34 @@ var printDateBlockPattern = regexp.MustCompile(`(?s)(.*?)\nNgày in:`)
 
 // ParseEntryDate mirrors xulydonhang.py:9326-9336: takes everything
 // before the first "Ngày đặt hàng:" marker, uses its LAST line as the
-// raw date, parses "MM/DD/YYYY" and reformats "DD/MM/YYYY". If the RAW
-// extracted date string is the placeholder "01/01/0001" (the PDF
-// template renders this when the entry-date field itself is unset in the
-// source system — not a parse failure), retries the same shape against
-// "Ngày in:" instead. Returns false if the "Ngày đặt hàng:" marker isn't
-// found at all, or if a fallback is triggered but "Ngày in:" isn't found
-// either, or if the date ultimately used doesn't parse as "MM/DD/YYYY".
+// raw date, parses "MM/DD/YYYY" and reformats "DD/MM/YYYY". If the
+// placeholder date (year/month/day == 1, the PDF template when the
+// entry-date field itself is unset in the source system) is detected,
+// retries the same shape against "Ngày in:" instead. Returns false if
+// the "Ngày đặt hàng:" marker isn't found at all, or if a fallback is
+// triggered but "Ngày in:" isn't found either, or if the date
+// ultimately used doesn't parse as "MM/DD/YYYY".
 //
 // The fallback only triggers when the "Ngày đặt hàng:" marker WAS found
-// and its raw value IS the placeholder — mirroring Python's control
-// flow, where the "Ngày in:" retry sits inside the `if entry_date:`
-// block and is never reached when the first marker is simply absent
-// from the text.
+// and its parsed value IS the placeholder — mirroring Python's control
+// flow (xulydonhang.py:9329-9331), where the "Ngày in:" retry sits
+// inside the `if entry_date:` block and is never reached when the first
+// marker is simply absent from the text.
 //
-// The placeholder check parses raw and tests for year/month/day == 1
-// rather than a literal string == "01/01/0001" comparison: on real
-// Satra PDFs (P-005508524.pdf, P-005516051.pdf, P-005523317.pdf,
-// confirmed against Task 6's frozen fixtures during Task 7's golden
-// integration test), this repo's Go PDF library renders the
-// placeholder's single-digit month/day WITHOUT the leading zero
-// ("1/1/0001") where PyMuPDF's extraction (what Python's literal
-// "01/01/0001" check was written against) renders it zero-padded —
-// the same category of library rendering gap formatMDYtoDMYChecked's
-// own doc comment already documents for this field shape. A literal
-// string comparison against the zero-padded form silently never
-// matches on this library's output, so the "Ngày in:" fallback never
-// fires and the placeholder date gets used as a real (and wrong)
-// order date — which then corrupts every downstream promo/price
-// lookup keyed on it. Parsing first makes the check invariant to
-// which padding the underlying library chose to render.
+// Importantly, Python's placeholder check (line 9331: `if entry_date ==
+// '01/01/0001':`) compares the FORMATTED DD/MM/YYYY string output,
+// not the raw extracted text. strftime("%d/%m/%Y") always zero-pads
+// by construction, making that check invariant to whatever raw padding
+// the PDF library chose to render (e.g., "1/1/0001" vs "01/01/0001").
+// Parsing the raw value before comparing the parsed year/month/day == 1
+// (rather than literal-string-matching the raw) is the faithful,
+// padding-invariant port of Python's actual behavior — not a divergence
+// to work around a PDF-library quirk. On real Satra PDFs
+// (P-005508524.pdf, P-005516051.pdf, P-005523317.pdf), this repo's Go
+// PDF library renders single-digit month/day without leading zeros
+// ("1/1/0001"); that difference exposed a pre-existing mis-port in an
+// earlier version that compared the raw string literally, but the fix
+// restores exact parity with Python.
 func ParseEntryDate(text string) (string, bool) {
 	raw, ok := rawDateBeforeMarker(text, entryDateBlockPattern)
 	if !ok {
