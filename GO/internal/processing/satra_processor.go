@@ -115,17 +115,33 @@ func (p *RealProcessor) processSatraSegment(filePath, text, pageLabel string) (O
 	}
 
 	region, statCode, warehouse := regionInfo(customerCode)
-	description := fmt.Sprintf("SATRA %s", poNumber)
+	// titleText mirrors write_to_dondathang_satra's `S{current_row}`
+	// value on the header/note row (xulydonhang.py:2391):
+	// f"{vendor} {po_number}" — no khonggiaothu7 suffix, ever.
+	titleText := fmt.Sprintf("SATRA %s", poNumber)
+	noSaturday := ""
 	if customerCode == noSaturdayDeliveryCustomerCode {
-		description += " - Không giao thứ 7"
+		noSaturday = "- Không giao thứ 7"
 	}
+	// noteText mirrors `diengiai` (xulydonhang.py:2374):
+	// f"{vendor} {po_number} {khonggiaothu7}" — note the literal space
+	// before khonggiaothu7 even when it's empty, which leaves a
+	// TRAILING SPACE on noteText for every order without the special
+	// no-Saturday-delivery customer code. This is used for every row's
+	// L/Description cell (2384, 2415, 2612, 2650) — confirmed against
+	// real Satra fixtures, where product rows' L column is
+	// "SATRA <po> " (trailing space) and the header row's L is
+	// "SATRA <po>  (Tổng trọng lượng: ...)" (TWO spaces, from noteText's
+	// own trailing space plus the literal space in the
+	// "{diengiai} (Tổng...)" f-string at :2689).
+	noteText := fmt.Sprintf("SATRA %s %s", poNumber, noSaturday)
 
 	var rows []excelwriter.Row
 	rows = append(rows, excelwriter.Row{
 		EntryDate: entryDate, DebtDays: coopDebtDays, OrderNumber: satraOrderNumber(poNumber),
 		Status: "Chưa thực hiện", CancelDate: cancelDate, ShipTo: shipTo, CustomerCode: customerCode,
-		Description: description, Warehouse: warehouse, VATPercent: 8, RegionCode: region,
-		StatCode: statCode, IsNoteRow: true, ProductName: description,
+		Description: noteText, Warehouse: warehouse, VATPercent: 8, RegionCode: region,
+		StatCode: statCode, IsNoteRow: true, ProductName: titleText,
 	})
 
 	saigia := 0
@@ -172,11 +188,30 @@ func (p *RealProcessor) processSatraSegment(filePath, text, pageLabel string) (O
 			matched = true
 		}
 
+		// unitPrice mirrors write_to_dondathang_satra's Y-cell write,
+		// which is NOT symmetric with Coop's equivalent write despite
+		// the rest of this loop's structural identity (see this
+		// function's doc comment): on a MATCH, Satra writes giahoadon —
+		// the PDF's own invoice price (xulydonhang.py:2495, and again at
+		// :2521 in the len(promos)==0 branch) — not giathucte/finalPrice
+		// like Coop's write_to_dondathang does at :1116/:1139. Confirmed
+		// against a real fixture: P-000022974.pdf's TP32415_01 line has
+		// finalPrice(giathucte)=75136*0.6=45081.6 but its invoice price
+		// (PDF's own "Đơn giá" for that line) is 45082, and the frozen
+		// fixture's Y column is 45082 — the invoice price, not the
+		// computed one. On a mismatch, Y still uses finalPrice
+		// (giathucte), unchanged from Coop's shape and Go's prior
+		// behavior here.
+		unitPrice := finalPrice
+		if matched {
+			unitPrice = invoicePrice
+		}
+
 		productRow := excelwriter.Row{
 			EntryDate: entryDate, DebtDays: coopDebtDays, OrderNumber: satraOrderNumber(poNumber),
 			Status: "Chưa thực hiện", CancelDate: cancelDate, ShipTo: shipTo, CustomerCode: customerCode,
-			Description: description, SKU: barcode, Warehouse: warehouse, VATPercent: 8,
-			RegionCode: region, StatCode: statCode, Qty: qty, UnitPrice: finalPrice,
+			Description: noteText, SKU: barcode, Warehouse: warehouse, VATPercent: 8,
+			RegionCode: region, StatCode: statCode, Qty: qty, UnitPrice: unitPrice,
 			ProductName: productInfo.Name, CaseCount: caseCount, LineWeightKg: lineWeight, UseZFormula: true,
 			PromoContent: lastExaminedPromo,
 		}
@@ -202,7 +237,7 @@ func (p *RealProcessor) processSatraSegment(filePath, text, pageLabel string) (O
 
 			bonusRow, mainRowNote, mainRowBundleSku, added := buildPromoBonusRow(p.Store, promoPart,
 				coop.Product{Barcode: barcode, Qty: qty}, i, entryDate, cancelDate, shipTo,
-				customerCode, description, warehouse, region, statCode, poNumber)
+				customerCode, noteText, warehouse, region, statCode, poNumber)
 			if !added {
 				continue
 			}
@@ -221,14 +256,14 @@ func (p *RealProcessor) processSatraSegment(filePath, text, pageLabel string) (O
 
 	if invoicePromo := priceIndex.FindInvoicePromotion(entryDate); invoicePromo != "" {
 		if bonusRow, added := buildInvoiceBonusRow(p.Store, invoicePromo, totalValue, entryDate, cancelDate,
-			shipTo, customerCode, description, warehouse, region, statCode, poNumber); added {
+			shipTo, customerCode, noteText, warehouse, region, statCode, poNumber); added {
 			bonusRow.OrderNumber = satraOrderNumber(poNumber)
 			totalWeight += bonusRow.LineWeightKg
 			rows = append(rows, bonusRow)
 		}
 	}
 
-	headerDescription := fmt.Sprintf("%s (Tổng trọng lượng: %s)", description, coop.FormatWeightKg(totalWeight))
+	headerDescription := fmt.Sprintf("%s (Tổng trọng lượng: %s)", noteText, coop.FormatWeightKg(totalWeight))
 	if err := excelwriter.WriteOrderRows(p.ExcelPath, rows, headerDescription); err != nil {
 		return OrderRow{}, err
 	}

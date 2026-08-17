@@ -25,12 +25,10 @@ func ParsePONumber(text string) (string, bool) {
 var entryDateBlockPattern = regexp.MustCompile(`(?s)(.*?)\nNgày đặt hàng:`)
 var printDateBlockPattern = regexp.MustCompile(`(?s)(.*?)\nNgày in:`)
 
-const placeholderDate = "01/01/0001"
-
 // ParseEntryDate mirrors xulydonhang.py:9326-9336: takes everything
 // before the first "Ngày đặt hàng:" marker, uses its LAST line as the
 // raw date, parses "MM/DD/YYYY" and reformats "DD/MM/YYYY". If the RAW
-// extracted date string is the literal placeholder "01/01/0001" (the PDF
+// extracted date string is the placeholder "01/01/0001" (the PDF
 // template renders this when the entry-date field itself is unset in the
 // source system — not a parse failure), retries the same shape against
 // "Ngày in:" instead. Returns false if the "Ngày đặt hàng:" marker isn't
@@ -38,28 +36,48 @@ const placeholderDate = "01/01/0001"
 // either, or if the date ultimately used doesn't parse as "MM/DD/YYYY".
 //
 // The fallback only triggers when the "Ngày đặt hàng:" marker WAS found
-// and its raw value is exactly the placeholder — mirroring Python's
-// control flow, where the "Ngày in:" retry sits inside the `if
-// entry_date:` block and is never reached when the first marker is
-// simply absent from the text.
+// and its raw value IS the placeholder — mirroring Python's control
+// flow, where the "Ngày in:" retry sits inside the `if entry_date:`
+// block and is never reached when the first marker is simply absent
+// from the text.
 //
-// Deliberately checks the RAW pre-format string against the placeholder,
-// not the formatted "DD/MM/YYYY" output: comparing formatted strings
-// requires re-deriving the formatted placeholder via a second format
-// call, which invites exactly the kind of stray literal comparison this
-// implementation avoids.
+// The placeholder check parses raw and tests for year/month/day == 1
+// rather than a literal string == "01/01/0001" comparison: on real
+// Satra PDFs (P-005508524.pdf, P-005516051.pdf, P-005523317.pdf,
+// confirmed against Task 6's frozen fixtures during Task 7's golden
+// integration test), this repo's Go PDF library renders the
+// placeholder's single-digit month/day WITHOUT the leading zero
+// ("1/1/0001") where PyMuPDF's extraction (what Python's literal
+// "01/01/0001" check was written against) renders it zero-padded —
+// the same category of library rendering gap formatMDYtoDMYChecked's
+// own doc comment already documents for this field shape. A literal
+// string comparison against the zero-padded form silently never
+// matches on this library's output, so the "Ngày in:" fallback never
+// fires and the placeholder date gets used as a real (and wrong)
+// order date — which then corrupts every downstream promo/price
+// lookup keyed on it. Parsing first makes the check invariant to
+// which padding the underlying library chose to render.
 func ParseEntryDate(text string) (string, bool) {
 	raw, ok := rawDateBeforeMarker(text, entryDateBlockPattern)
 	if !ok {
 		return "", false
 	}
-	if raw == placeholderDate {
+	if isPlaceholderDate(raw) {
 		raw, ok = rawDateBeforeMarker(text, printDateBlockPattern)
 		if !ok {
 			return "", false
 		}
 	}
 	return formatMDYtoDMYChecked(raw)
+}
+
+// isPlaceholderDate reports whether raw parses (as M/D/YYYY, the same
+// lenient layout formatMDYtoDMYChecked uses) to year/month/day == 1 —
+// i.e. is some padding variant of "1/1/0001" — regardless of whether
+// the PDF-extraction library rendered it zero-padded or not.
+func isPlaceholderDate(raw string) bool {
+	t, err := time.Parse("1/2/2006", raw)
+	return err == nil && t.Year() == 1 && t.Month() == time.January && t.Day() == 1
 }
 
 // rawDateBeforeMarker returns the last line of the text preceding

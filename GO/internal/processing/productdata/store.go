@@ -98,17 +98,37 @@ func loadProducts(f *excelize.File) (map[string]ProductInfo, map[string]string, 
 		}
 		skuCode := strings.TrimSpace(row[0])
 
-		info := ProductInfo{}
-		if len(row) > 1 {
-			info.Name = row[1]
+		// Python's timten_sanpham/timtrongluong_sanpham/timquycach_sanpham
+		// (xulydonhang.py:784-817) each linearly scan the sheet and
+		// `return` on the FIRST row whose column A matches — so for the
+		// handful of SKUs that appear more than once in data.xlsx (e.g.
+		// TP32415_01, TP32422_01, each duplicated with stale/wrong
+		// name+weight in a later row), Python always resolves to the
+		// FIRST occurrence. An unconditional map write here would let
+		// whichever duplicate is read LAST win instead, which for those
+		// two SKUs silently substitutes the wrong product name
+		// ("...can 3,2l" instead of "...can 3,2L") and wrong weight
+		// (3.2kg instead of 3.45kg) — confirmed against real data.xlsx
+		// and Satra's frozen fixtures during Task 7's golden-fixture
+		// investigation. Note: this first-wins rule applies ONLY to this
+		// products map — skuMapping below intentionally keeps Python's
+		// load_sku_mapping dict-assignment (unconditional overwrite,
+		// i.e. LAST occurrence wins), since that function builds a plain
+		// dict rather than a scan-and-return, so it must still run for
+		// every row including duplicates.
+		if _, exists := products[skuCode]; !exists {
+			info := ProductInfo{}
+			if len(row) > 1 {
+				info.Name = row[1]
+			}
+			if len(row) > 2 {
+				info.WeightKg = parseFloat(row[2])
+			}
+			if len(row) > 3 {
+				info.PackSize = parseFloat(row[3])
+			}
+			products[skuCode] = info
 		}
-		if len(row) > 2 {
-			info.WeightKg = parseFloat(row[2])
-		}
-		if len(row) > 3 {
-			info.PackSize = parseFloat(row[3])
-		}
-		products[skuCode] = info
 
 		// Mirrors load_sku_mapping: EVERY non-empty cell from column C
 		// (index 2) onward maps back to this row's internal SKU,
