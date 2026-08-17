@@ -74,8 +74,14 @@ func parseNote(text string) string {
 	if block == "" {
 		return ""
 	}
-	// Split on newlines and join with spaces
+	// Split on newlines, drop the LAST line (Python's `.splitlines()[:-1]`),
+	// then join the rest with spaces. If only 0 or 1 line remains after
+	// trimming, dropping the last line yields an empty slice and this
+	// correctly returns "" — matching Python's real behavior, not a bug.
 	lines := strings.Split(block, "\n")
+	if len(lines) > 0 {
+		lines = lines[:len(lines)-1]
+	}
 	return strings.Join(lines, " ")
 }
 
@@ -145,7 +151,10 @@ func ParseFuzzyMatchAddress(text string) (string, bool) {
 		lineLower := strings.ToLower(lines[i])
 		nextLower := strings.ToLower(lines[i+1])
 		if strings.Contains(lineLower, "tổng hợp") && strings.Contains(nextLower, "wincommerce") {
-			idx = i + 1  // Set idx to the WINCOMMERCE line
+			idx = i // Anchor on the "tổng hợp" line itself (Python: idx = i,
+			// "Lấy dòng đầu tiên làm mốc" = "take the first line as anchor").
+			// Collection starts at idx+1, i.e. the WINCOMMERCE line, which
+			// IS included in the collected block.
 			break
 		}
 		if strings.Contains(lineLower, "wincommerce") {

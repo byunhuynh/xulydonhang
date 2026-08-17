@@ -7,7 +7,7 @@ func TestParseOrderInfo_ExtractsPONumberDatesAndNote(t *testing.T) {
 		"Ngày đặt hàng (PO date)\n07.31.2026\n" +
 		"Số đơn hàng (PO No.)\n4194002858\n" +
 		"Ngày giao (Delivery Date)\n08.08.2026\n" +
-		"Ghi chú\nNguyễn Quang Phi_0396035541\nNhà cung cấp (Supplier): 0002011398\nfooter"
+		"Ghi chú\nNguyễn Quang Phi_0396035541\nphinq@winmart.m\nNhà cung cấp (Supplier): 0002011398\nfooter"
 	po, entry, cancel, note, ok := ParseOrderInfo(text)
 	if !ok {
 		t.Fatal("ParseOrderInfo: no match, want match")
@@ -21,6 +21,15 @@ func TestParseOrderInfo_ExtractsPONumberDatesAndNote(t *testing.T) {
 	if cancel != "08/08/2026" {
 		t.Fatalf("cancel = %q, want %q", cancel, "08/08/2026")
 	}
+	// The Ghi chú block has TWO lines before the supplier marker
+	// ("Nguyễn Quang Phi_0396035541" and "phinq@winmart.m") -- Python's
+	// .splitlines()[:-1] drops the LAST one ("phinq@winmart.m"), so only
+	// the first line survives into the joined note. This matches the
+	// real sample PDF's actual behavior (confirmed during planning: the
+	// real file's note field renders as "Nguyễn Quang
+	// Phi_0396035541_phinq@winmart.m" as raw PDF text on what is
+	// apparently 2 logical lines in the extracted text, and Python's
+	// real output drops the trailing one).
 	if note != "Nguyễn Quang Phi_0396035541" {
 		t.Fatalf("note = %q, want %q", note, "Nguyễn Quang Phi_0396035541")
 	}
@@ -37,11 +46,16 @@ func TestParseOrderInfo_NoteWithMultipleLinesIsJoinedWithSpaces(t *testing.T) {
 	text := "Ngày đặt hàng (PO date)\n07.31.2026\n" +
 		"Số đơn hàng (PO No.)\n4194002858\n" +
 		"Ngày giao (Delivery Date)\n08.08.2026\n" +
-		"Ghi chú\nline one\nline two\nNhà cung cấp (Supplier): 0002011398\n"
+		"Ghi chú\nline one\nline two\nline three\nNhà cung cấp (Supplier): 0002011398\n"
 	_, _, _, note, ok := ParseOrderInfo(text)
 	if !ok {
 		t.Fatal("ParseOrderInfo: no match, want match")
 	}
+	// 3 lines before the marker ("line one", "line two", "line three");
+	// .splitlines()[:-1] drops "line three", leaving "line one"+"line two"
+	// joined with a space -- this is the test that actually exercises
+	// the multi-surviving-line join behavior (the previous test only
+	// ever has exactly 1 surviving line after the drop).
 	if note != "line one line two" {
 		t.Fatalf("note = %q, want %q", note, "line one line two")
 	}
@@ -104,7 +118,12 @@ func TestParseFuzzyMatchAddress_FindsBlockAfterWincommerceMarker(t *testing.T) {
 	if !ok {
 		t.Fatal("ParseFuzzyMatchAddress: no match, want match")
 	}
-	want := "Khu trung tâm thương mại Vincom Lê Thánh Tông Số 5 Đường Lê Thánh Tông"
+	// The anchor is the "TỔNG HỢP" line (idx=i, matching Python's real
+	// `idx = i` -- NOT i+1), so collection starts at idx+1, which is the
+	// "WINCOMMERCE" line itself -- it IS included in the collected
+	// block, unlike what an earlier (incorrect) version of this test
+	// assumed. Verified by hand-tracing real xulydonhang.py:9068-9083.
+	want := "WINCOMMERCE Khu trung tâm thương mại Vincom Lê Thánh Tông Số 5 Đường Lê Thánh Tông"
 	if got != want {
 		t.Fatalf("ParseFuzzyMatchAddress = %q, want %q", got, want)
 	}
