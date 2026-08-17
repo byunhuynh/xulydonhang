@@ -2,6 +2,7 @@ package bigc
 
 import (
 	"regexp"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -95,4 +96,105 @@ func convertEntryDate(raw string) (string, bool) {
 		return "", false
 	}
 	return m[1] + "/" + m[2] + "/20" + m[3], true
+}
+
+// Product is one row of BigC's page-0 master price/product list.
+type Product struct {
+	Barcode        string
+	SKUOrUnit      string
+	OrderedUnitQty string
+	// UnitPrice is Python's "Total Price" dict key (laydanhsachsanpham_bigc,
+	// xulydonhang.py:5869) — despite the name, it holds the PER-UNIT net
+	// purchase price, not a line total; renamed here for clarity, not
+	// literal fidelity to the (misleading) Python key name.
+	UnitPrice float64
+	// TotalNetPurchasePrice is captured for fidelity but never read
+	// downstream anywhere in xulydonhang.py either — kept for
+	// completeness/debugging only.
+	TotalNetPurchasePrice float64
+}
+
+var articleHeaderPattern = regexp.MustCompile(`\bArticle\b`)
+var priceListLinePattern = regexp.MustCompile(`(?s)(\d{13})\s+.+?\s+Pack\s+\d+\s+(\d+)\s+(\d+)\s+\d+\s+([\d,]+)\s+\w+\s+([\d,]+)`)
+
+// ExtractPriceList mirrors laydanhsachsanpham_bigc (xulydonhang.py:5831-5873):
+// slices page-0 text to everything from the first "Article" header word
+// onward (xulydonhang.py:5837-5843), then extracts every matching
+// product line from that slice. A line whose 4th/5th numeric field fails
+// to parse (after stripping "," separators) is silently skipped —
+// mirrors Python's `continue` on a malformed match; Go's regex only ever
+// produces exactly 5 capture groups per match (unlike Python's
+// len(match) != 5 check, which is checking tuple arity from findall,
+// not field validity), so the equivalent Go failure mode is a
+// strconv.ParseFloat error on group 4 or 5.
+//
+// IMPORTANT: Go's RE2 engine treats \s as ASCII-only whitespace, while
+// Python's re module treats \s as Unicode-aware and matches non-breaking
+// space (U+00A0 / \xa0). laydanhsachsanpham_bigc's own pattern
+// (xulydonhang.py:5846-5849) never strips \xa0 from its input either —
+// it just relies on Python's Unicode-aware \s to silently swallow it.
+// This is a confirmed real artifact in this project's PDF-extracted text
+// (see xulydonhang.py's demsodonhang1trang_coop, which explicitly does
+// text.replace("\xa0", " ") before further processing) and this
+// function's \s+-heavy pattern is exposed to the exact same risk
+// ParseOrderInfo's pattern was (see its doc comment), so this function
+// normalizes U+00A0 to a regular space before matching too, for the same
+// reason. This normalization is local to this function — Go strings are
+// immutable, so ParseOrderInfo's own normalization does not carry over.
+func ExtractPriceList(pageZeroText string) []Product {
+	pageZeroText = strings.ReplaceAll(pageZeroText, string(rune(0x00A0)), " ")
+
+	loc := articleHeaderPattern.FindStringIndex(pageZeroText)
+	if loc == nil {
+		return nil
+	}
+	text := strings.TrimSpace(pageZeroText[loc[0]:])
+
+	var products []Product
+	for _, m := range priceListLinePattern.FindAllStringSubmatch(text, -1) {
+		unitPrice, err1 := strconv.ParseFloat(strings.ReplaceAll(m[4], ",", ""), 64)
+		totalPrice, err2 := strconv.ParseFloat(strings.ReplaceAll(m[5], ",", ""), 64)
+		if err1 != nil || err2 != nil {
+			continue
+		}
+		products = append(products, Product{
+			Barcode: strings.TrimSpace(m[1]), SKUOrUnit: strings.TrimSpace(m[2]), OrderedUnitQty: strings.TrimSpace(m[3]),
+			UnitPrice: unitPrice, TotalNetPurchasePrice: totalPrice,
+		})
+	}
+	return products
+}
+
+// ResolveCustomerCode mirrors the 4-branch customer-code lookup inline
+// in process_file's BigC branch (xulydonhang.py:9419-9433): a
+// cross-product of 2 supplier codes x 2 warehouse names, checked via
+// plain substring containment against page-0's raw text, in this exact
+// order, with a default fallback matching Python's else branch. Returns
+// both the resolved customer code AND the delivery-warehouse string
+// (diachigiao, xulydonhang.py's second assigned variable in every
+// branch — written to Excel column E downstream).
+//
+// No NBSP normalization here: this function only does plain
+// strings.Contains literal substring checks, and Python's own `in`
+// operator is likewise a literal substring check with no whitespace-class
+// awareness. There is no Go/Python divergence to fix (unlike
+// ExtractPriceList's \s-heavy regex above).
+func ResolveCustomerCode(pageZeroText string) (customerCode, deliveryWarehouse string) {
+	has3006900 := strings.Contains(pageZeroText, "3006900")
+	has3005382 := strings.Contains(pageZeroText, "3005382")
+	hasLinfox := strings.Contains(pageZeroText, "LINFOX WAREHOUSE (802)")
+	hasFMLogistic := strings.Contains(pageZeroText, "FM LOGISTIC VSIP 2 (806)")
+
+	switch {
+	case has3006900 && hasLinfox:
+		return "MB_GC_BIGC", "LINFOX WAREHOUSE (802)"
+	case has3005382 && hasLinfox:
+		return "MB_MT_BIGC", "LINFOX WAREHOUSE (802)"
+	case has3005382 && hasFMLogistic:
+		return "MN_MT_BIGCAC", "FM LOGISTIC VSIP 2 (806)"
+	case has3006900 && hasFMLogistic:
+		return "MN_GC_BIGCAC", "FM LOGISTIC VSIP 2 (806)"
+	default:
+		return "MN_MT_BIGCAC", "FM LOGISTIC VSIP 2 (806)"
+	}
 }
