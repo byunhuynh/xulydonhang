@@ -106,6 +106,17 @@ func (p *RealProcessor) Process(ctx context.Context, filePath string, stt int) (
 			}
 			rows = append(rows, row)
 
+		case "Winmart":
+			row, err := p.processWinmartSegment(filePath, text, pageLabel)
+			if err != nil {
+				rows = append(rows, OrderRow{
+					FileName: filepath.Base(filePath), Page: pageLabel, System: "Winmart",
+					Status: fmt.Sprintf("%s - %v", StatusFailed, err), StatusKind: StatusKindFailed,
+				})
+				continue
+			}
+			rows = append(rows, row)
+
 		default:
 			reason := "không nhận diện được nhà cung cấp"
 			if v != "" {
