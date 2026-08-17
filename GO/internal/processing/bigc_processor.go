@@ -194,7 +194,7 @@ func (p *RealProcessor) processBigcStorePage(storePageText string, priceList []b
 		invoicePrice := item.UnitPrice // giahoadon: the joined-in per-unit price from page 0
 		realPriceStr, _ := priceIndex.FindPrice(barcode)
 		realPrice := parseNumericField(realPriceStr) // giathuctegoc
-		finalPrice := realPrice                       // giathucte, mutates through the promo loop below
+		finalPrice := realPrice                      // giathucte, mutates through the promo loop below
 
 		promos := priceIndex.FindPromotions(barcode, entryDate)
 		khuyenmai := ""
