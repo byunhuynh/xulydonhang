@@ -310,37 +310,11 @@ From `GO/internal/processing/coop_processor_test.go`: delete the `fixturePricing
 
 From `GO/internal/processing/coop_golden_test.go`: delete the `frozenPricingFixture` type, `fixtureData` type (lines 17-27), and `compareRowsAgainstFixture` through `joinLines` (lines 123-304) — **keep** `loadFrozenPricingSource` (Coop-specific, loads from `coop/testdata/fixtures/_frozen_pricing.json`) and `TestRealProcessor_MatchesGoldenFixtures` (Coop's own golden test) in place.
 
-- [ ] **Step 7: Fix imports and run the full test suite**
+- [ ] **Step 7: Update Coop's own 2 call sites in `coop_processor.go` to match the new signature**
 
-Run `cd GO && go build ./... && go vet ./...`, fix any unused-import errors the same way as Step 4.
+**This step exists because of a real defect caught during execution, not part of the plan's original design**: `processor_shared.go` (Step 1) already defines `buildPromoBonusRow`/`buildInvoiceBonusRow` with the NEW `orderNumber string` parameter — but since both the old parameter name (`poNumber`) and the new one (`orderNumber`) are plain `string`, Go's compiler cannot catch a caller that still passes a bare PO number where a fully-formed order number is now expected. Coop's own call sites (in `processSegment`, untouched by this task's Steps 2 and 4 — those only removed the HELPER function definitions, not `processSegment`'s calls into them) are exactly such a caller. Left unfixed, this task would silently regress Coop's golden-fixture test (bonus rows write `OrderNumber` without the `"ĐĐHCOOP-"` prefix) — caught by Step 8's baseline comparison below, not by the compiler. Fix it now, in this same task, so this task's own commit has zero regressions (originally scoped as part of Task 1, moved here once the dependency was discovered).
 
-Run: `cd GO && go test ./... -v 2>&1 | tee /tmp/task0-after.txt` (or equivalent — capture full output).
-
-Expected: **every** Coop/Lotte/Satra test that passed before this task still passes, with identical results — specifically confirm `TestRealProcessor_ProcessesRealSampleCoopFile`, `TestRealProcessor_PromoBonusRowFieldsMatchPythonRowTarget`, `TestRealProcessor_MatchesGoldenFixtures_Lotte` (60/60), `TestRealProcessor_MatchesGoldenFixtures_Satra` (36/36) are unchanged. `TestRealProcessor_MatchesGoldenFixtures` (Coop) is expected to still show its known pre-existing, unrelated failure (same mismatch count as before this task — confirm the count is IDENTICAL, not worse) — this task must not be blocked by that pre-existing issue, but must not make it worse either.
-
-- [ ] **Step 8: Commit**
-
-```bash
-git add GO/internal/processing/processor_shared.go GO/internal/processing/golden_test_helpers_test.go GO/internal/processing/coop_processor.go GO/internal/processing/coop_processor_test.go GO/internal/processing/coop_golden_test.go GO/internal/processing/lotte_processor.go
-git commit -m "refactor(go): extract shared vendor-neutral helpers into their own files"
-```
-
----
-
-### Task 1: Parameterize order-number on `buildPromoBonusRow`/`buildInvoiceBonusRow`
-
-**Files:**
-- Modify: `GO/internal/processing/coop_processor.go`
-- Modify: `GO/internal/processing/lotte_processor.go`
-- Modify: `GO/internal/processing/satra_processor.go`
-
-**Interfaces:**
-- Consumes: `buildPromoBonusRow`/`buildInvoiceBonusRow`'s new `orderNumber string` parameter (already defined this way in Task 0's `processor_shared.go` — this task only updates call sites).
-- Produces: no post-patch of `bonusRow.OrderNumber` anywhere in the codebase after this task — consumed by Task 6 (BigC does NOT need this pattern at all, since it doesn't call these shared functions, but every OTHER vendor's call sites must be updated so the codebase has exactly one convention).
-
-- [ ] **Step 1: Update Coop's 2 call sites in `coop_processor.go`**
-
-Read the file first to confirm current line numbers (should be near where `regionInfo`/etc. used to be, in `processSegment`). Change:
+Read `coop_processor.go`'s `processSegment` function to find the 2 call sites (unchanged by this task's earlier steps). Change:
 
 ```go
 			bonusRow, mainRowNote, mainRowBundleSku, added := buildPromoBonusRow(p.Store, promoPart, product, i, entryDate, cancelDate, shipTo,
@@ -363,9 +337,38 @@ to:
 			shipTo, customerCode, description, warehouse, region, statCode, orderNumber(info.PONumber)); added {
 ```
 
-(Coop's own `orderNumber(poNumber string) string` function, kept in `coop_processor.go` by Task 0's Step 2, now gets called explicitly at each call site instead of implicitly inside the shared helpers.)
+(Coop's own `orderNumber(poNumber string) string` function, kept in `coop_processor.go` by Step 2, now gets called explicitly at each call site instead of implicitly inside the shared helpers.)
 
-- [ ] **Step 2: Update Lotte's 2 call sites in `lotte_processor.go`**
+- [ ] **Step 8: Fix imports and run the full test suite**
+
+Run `cd GO && go build ./... && go vet ./...`, fix any unused-import errors the same way as Step 4.
+
+Run: `cd GO && go test ./... -v 2>&1 | tee /tmp/task0-after.txt` (or equivalent — capture full output).
+
+Expected: **every** Coop/Lotte/Satra test that passed before this task still passes, with identical results — specifically confirm `TestRealProcessor_ProcessesRealSampleCoopFile`, `TestRealProcessor_PromoBonusRowFieldsMatchPythonRowTarget`, `TestRealProcessor_MatchesGoldenFixtures_Lotte` (60/60), `TestRealProcessor_MatchesGoldenFixtures_Satra` (36/36) are unchanged. `TestRealProcessor_MatchesGoldenFixtures` (Coop) is expected to still show its known pre-existing, unrelated failure (same mismatch count as before this task — confirm the count is IDENTICAL, not worse, INCLUDING after Step 7's fix above — the whole point of Step 7 is that this task's own commit has zero regressions of its own, on top of the pre-existing unrelated baseline).
+
+- [ ] **Step 9: Commit**
+
+```bash
+git add GO/internal/processing/processor_shared.go GO/internal/processing/golden_test_helpers_test.go GO/internal/processing/coop_processor.go GO/internal/processing/coop_processor_test.go GO/internal/processing/coop_golden_test.go GO/internal/processing/lotte_processor.go
+git commit -m "refactor(go): extract shared vendor-neutral helpers into their own files"
+```
+
+---
+
+### Task 1: Parameterize order-number on `buildPromoBonusRow`/`buildInvoiceBonusRow`
+
+**Files:**
+- Modify: `GO/internal/processing/lotte_processor.go`
+- Modify: `GO/internal/processing/satra_processor.go`
+
+**Interfaces:**
+- Consumes: `buildPromoBonusRow`/`buildInvoiceBonusRow`'s new `orderNumber string` parameter (already defined this way in Task 0's `processor_shared.go` — this task only updates call sites).
+- Produces: no post-patch of `bonusRow.OrderNumber` anywhere in the codebase after this task — consumed by Task 6 (BigC does NOT need this pattern at all, since it doesn't call these shared functions, but every OTHER vendor's call sites must be updated so the codebase has exactly one convention).
+
+**Note:** Coop's own 2 call sites were originally scoped as this task's Step 1, but were moved into Task 0 (as its Step 7) after Task 0's implementer caught a real defect: since the old (`poNumber`) and new (`orderNumber`) parameters are both plain `string`, the compiler can't catch a stale caller, so leaving Coop's call sites unfixed until this task would have left Task 0's own commit with a silent regression in Coop's golden-fixture test. Coop is already correct by the time this task starts — this task only touches Lotte and Satra.
+
+- [ ] **Step 1: Update Lotte's 2 call sites in `lotte_processor.go`**
 
 Change:
 ```go
@@ -401,7 +404,7 @@ to:
 			totalWeight += bonusRow.LineWeightKg
 ```
 
-- [ ] **Step 3: Update Satra's 2 call sites in `satra_processor.go`**
+- [ ] **Step 2: Update Satra's 2 call sites in `satra_processor.go`**
 
 Change:
 ```go
@@ -441,17 +444,17 @@ to:
 			totalWeight += bonusRow.LineWeightKg
 ```
 
-- [ ] **Step 4: Run the full test suite**
+- [ ] **Step 3: Run the full test suite**
 
 Run: `cd GO && go build ./... && go vet ./... && go test ./... -v`
 
-Expected: identical results to Task 0's Step 7 baseline — this task is a pure call-site update with no behavior change (the value passed as `orderNumber` is exactly what the old post-patch used to set `bonusRow.OrderNumber` to, just passed in upfront instead of assigned after). `TestRealProcessor_PromoBonusRowFieldsMatchPythonRowTarget` and every golden-fixture test's `OrderNumber`/`B`-column assertions must be byte-identical to before.
+Expected: identical results to Task 0's Step 8 baseline — this task is a pure call-site update with no behavior change (the value passed as `orderNumber` is exactly what the old post-patch used to set `bonusRow.OrderNumber` to, just passed in upfront instead of assigned after; Coop is already correct from Task 0's Step 7 and must remain unchanged by this task). `TestRealProcessor_PromoBonusRowFieldsMatchPythonRowTarget` and every golden-fixture test's `OrderNumber`/`B`-column assertions must be byte-identical to before.
 
-- [ ] **Step 5: Commit**
+- [ ] **Step 4: Commit**
 
 ```bash
-git add GO/internal/processing/coop_processor.go GO/internal/processing/lotte_processor.go GO/internal/processing/satra_processor.go
-git commit -m "refactor(go): parameterize buildPromoBonusRow/buildInvoiceBonusRow's order-number"
+git add GO/internal/processing/lotte_processor.go GO/internal/processing/satra_processor.go
+git commit -m "refactor(go): parameterize buildPromoBonusRow/buildInvoiceBonusRow's order-number for Lotte and Satra"
 ```
 
 ---
