@@ -100,3 +100,39 @@ func TestIdentify_BigCCheckedBeforeLotte(t *testing.T) {
 		t.Fatalf("Identify with BigC marker = %q, want %q", got, "BigC")
 	}
 }
+
+func TestIdentify_RecognizesWinmartBySupplierCode(t *testing.T) {
+	cases := []struct {
+		name string
+		text string
+		want string
+	}{
+		{"supplier code present", "Header\nNhà cung cấp (Supplier): 0002011398\nfooter", "Winmart"},
+		{"unrelated supplier code", "Nhà cung cấp (Supplier): 9999999999", ""},
+		{"no marker at all", "nothing relevant here", ""},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			got := Identify(c.text)
+			if got != c.want {
+				t.Fatalf("Identify(%q) = %q, want %q", c.text, got, c.want)
+			}
+		})
+	}
+}
+
+func TestIdentify_WinmartCheckedAfterSatra(t *testing.T) {
+	// Python's real identify_vendor order (xulydonhang.py:90-179) is
+	// Coop -> BigC -> Lotte -> Satra -> Satra(2nd form) -> Emart ->
+	// Kingfood -> CN-HCM -> Winmart -> SHOPEE-CHOICE -> ... Since Emart/
+	// Kingfood/CN-HCM are not yet ported to Go, Winmart's case only needs
+	// to be appended after Satra's (not inserted mid-sequence like BigC
+	// was) to preserve the correct relative order among vendors that
+	// actually exist in Go today. This test doesn't have a genuine
+	// ordering conflict to construct (no unported vendor's pattern is
+	// available), so it documents the intent for a future reader.
+	got := Identify("Nhà cung cấp (Supplier): 0002011398")
+	if got != "Winmart" {
+		t.Fatalf("Identify with Winmart marker = %q, want %q", got, "Winmart")
+	}
+}
