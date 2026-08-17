@@ -213,13 +213,17 @@ func extractWinmartPageText(page pdf.Page) (result string, err error) {
 }
 
 // extractWinmartPageTextFromFile reopens filePath and re-extracts a
-// single page's text via extractWinmartPageText (pageIdx is 0-based,
-// matching the pageTexts index the shared dispatch loop already
-// iterates in coop_processor.go's Process). Winmart pages are already
-// re-parsed a second time on purpose here (the shared extractPageTexts
-// pass, used for vendor.Identify and every other vendor, stays exactly
-// as-is) — see extractWinmartPageText's own doc comment for why this
-// isn't instead folded into that shared pass.
+// single page's text via extractWinmartPageText. pageIdx is 0-based and
+// must be the REAL, uncompacted PDF page number minus one — NOT the
+// shared dispatch loop's pageTexts index. extractPageTexts (in
+// pdfextract.go) skips null pages without appending a placeholder, so
+// its returned pageTexts slice is compacted; coop_processor.go's Process
+// passes extractPageTexts's parallel pageNumbers slice
+// (pageNumbers[pageIdx]-1) here for exactly this reason. Winmart pages
+// are already re-parsed a second time on purpose here (the shared
+// extractPageTexts pass, used for vendor.Identify and every other
+// vendor, stays exactly as-is) — see extractWinmartPageText's own doc
+// comment for why this isn't instead folded into that shared pass.
 func extractWinmartPageTextFromFile(filePath string, pageIdx int) (string, error) {
 	file, r, err := pdfOpen(filePath)
 	if err != nil {
