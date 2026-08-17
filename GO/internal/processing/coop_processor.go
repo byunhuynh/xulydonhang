@@ -45,6 +45,17 @@ func (p *RealProcessor) Process(ctx context.Context, filePath string, stt int) (
 		}}, nil
 	}
 
+	// BigC's identifying markers are present on every page of a real
+	// BigC file (see vendor.Identify's bigcPattern doc comment), but
+	// only page 0 carries the master price list, customer code, and
+	// PO/dates every store page's row-building depends on — a per-page
+	// dispatch can't supply that cross-page state. Pre-check page 0
+	// specifically and, if it's BigC, hand the WHOLE file to
+	// processBigcDocument instead of entering the per-page loop below.
+	if len(pageTexts) > 0 && vendor.Identify(pageTexts[0]) == "BigC" {
+		return p.processBigcDocument(filePath, pageTexts)
+	}
+
 	var rows []OrderRow
 	for pageIdx, text := range pageTexts {
 		pageLabel := fmt.Sprintf("%d/%d", pageIdx+1, len(pageTexts))
