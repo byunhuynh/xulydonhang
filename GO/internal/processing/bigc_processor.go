@@ -157,6 +157,14 @@ func (p *RealProcessor) processBigcDocument(filePath string, pageTexts []string)
 func (p *RealProcessor) processBigcStorePage(storePageText string, priceList []bigc.Product, priceIndex *pricing.Index,
 	orderNum, entryDate, cancelDate, customerCode, shipTo, description, warehouse, region, statCode string, isFirstSuccessful bool,
 ) storePageResult {
+	// The extracted store name itself is intentionally discarded here —
+	// only `ok` (whether extraction succeeded) is used. The name that
+	// actually ends up in this store's rows comes from a different,
+	// document-level source (customerCode/description, resolved once in
+	// processBigcDocument from page 0 and threaded through as
+	// parameters), not from this per-page extraction. This is not an
+	// oversight; ExtractStoreName is called here purely as a page-is-a-
+	// real-store-page sanity check.
 	_, ok := bigc.ExtractStoreName(storePageText)
 	if !ok {
 		return storePageResult{err: fmt.Errorf("không tách được tên store")}
@@ -178,6 +186,15 @@ func (p *RealProcessor) processBigcStorePage(storePageText string, priceList []b
 	// this kind of blank continuation page) — treating this as a hard
 	// error (an earlier version of this port did) produces a spurious
 	// Failed OrderRow Python never reports for these files.
+	//
+	// Note this removes a safety net: with the hard-fail gone, a future
+	// regression in bigc.ExtractStoreItems's regexes (one that starts
+	// wrongly matching zero lines on a page that legitimately has items)
+	// would now silently produce a "Hoàn Thành" success status with
+	// missing rows, instead of a loud Failed row. The golden fixture
+	// test (bigc_golden_test.go) is the only thing that would catch
+	// such a regression, since it diffs actual row content/counts
+	// against frozen Python output — not just status/error presence.
 	rawItems := bigc.ExtractStoreItems(storePageText)
 	items := bigc.JoinItemsWithPrices(rawItems, priceList)
 
@@ -218,7 +235,26 @@ func (p *RealProcessor) processBigcStorePage(storePageText string, priceList []b
 			if promo.Value == "" {
 				continue
 			}
-			khuyenmai = promo.Value
+			// Normalize literal CR to LF here, matching Python's
+			// actual EFFECTIVE output for this column rather than its
+			// raw fetch. Root cause (confirmed by hand-tracing the
+			// xlsx XML): openpyxl silently normalizes '\r' -> '\n' (and
+			// '\r\n' -> '\n\n') on the write/read round-trip that Task
+			// 7's fixture-generation harness performs when it captures
+			// promo text into the frozen golden fixtures — Go's
+			// excelize instead escapes '\r' as "&#xD;", which survives
+			// untouched, so without this normalization Go's AQ output
+			// (raw CR preserved) diverges from Python's fixture-
+			// captured AQ output (CR silently mangled to LF) even
+			// though both started from the identical raw CSV cell
+			// value. This is a BigC-fixture-capture-path artifact, not
+			// a live-fetch-timing issue — see bigc_golden_test.go's
+			// former Category C comment / task-8-report.md Fix Round 1
+			// for the full investigation. Scoped to BigC only: applying
+			// it here (not in the shared excelwriter write site) avoids
+			// touching Coop/Lotte/Satra, whose golden tests already
+			// pass without this normalization.
+			khuyenmai = strings.ReplaceAll(promo.Value, "\r", "\n")
 			if discount := coop.ExtractDiscount(promo.Value); discount != 0 {
 				// xulydonhang.py:4685 recomputes from the ORIGINAL
 				// fetched price (giathuctegoc), not from whatever
