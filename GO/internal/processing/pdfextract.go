@@ -10,15 +10,28 @@ import (
 	"order-processor/internal/processing/vendor"
 )
 
-func extractPageTexts(path string) ([]string, error) {
+// extractPageTexts returns each non-null page's extracted text, plus a
+// parallel slice of the real, 1-based PDF page number for each entry.
+// The two slices are the same length and the same order; pages[i]
+// corresponds to real PDF page pageNumbers[i]. This second slice exists
+// because the returned pages slice is COMPACTED — a null page (see the
+// page.V.IsNull() check below) is skipped, not appended as an empty
+// entry — so pages[i] does NOT in general equal PDF page i+1 once any
+// earlier page has been null. Callers that need to re-open this same PDF
+// and re-fetch a specific page by its real PDF page number (rather than
+// just consuming pages[i] as opaque text) must use pageNumbers[i], not i,
+// for that lookup — see extractWinmartPageTextFromFile's caller in
+// coop_processor.go for a concrete case this matters for.
+func extractPageTexts(path string) ([]string, []int, error) {
 	file, r, err := pdfOpen(path)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	defer file.Close()
 
 	numPages := r.NumPage()
 	pages := make([]string, 0, numPages)
+	pageNumbers := make([]int, 0, numPages)
 	for i := 1; i <= numPages; i++ {
 		page := r.Page(i)
 		if page.V.IsNull() {
@@ -26,14 +39,15 @@ func extractPageTexts(path string) ([]string, error) {
 		}
 		text, err := extractPageText(page)
 		if err != nil {
-			return nil, fmt.Errorf("trang %d: %w", i, err)
+			return nil, nil, fmt.Errorf("trang %d: %w", i, err)
 		}
 		pages = append(pages, text)
+		pageNumbers = append(pageNumbers, i)
 	}
 	if len(pages) == 0 {
-		return nil, fmt.Errorf("không đọc được nội dung trang nào")
+		return nil, nil, fmt.Errorf("không đọc được nội dung trang nào")
 	}
-	return pages, nil
+	return pages, pageNumbers, nil
 }
 
 // minPlausibleLines is the newline-count floor below which

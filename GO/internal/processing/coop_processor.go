@@ -36,7 +36,7 @@ type RealProcessor struct {
 }
 
 func (p *RealProcessor) Process(ctx context.Context, filePath string, stt int) ([]OrderRow, error) {
-	pageTexts, err := extractPageTexts(filePath)
+	pageTexts, pageNumbers, err := extractPageTexts(filePath)
 	if err != nil {
 		return []OrderRow{{
 			FileName:   filepath.Base(filePath),
@@ -109,12 +109,17 @@ func (p *RealProcessor) Process(ctx context.Context, filePath string, stt int) (
 		case "Winmart":
 			// Re-extract this page's text with extractWinmartPageText
 			// instead of using the shared pass's `text` directly — see
-			// that function's doc comment (winmart_pdftext.go) for why
-			// Winmart specifically needs it. Best-effort: if re-parsing
-			// fails for any reason, fall back to the already-extracted
-			// `text` rather than failing the whole page.
+			// that function's doc comment (winmart_pdftext.go) for why.
+			// Use pageNumbers[pageIdx] (the real, uncompacted PDF page
+			// number), NOT the loop's pageIdx itself: extractPageTexts
+			// skips null pages without appending a placeholder, so
+			// pageIdx only equals "real page number minus one" when no
+			// earlier page in this document was null. Passing pageIdx
+			// directly here would silently re-extract the WRONG page
+			// whenever an earlier page is null, with no error returned
+			// to trigger the fallback below.
 			winmartText := text
-			if improved, wErr := extractWinmartPageTextFromFile(filePath, pageIdx); wErr == nil {
+			if improved, wErr := extractWinmartPageTextFromFile(filePath, pageNumbers[pageIdx]-1); wErr == nil && improved != "" {
 				winmartText = improved
 			}
 			row, err := p.processWinmartSegment(filePath, winmartText, pageLabel)

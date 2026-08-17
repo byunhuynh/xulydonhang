@@ -7,7 +7,7 @@ func TestExtractPageTexts_ReturnsOnePerPage(t *testing.T) {
 	// folder as a smoke-test fixture — copy one into testdata/ (see
 	// Step 2) rather than depending on the live folder, so this test
 	// doesn't break if that folder's contents change.
-	pages, err := extractPageTexts("testdata/sample_coop_order.pdf")
+	pages, _, err := extractPageTexts("testdata/sample_coop_order.pdf")
 	if err != nil {
 		t.Fatalf("extractPageTexts returned error: %v", err)
 	}

@@ -154,6 +154,12 @@ func extractWinmartPageText(page pdf.Page) (result string, err error) {
 				haveY = true
 			}
 		case "Tf":
+			// Deliberate fix vs. the vendored library: GetPlainText
+			// assigns font.Encoder() into its encoder variable
+			// unconditionally, even when Encoder() returns nil (page.go
+			// ~line 578) — this guards against that and falls back to
+			// the passthrough nopEncoder instead, the same way this
+			// function already does for an unrecognized font name.
 			if len(args) == 2 {
 				if font, ok := fonts[args[0].Name()]; ok {
 					if e := font.Encoder(); e != nil {
@@ -166,6 +172,12 @@ func extractWinmartPageText(page pdf.Page) (result string, err error) {
 				}
 			}
 		case "\"":
+			// The vendored library's own GetPlainText has a bug here: its
+			// case "\"" falls through into case "'"'s len(args) != 1
+			// check, so it panics on every valid 3-operand '"' call. This
+			// reimplementation fixes that by handling '"' with its own
+			// 3-arg check and using args[2] (the string operand — '"'
+			// syntax is `aw ac string "`), matching the PDF spec.
 			if len(args) != 3 {
 				panic("bad \" operator")
 			}
