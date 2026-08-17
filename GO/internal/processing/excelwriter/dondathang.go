@@ -41,6 +41,13 @@ type Row struct {
 	PriceMismatch  bool
 	InvoicePrice   float64
 	UseZFormula    bool
+	// NoCaseCount suppresses the AU (case count) write entirely, leaving
+	// the cell blank rather than writing 0. BigC's write_to_dondathang_bigc
+	// (xulydonhang.py:4541-4897) never touches AU on ANY row — unlike
+	// Coop/Satra/Lotte, which always write a real (possibly legitimately
+	// zero) case count — so BigC rows set this true to distinguish "no
+	// value" from "computed value of zero".
+	NoCaseCount bool
 }
 
 // WriteOrderRows appends rows to the "Don dat hang" sheet, mirroring
@@ -138,8 +145,10 @@ func writeRow(f *excelize.File, rowNum int, row Row, redFillStyle int) error {
 	// (as an unconditional write would) is a real, visible difference:
 	// real fixtures show AU/AT as null on the header row, not 0.
 	if !row.IsNoteRow {
-		if err := set("AU", row.CaseCount); err != nil {
-			return fmt.Errorf("excelwriter: set AU%d: %w", rowNum, err)
+		if !row.NoCaseCount {
+			if err := set("AU", row.CaseCount); err != nil {
+				return fmt.Errorf("excelwriter: set AU%d: %w", rowNum, err)
+			}
 		}
 		if err := set("AT", row.LineWeightKg); err != nil {
 			return fmt.Errorf("excelwriter: set AT%d: %w", rowNum, err)

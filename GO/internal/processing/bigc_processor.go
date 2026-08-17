@@ -157,14 +157,28 @@ func (p *RealProcessor) processBigcDocument(filePath string, pageTexts []string)
 func (p *RealProcessor) processBigcStorePage(storePageText string, priceList []bigc.Product, priceIndex *pricing.Index,
 	orderNum, entryDate, cancelDate, customerCode, shipTo, description, warehouse, region, statCode string, isFirstSuccessful bool,
 ) storePageResult {
-	storeName, ok := bigc.ExtractStoreName(storePageText)
+	_, ok := bigc.ExtractStoreName(storePageText)
 	if !ok {
 		return storePageResult{err: fmt.Errorf("không tách được tên store")}
 	}
+	// A page with ZERO extracted item lines is a legitimate, successful
+	// "store" page in Python, not an error: write_to_dondathang_bigc
+	// (xulydonhang.py:4605) just does `for item in items:` over
+	// (possibly empty) items — an empty list means the loop body never
+	// runs, no exception, no error return. Real PDFs have pages like
+	// this: BigC's page-0 "PURCHASE NOTE" master list can overflow onto
+	// a second physical page (PDF page index 1) that repeats the
+	// header/store-info block but has no item table at all — Python's
+	// caller (xulydonhang.py:9469) still calls write_to_dondathang_bigc
+	// for every page from index 1 to len(doc)-2 unconditionally, and
+	// since that call's `page_num == 1` (xulydonhang.py:4583), the
+	// order's header/note row (this port's isFirstSuccessful row) is
+	// STILL attached there. Confirmed via 2631057774693.pdf and
+	// 2632057938612.pdf (real fixtures whose PDF page index 1 is exactly
+	// this kind of blank continuation page) — treating this as a hard
+	// error (an earlier version of this port did) produces a spurious
+	// Failed OrderRow Python never reports for these files.
 	rawItems := bigc.ExtractStoreItems(storePageText)
-	if len(rawItems) == 0 {
-		return storePageResult{err: fmt.Errorf("không trích xuất được sản phẩm nào cho store %q", storeName)}
-	}
 	items := bigc.JoinItemsWithPrices(rawItems, priceList)
 
 	var rows []excelwriter.Row
@@ -226,26 +240,18 @@ func (p *RealProcessor) processBigcStorePage(storePageText string, priceList []b
 			matched = true
 		}
 
-		productRow := excelwriter.Row{
-			EntryDate: entryDate, DebtDays: coopDebtDays, OrderNumber: orderNum,
-			Status: "Chưa thực hiện", CancelDate: cancelDate, ShipTo: shipTo, CustomerCode: customerCode,
-			Description: description, SKU: barcode, Warehouse: warehouse, VATPercent: 8,
-			RegionCode: region, StatCode: statCode, Qty: qtyOrdPcs, UnitPrice: finalPrice,
-			ProductName: productInfo.Name, LineWeightKg: lineWeight, UseZFormula: true, PromoContent: khuyenmai,
-		}
-		if !matched {
-			productRow.PriceMismatch = true
-			productRow.InvoicePrice = invoicePrice
-			saigia++
-		}
-		rows = append(rows, productRow)
-		tongtien += finalPrice * qtyOrdPcs // xulydonhang.py:4749 — uses qtyOrdPcs BEFORE any promo-bonus division below
-
 		// Promo bonus-row check (xulydonhang.py:4754-4808). BigC has NO
 		// khuyenmai.split('|') loop (confirmed structurally different
 		// from Coop/Satra during planning) — exactly one bonus row per
 		// item, driven by the single khuyenmai string this item ended
-		// up with.
+		// up with. This is computed BEFORE productRow is built below
+		// because Python writes AO/AP (xulydonhang.py:4771/4777) on the
+		// PRODUCT row (current_row, before current_row is incremented
+		// for the bonus row) — NOT on the bonus row itself, despite the
+		// bonus-row fields being written physically later in the
+		// function. Putting PromoNote/PromoBundleSku on the bonus row
+		// (an earlier version of this port did) produces an off-by-one
+		// row shift versus every real fixture.
 		bonusSku := p.Store.FindSkusMentioned(khuyenmai)
 		bonusQty := qtyOrdPcs
 		bonusBarcode := ""
@@ -264,11 +270,9 @@ func (p *RealProcessor) processBigcStorePage(storePageText string, priceList []b
 				bonusQty = math.Floor(qtyOrdPcs / float64(x))
 			}
 		}
-		if bonusBarcode != "" {
-			bonusInfo, _ := p.Store.GetProductInfo(bonusBarcode)
-			bonusWeight := bonusInfo.WeightKg * bonusQty
-			weightKg += bonusWeight
 
+		var promoNote, promoBundleSku string
+		if bonusBarcode != "" {
 			// xulydonhang.py:4769's laycachbo_khuyenmai(value) uses the
 			// leftover "value" loop variable from the promo-matching
 			// loop above, not "khuyenmai" — this plan's Global
@@ -278,21 +282,54 @@ func (p *RealProcessor) processBigcStorePage(storePageText string, priceList []b
 			// "correct main flow" policy. Flag via knownDivergences_BigC
 			// during Task 8 if a real fixture traces a mismatch to this.
 			bundleNote := coop.ExtractBraceContent(khuyenmai)
+			if bundleNote != "" {
+				promoNote = bundleNote
+				lower := strings.ToLower(bundleNote)
+				if strings.Contains(lower, "bó kèm") || strings.Contains(lower, "quấn kèm") {
+					// xulydonhang.py:4774-4775 — same AP value written on
+					// BOTH the product row and the bonus row. Not
+					// observed in any of the 29 real fixtures (cachbokem
+					// is always empty for BigC's actual promo data), but
+					// ported for fidelity in case it's ever hit.
+					promoBundleSku = fmt.Sprintf("%s_%s_1", layduoiMahang(barcode), layduoiMahang(bonusBarcode))
+				}
+			} else {
+				// BigC's per-item no-brace fallback text is genuinely
+				// different from Coop/Satra's "KM Bó Kèm - Che Barcode"
+				// (xulydonhang.py:4777: "KM Rời - Không Che Barcode") —
+				// confirmed during planning, not a transcription error.
+				promoNote = "KM Rời - Không Che Barcode"
+			}
+		}
+
+		productRow := excelwriter.Row{
+			EntryDate: entryDate, DebtDays: coopDebtDays, OrderNumber: orderNum,
+			Status: "Chưa thực hiện", CancelDate: cancelDate, ShipTo: shipTo, CustomerCode: customerCode,
+			Description: description, SKU: barcode, Warehouse: warehouse, VATPercent: 8,
+			RegionCode: region, StatCode: statCode, Qty: qtyOrdPcs, UnitPrice: finalPrice,
+			ProductName: productInfo.Name, LineWeightKg: lineWeight, UseZFormula: true, PromoContent: khuyenmai,
+			PromoNote: promoNote, PromoBundleSku: promoBundleSku, NoCaseCount: true,
+		}
+		if !matched {
+			productRow.PriceMismatch = true
+			productRow.InvoicePrice = invoicePrice
+			saigia++
+		}
+		rows = append(rows, productRow)
+		tongtien += finalPrice * qtyOrdPcs // xulydonhang.py:4749 — uses qtyOrdPcs BEFORE any promo-bonus division below
+
+		if bonusBarcode != "" {
+			bonusInfo, _ := p.Store.GetProductInfo(bonusBarcode)
+			bonusWeight := bonusInfo.WeightKg * bonusQty
+			weightKg += bonusWeight
+
 			bonusRow := excelwriter.Row{
 				EntryDate: entryDate, DebtDays: coopDebtDays, OrderNumber: orderNum,
 				Status: "Chưa thực hiện", CancelDate: cancelDate, ShipTo: shipTo, CustomerCode: customerCode,
 				Description: description, SKU: bonusBarcode, Warehouse: warehouse, VATPercent: 8,
 				RegionCode: region, StatCode: statCode, IsPromoItem: true, Qty: bonusQty,
 				ProductName: bonusInfo.Name, LineWeightKg: bonusWeight, UseZFormula: false,
-			}
-			if bundleNote != "" {
-				bonusRow.PromoNote = bundleNote
-			} else {
-				// BigC's per-item no-brace fallback text is genuinely
-				// different from Coop/Satra's "KM Bó Kèm - Che Barcode"
-				// (xulydonhang.py:4777: "KM Rời - Không Che Barcode") —
-				// confirmed during planning, not a transcription error.
-				bonusRow.PromoNote = "KM Rời - Không Che Barcode"
+				PromoBundleSku: promoBundleSku, NoCaseCount: true,
 			}
 			rows = append(rows, bonusRow)
 		}
@@ -313,4 +350,16 @@ func parseNumericField(s string) float64 {
 		return 0
 	}
 	return v
+}
+
+// layduoiMahang mirrors layduoi_mahang(text) (xulydonhang.py:885-887):
+// split on "_", take the part before the first underscore, then return
+// its last 4 characters (fewer if the string is shorter).
+func layduoiMahang(text string) string {
+	base := strings.SplitN(text, "_", 2)[0]
+	r := []rune(base)
+	if len(r) <= 4 {
+		return base
+	}
+	return string(r[len(r)-4:])
 }
