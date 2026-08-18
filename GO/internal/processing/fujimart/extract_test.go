@@ -237,3 +237,51 @@ func TestParseOrderInfo_MissingStoreInfoStillSucceeds(t *testing.T) {
 		t.Errorf("storeInfo = %q, want empty", storeInfo)
 	}
 }
+
+func TestExtractProducts_ParsesRealSampleFiveProducts(t *testing.T) {
+	// Exact shape of this repo's OWN extractPageTexts output for the
+	// product-table region of đơn hàng/08-2026/103001302608001342.pdf,
+	// confirmed during planning by running the actual Go PDF pipeline —
+	// including the internal SKU-like code line after each barcode
+	// (e.g. "2006324377") that the regex must correctly skip over.
+	text := "§Þa chØ:\n" +
+		"1\n12.0\n1,695,264\nTUI\n141,272\nBLUE -N­íc giÆt x¶ ®Ëm ®Æc H. Th¶o méc 3.6 l\n8936156730879\n2006324377\n" +
+		"2\n12.0\n1,695,264\nTUI\n141,272\nBLUE -N­íc giÆt x¶ ®Ëm ®Æc H. N­íc hoa 3.6 l\n8936156730886\n2006324378\n" +
+		"3\n12.0\n490,836\nTUI\n40,903\nBLUE -N­íc röa chÐn chiÕt xuÊt g¹o tói 2.1L\n8936156730473\n2006324379\n" +
+		"4\n12.0\n490,836\nTUI\n40,903\nBLUE -N­íc röa chÐn chiÕt xuÊt ®Ëu xanh tói 2.1L\n8936156730466\n2006324380\n" +
+		"5\n12.0\n452,472\nCH\n37,706\nBLUE -Chai th¶ bån cÇu toilet h­¬ng Ngµn hoa 180g\n8809174900138\n2006324382\n" +
+		"4,824,672\n" +
+		"ng­êi ®Æt ®¬n\n" +
+		"VAT\n"
+
+	products := ExtractProducts(text)
+	if len(products) != 5 {
+		t.Fatalf("len(products) = %d, want 5", len(products))
+	}
+	want := []Product{
+		{Barcode: "8936156730879", OUQty: "12.0", TotalPrice: "1695264"},
+		{Barcode: "8936156730886", OUQty: "12.0", TotalPrice: "1695264"},
+		{Barcode: "8936156730473", OUQty: "12.0", TotalPrice: "490836"},
+		{Barcode: "8936156730466", OUQty: "12.0", TotalPrice: "490836"},
+		{Barcode: "8809174900138", OUQty: "12.0", TotalPrice: "452472"},
+	}
+	for i, w := range want {
+		if products[i] != w {
+			t.Errorf("products[%d] = %+v, want %+v", i, products[i], w)
+		}
+	}
+}
+
+func TestExtractProducts_NoTableMarkerReturnsEmpty(t *testing.T) {
+	products := ExtractProducts("no address marker or VAT anywhere in this text")
+	if products != nil {
+		t.Errorf("ExtractProducts = %v, want nil", products)
+	}
+}
+
+func TestExtractProducts_NoMatchingRowsReturnsEmpty(t *testing.T) {
+	products := ExtractProducts("§Þa chØ:\nnothing shaped like a product row\nVAT\n")
+	if products != nil {
+		t.Errorf("ExtractProducts = %v, want nil", products)
+	}
+}

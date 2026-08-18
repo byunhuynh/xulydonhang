@@ -179,3 +179,75 @@ func valueAfterMarker(lines []string, marker string) string {
 	}
 	return ""
 }
+
+// productTablePattern isolates the product-table region, mirroring
+// xulydonhang.py:8903-8907 exactly: text.rfind("§Þa chØ:") to
+// text.find("VAT"). Confirmed via real extraction that "§Þa chØ:" (this
+// exact mojibake spelling) appears exactly once in real FujiMart page
+// text, right before the product table — distinct from "§i¹ chØ:" (a
+// different mojibake spelling, the vendor/NCC's own address label,
+// appearing earlier in the text and never matched by this literal
+// string).
+var productTablePattern = regexp.MustCompile(`(?s)§Þa chØ:(.*?)VAT`)
+
+// productLinePattern mirrors tach_san_pham_Fujimart's compiled regex
+// (xulydonhang.py:7020-7028) exactly: 7 fields — STT, quantity, total
+// amount, unit, unit price, product name, and a trailing barcode/product
+// code. Go has no re.VERBOSE mode; the pattern below is the same shape
+// with the VERBOSE-only whitespace/comments removed. Python's pattern
+// uses re.MULTILINE but never references ^ or $, so that flag is
+// vestigial there and is correctly omitted here too. re.DOTALL is also
+// NOT used by Python for this pattern, so "." here does not match
+// newlines either — matches Python exactly.
+//
+// Confirmed via direct testing against this repo's own extractPageTexts
+// output for a real FujiMart PDF (see this task's own tests) that Go's
+// non-backtracking FindAllStringSubmatch reproduces the same
+// "skip the stray internal SKU-code line after each barcode" behavior
+// Python's finditer exhibits: after the first full match's barcode
+// group ends, the scan resumes right after it; the stray internal code
+// line fails to satisfy the pattern's quantity/unit groups at that
+// position (its digits don't line up with the expected shape), so the
+// scanner naturally advances to the next real STT and matches there —
+// this is a property of the pattern's own structure (no ambiguous
+// internal backtracking needed), not something either engine does
+// specially.
+var productLinePattern = regexp.MustCompile(`(\d+)\n([\d.]+)\n([\d,]+)\n([A-Z]+)\n([\d,]+)\n(.+?)\n(\d+|[A-Z0-9]+)`)
+
+// Product is one extracted FujiMart product line. Only Barcode, OUQty,
+// and TotalPrice are used downstream by processFujimartSegment — Python
+// captures "Unit"/"Unit Price"/"Product Name" too (xulydonhang.py:7043-
+// 7050) but write_to_dondathang_fujimart never reads them (product name
+// is always re-looked-up via timten_sanpham, xulydonhang.py:2821), so
+// this struct omits them entirely.
+type Product struct {
+	Barcode    string
+	OUQty      string
+	TotalPrice string
+}
+
+// ExtractProducts mirrors tach_san_pham_Fujimart (xulydonhang.py:7017-
+// 7053) plus the table-isolation step that always runs immediately
+// before it (xulydonhang.py:8903-8909). If the "§Þa chØ:...VAT"
+// isolation doesn't match at all, Python's real code would crash
+// (start = -1 from rfind, producing a nonsensical negative-index slice
+// that either errors or silently returns garbage depending on exact
+// values) — this returns nil instead, per this codebase's established
+// clean-failure policy.
+func ExtractProducts(text string) []Product {
+	tableMatch := productTablePattern.FindStringSubmatch(text)
+	if tableMatch == nil {
+		return nil
+	}
+	tableText := strings.TrimSpace(tableMatch[1])
+
+	var products []Product
+	for _, m := range productLinePattern.FindAllStringSubmatch(tableText, -1) {
+		products = append(products, Product{
+			Barcode:    m[7],
+			OUQty:      strings.ReplaceAll(m[2], ",", ""),
+			TotalPrice: strings.ReplaceAll(m[3], ",", ""),
+		})
+	}
+	return products
+}
