@@ -93,24 +93,81 @@ trạng thái tích lũy xuyên trang.
 FujiMart trong Go's `vendor.Identify` chỉ cần **nối sau Winmart** (case
 cuối cùng hiện có) — không cần chèn giữa.
 
-## Không cần OCR — xác nhận trực tiếp qua cả 2 pipeline
+## Không cần OCR — xác nhận trực tiếp qua cả 2 pipeline, kèm bẫy encoding đã giải quyết
 
-Python dùng `pytesseract` (render trang → ảnh 500dpi → OCR) để lấy tên
-chi nhánh, NHƯNG kiểm tra trực tiếp trên 6 file PDF thật khác nhau (cả
-qua PyMuPDF lẫn qua Go's `extractPageTexts`) xác nhận: **tên chi nhánh
-đã có sẵn trong lớp text thường**, luôn ở vị trí cố định — dòng đầu tiên
-có nội dung khác rỗng sau khi trang bắt đầu (dạng `"FujiMart <tên chi
-nhánh>"`, ví dụ `"FujiMart T©y S¬n"`, `"FujiMart Hoµng CÇu"`, `"FujiMart
-10 TrÇn Phó-Hµ §«ng"`).
+Python dùng `pytesseract` (render trang → ảnh 500dpi → OCR) để lấy giá
+trị trường `"Nơi nhận:"` (`tenstore`, xulydonhang.py:8895-8899, regex
+`r"N\s*ơ\s*i\s*[\s]*n\s*h\s*ậ\s*n\s*:\s*(.+?)(?=\n|$)"` áp trên text OCR).
 
-**Quyết định: không port OCR.** Trích tên chi nhánh bằng cách tìm dòng
-đầu tiên bắt đầu bằng `"FujiMart "` (không dùng chỉ số dòng cố định —
-tìm theo prefix chịu được lệch dòng nhỏ giữa các PDF). Giữ Go thuần,
-không thêm dependency Tesseract/cgo.
+**Giá trị thật, xác nhận bằng cách CHẠY TRỰC TIẾP `pytesseract` trên 2
+file PDF thật**: `"11031 FujiMart Tây Sơn"`, `"11051 FujiMart 10 Trần
+Phú-Hà Đông"` — **KHÔNG chỉ là tên chi nhánh**, mà là `<mã cửa hàng 5
+chữ số> + " " + "FujiMart " + <tên chi nhánh>`. Ban đầu brainstorm chỉ
+kiểm tra tên chi nhánh riêng lẻ và bỏ sót phần mã số — đã sửa lại sau khi
+đối chiếu trực tiếp với OCR thật.
 
-**Giá trị này đi đâu**: Python gán biến `diachigiao`/`tenstore` này thẳng
-vào tham số `diachigiao` của `write_to_dondathang_fujimart`, ghi vào cột
-**E** (ShipTo) — không phải chỉ để log. Biến `socuahang =
+**Cả 2 phần đều có sẵn trong lớp text thường, không cần OCR** — xác nhận
+qua cả PyMuPDF lẫn Go's `extractPageTexts` trên toàn bộ 15/15 file mẫu:
+- **Mã cửa hàng**: dòng ngay sau dòng chứa marker `"N¬i nhËn:"` (ví dụ
+  `"11031"`, `"11051"`, `"11021"` — luôn 5 chữ số).
+- **Tên chi nhánh**: dòng đầu tiên bắt đầu bằng `"FujiMart "` (không phụ
+  thuộc chỉ số dòng cố định — tìm theo prefix).
+
+**Quyết định: không port OCR.** Ghép 2 phần trên bằng dấu cách, đúng thứ
+tự Python. Giữ Go thuần, không thêm dependency Tesseract/cgo.
+
+### Bẫy encoding đã phát hiện và giải quyết: lớp text bị lỗi font tiếng Việt
+
+Tên chi nhánh trích từ **lớp text** bị lỗi encoding (mojibake) — ví dụ
+`"FujiMart T©y S¬n"` thay vì `"FujiMart Tây Sơn"` — trong khi giá trị
+thật Python ghi vào Excel (qua OCR) là tiếng Việt **sạch, đúng**. Đây là
+lỗi font tiếng Việt cũ kiểu byte 8-bit (dạng TCVN3/ABC) bị đọc nhầm bảng
+mã — chỉ ảnh hưởng cột **E** (địa chỉ giao hàng), không ảnh hưởng trường
+nào khác (tên sản phẩm luôn tra cứu từ `timten_sanpham`, không dùng text
+trích từ PDF).
+
+**Đã xây và xác minh bảng ánh xạ giải mã ký tự từ dữ liệu thật — chạy
+OCR thật + trích text thật trên TOÀN BỘ 15/15 file mẫu hiện có, đối
+chiếu ký tự-với-ký tự, không xung đột nào**:
+
+| Mojibake | → | Unicode đúng |
+|---|---|---|
+| `§` (U+00A7) | → | `Đ` (U+0110) |
+| `©` (U+00A9) | → | `â` (U+00E2) |
+| `ª` (U+00AA) | → | `ê` (U+00EA) |
+| `«` (U+00AB) | → | `ô` (U+00F4) |
+| `¬` (U+00AC) | → | `ơ` (U+01A1) |
+| `µ` (U+00B5) | → | `à` (U+00E0) |
+| `¸` (U+00B8) | → | `á` (U+00E1) |
+| `¹` (U+00B9) | → | `ạ` (U+1EA1) |
+| `Ç` (U+00C7) | → | `ầ` (U+1EA7) |
+| `È` (U+00C8) | → | `ẩ` (U+1EA9) |
+| `Ô` (U+00D4) | → | `ễ` (U+1EC5) |
+| `ä` (U+00E4) | → | `ọ` (U+1ECD) |
+| `ó` (U+00F3) | → | `ú` (U+00FA) |
+| `ô` (U+00F4) | → | `ụ` (U+1EE5) |
+| `ú` (U+00FA) | → | `ỳ` (U+1EF3) |
+
+**Quyết định: giải mã bằng bảng ánh xạ ký tự cố định** (1 map[rune]rune
+trong Go), áp dụng CHỈ lên chuỗi tên chi nhánh trước khi ghi cột E — giữ
+Go thuần, không cần OCR, cột E hiển thị tiếng Việt đúng như Python thật.
+
+**Rủi ro đã biết, cần xử lý rõ ràng trong code**: bảng trên chỉ phủ các
+ký tự xuất hiện trong 11 chi nhánh khác nhau đã thấy được từ 15 file mẫu
+hiện có (Tây Sơn, Hoàng Cầu, 10 Trần Phú-Hà Đông, Thụy Khuê, Lê Duẩn,
+Linh Đàm, 89 Lạc Long Quân, Ngọc Khánh, Times City, Huỳnh Thúc Kháng,
+Tân Mai, Nguyễn Cơ Thạch) — **không phải toàn bộ bảng mã font gốc**. Một
+chi nhánh FujiMart khác (chưa từng thấy trong dữ liệu mẫu) có thể dùng
+ký tự tiếng Việt chưa có trong bảng này. Hàm giải mã phải: (a) áp mapping
+cho ký tự đã biết; (b) với ký tự KHÔNG có trong bảng, GIỮ NGUYÊN không
+đổi (không đoán, không lỗi) — để lộ rõ trong output nếu gặp chi nhánh mới
+thay vì âm thầm sai; (c) khi golden-fixture chạy phát hiện ký tự lạ chưa
+map được, bổ sung vào bảng dựa trên bằng chứng thật (chạy OCR đối chiếu
+trực tiếp file đó), không suy đoán.
+
+**Giá trị này đi đâu**: Python gán biến `diachigiao`/`tenstore` (đã giải
+mã qua OCR) thẳng vào tham số `diachigiao` của `write_to_dondathang_fujimart`,
+ghi vào cột **E** (ShipTo) — không phải chỉ để log. Biến `socuahang =
 tenstore.split()[0]` (dòng 8917) chỉ dùng trong 1 dòng log/print
 (`f'SỐ cửa hàng: FJ{socuahang}'`), **không** ảnh hưởng `makhachhang` hay
 bất kỳ tra cứu nào — Go không cần port giá trị `socuahang` này.
@@ -219,9 +276,11 @@ cách Emart's `productLinePattern` đã được xác minh).
 ## Phạm vi
 
 ### Làm thật
-- Trích tên chi nhánh (tìm dòng bắt đầu `"FujiMart "`), entry_date (offset
-  -3 từ marker `"Sè §¬n:"`), po_number (dòng ngay sau dòng entry_date),
-  cancel_date (quét dòng chịu được cùng-dòng-hoặc-dòng-kế của
+- Trích `diachigiao` = `<mã cửa hàng 5 số, dòng ngay sau "N¬i nhËn:"> +
+  " " + <dòng bắt đầu "FujiMart ">`, GIẢI MÃ phần tên chi nhánh qua bảng
+  ánh xạ ký tự đã xác minh (xem mục riêng ở trên) trước khi ghép. entry_date
+  (offset -3 từ marker `"Sè §¬n:"`), po_number (dòng ngay sau dòng
+  entry_date), cancel_date (quét dòng chịu được cùng-dòng-hoặc-dòng-kế của
   `"Ngµy giao:"`), cross-validate/fallback ±2 ngày.
 - Cắt khối sản phẩm (`rfind("§Þa chØ:")` → `find("VAT")`) + trích sản
   phẩm (`ExtractProducts`, mirror `tach_san_pham_Fujimart`).
@@ -275,6 +334,10 @@ GO/internal/processing/fujimart/testdata/
 
 - Unit test cho `ParseOrderInfo`/`ExtractProducts` trong `fujimart/`,
   dùng dữ liệu thật đã xác minh qua cả 2 pipeline ở trên.
+- Test riêng cho hàm giải mã mojibake: toàn bộ 15 bảng ánh xạ đã xác minh
+  (input mojibake → output Unicode đúng, đối chiếu trực tiếp với OCR thật
+  đã chạy lúc brainstorm), CỘNG test ký tự không có trong bảng phải giữ
+  nguyên không đổi (không lỗi, không đoán).
 - Test riêng cho fallback AO/AP của khối khuyến mãi tặng kèm (xác nhận
   fallback VẪN ghi AP, khác Winmart/Emart).
 - Test riêng cho `fujimartRegionInfo` (cả 2 nhánh, dù 1 nhánh không đạt
