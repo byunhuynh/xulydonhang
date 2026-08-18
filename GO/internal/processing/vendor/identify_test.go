@@ -136,3 +136,40 @@ func TestIdentify_WinmartCheckedAfterSatra(t *testing.T) {
 		t.Fatalf("Identify with Winmart marker = %q, want %q", got, "Winmart")
 	}
 }
+
+func TestIdentify_RecognizesEmartByCompanyMarker(t *testing.T) {
+	cases := []struct {
+		name string
+		text string
+		want string
+	}{
+		{"real marker seen on real PDFs", "Header\nTHISO RETAIL COMPANY LIMITED\nfooter", "Emart"},
+		{"ASCII marker (never observed on real PDFs; mirrored for fidelity with Python)", "CONG TY TNHH TMDV XNK HA THANH (101017)", "Emart"},
+		{"unrelated text", "nothing matches here", ""},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			got := Identify(c.text)
+			if got != c.want {
+				t.Fatalf("Identify(%q) = %q, want %q", c.text, got, c.want)
+			}
+		})
+	}
+}
+
+func TestIdentify_EmartCheckedBetweenSatraAndWinmart(t *testing.T) {
+	// Python's real identify_vendor order (xulydonhang.py:90-179) is
+	// Coop -> BigC -> Lotte -> Satra -> Satra(2nd form) -> Emart ->
+	// Kingfood -> CN-HCM -> Winmart -> SHOPEE-CHOICE -> ... Kingfood/
+	// CN-HCM aren't ported to Go, so Emart's case must be inserted
+	// directly before Winmart's existing case (not appended after it)
+	// to preserve the correct relative order among vendors that exist in
+	// Go today. This test doesn't have a genuine ordering conflict to
+	// construct (no unported vendor's pattern is available to collide
+	// with), so it documents the intent for a future reader, mirroring
+	// TestIdentify_WinmartCheckedAfterSatra's own rationale.
+	got := Identify("THISO RETAIL COMPANY LIMITED")
+	if got != "Emart" {
+		t.Fatalf("Identify with Emart marker = %q, want %q", got, "Emart")
+	}
+}

@@ -27,6 +27,18 @@ var (
 	// branch (xulydonhang.py:105-109): either literal substring
 	// appearing anywhere in the (whitespace-normalized) page text.
 	satraPattern = regexp.MustCompile(`VD-00002345|VD-00002547`)
+	// Emart's identify pattern (xulydonhang.py:111-112): either a literal
+	// ASCII company-name substring, or "THISO RETAIL COMPANY LIMITED"
+	// (the actual PO issuer's letterhead name), in the whitespace-
+	// normalized page text. Confirmed on a real sample (4501866956.PDF):
+	// the real PDF text uses the ACCENTED Vietnamese form of the first
+	// company name ("CÔNG TY TNHH TMDV XNK HÀ THÀNH  (101017)"), so
+	// Python's plain-ASCII first alternative never actually matches real
+	// PDFs — only "THISO RETAIL COMPANY LIMITED" does the real work.
+	// Both are mirrored here for fidelity with Python (the ASCII form
+	// costs nothing to keep and guards against a future PDF that happens
+	// to use it).
+	emartPattern = regexp.MustCompile(`CONG TY TNHH TMDV XNK HA THANH \(101017\)|THISO RETAIL COMPANY LIMITED`)
 	// Winmart's identify pattern (xulydonhang.py:121-122): a single
 	// literal regex against the whitespace-normalized page text, no
 	// alternation, no case-insensitivity flag in Python (the supplier
@@ -36,13 +48,13 @@ var (
 
 // Identify tries to recognize which retail vendor produced this
 // page/PO text, mirroring xulydonhang.py's identify_vendor. Coop, BigC,
-// Lotte, Satra, and Winmart are implemented in that order (order is load-bearing and
-// mirrors Python's real identify_vendor precedence). Python's real order has several
-// more vendors between Satra and Winmart (Emart, Kingfood, CN-HCM) that aren't ported
-// yet — a future implementer adding one of those must insert it at the correct relative
-// position, not simply append. Identify returns "" for anything that isn't one of the
-// five implemented vendors. Future vendor additions must insert their case at the correct
-// position in this sequence, not simply append.
+// Lotte, Satra, Emart, and Winmart are implemented in that order (order
+// is load-bearing and mirrors Python's real identify_vendor precedence).
+// Python's real order still has Kingfood/CN-HCM between Emart and
+// Winmart that aren't ported yet — a future implementer adding one of
+// those must insert it at the correct relative position, not simply
+// append. Identify returns "" for anything that isn't one of the six
+// implemented vendors.
 func Identify(text string) string {
 	cleaned := strings.TrimSpace(whitespacePattern.ReplaceAllString(text, " "))
 	if coopPattern.MatchString(cleaned) {
@@ -56,6 +68,9 @@ func Identify(text string) string {
 	}
 	if satraPattern.MatchString(cleaned) {
 		return "Satra"
+	}
+	if emartPattern.MatchString(cleaned) {
+		return "Emart"
 	}
 	if winmartPattern.MatchString(cleaned) {
 		return "Winmart"
