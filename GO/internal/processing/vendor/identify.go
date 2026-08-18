@@ -54,11 +54,11 @@ var (
 // page/PO text, mirroring xulydonhang.py's identify_vendor. Coop, BigC,
 // Lotte, Satra, Emart, Winmart, and FujiMart are implemented in that order
 // (order is load-bearing and mirrors Python's real identify_vendor
-// precedence). Python's real order still has Kingfood/CN-HCM/SHOPEE-CHOICE
-// between Winmart and FujiMart that aren't ported yet — a future
-// implementer adding one of those must insert it at the correct relative
-// position, not simply append. Identify returns "" for anything that isn't
-// one of the seven implemented vendors.
+// precedence). Python's real order still has Kingfood and CN-HCM between
+// Emart and Winmart, and SHOPEE-CHOICE between Winmart and FujiMart, that
+// aren't ported yet — a future implementer adding one of those must insert
+// it at the correct relative position, not simply append. Identify returns
+// "" for anything that isn't one of the seven implemented vendors.
 func Identify(text string) string {
 	cleaned := strings.TrimSpace(whitespacePattern.ReplaceAllString(text, " "))
 	if coopPattern.MatchString(cleaned) {
