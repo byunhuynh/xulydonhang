@@ -37,6 +37,7 @@
 // (at worst) DIFFERENTLY garbled output — it can never make already-good
 // extraction worse, since it never runs against text that wasn't already
 // mostly U+FFFD to begin with.
+
 package processing
 
 import (

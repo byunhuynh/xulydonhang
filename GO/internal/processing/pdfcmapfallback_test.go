@@ -133,16 +133,37 @@ func buildFontTestPage(t *testing.T, fontDict string, extraObjs ...synthObj) pdf
 // --- decodeSimpleFontCmap: bail cases -----------------------------------
 
 func TestDecodeSimpleFontCmap_BailsOnType0Font(t *testing.T) {
-	font := buildFontTestPage(t, "<< /Type /Font /Subtype /Type0 /BaseFont /F1 >>")
+	// Deliberately gives this font a VALID, well-formed single-byte
+	// ToUnicode stream (the same shape
+	// TestDecodeSimpleFontCmap_BuildsTableFromValidSingleByteBfrange
+	// proves decodeSimpleFontCmap can successfully parse) — otherwise
+	// this test would bail 3 checks later at the missing-/ToUnicode
+	// check without ever reaching the Type0 guard it's named after,
+	// making it green-by-construction rather than a real proof. With a
+	// real ToUnicode present, only the Type0 check (which runs first)
+	// can be what stops this from succeeding.
+	cmapData := "1 beginbfrange\n<00><00><0041>\nendbfrange"
+	font := buildFontTestPage(t,
+		"<< /Type /Font /Subtype /Type0 /BaseFont /F1 /ToUnicode 20 0 R >>",
+		synthObj{20, streamObjBody("", cmapData)},
+	)
 	if table, ok := decodeSimpleFontCmap(font); ok {
-		t.Errorf("decodeSimpleFontCmap(Type0 font) = (%v, true), want ok=false — Type0/Identity-H FujiMart PDFs already decode correctly via the library's own normal path and must never be touched by this fallback", table)
+		t.Errorf("decodeSimpleFontCmap(Type0 font with a valid ToUnicode) = (%v, true), want ok=false — Type0/Identity-H FujiMart PDFs already decode correctly via the library's own normal path and must never be touched by this fallback", table)
 	}
 }
 
 func TestDecodeSimpleFontCmap_BailsOnNonNullEncoding(t *testing.T) {
-	font := buildFontTestPage(t, "<< /Type /Font /Subtype /TrueType /BaseFont /F1 /Encoding /WinAnsiEncoding >>")
+	// Same reasoning as TestDecodeSimpleFontCmap_BailsOnType0Font above:
+	// includes a VALID ToUnicode stream so this test is actually stopped
+	// by the non-Null-/Encoding check (which runs before the ToUnicode
+	// check), not by the unrelated missing-/ToUnicode check.
+	cmapData := "1 beginbfrange\n<00><00><0041>\nendbfrange"
+	font := buildFontTestPage(t,
+		"<< /Type /Font /Subtype /TrueType /BaseFont /F1 /Encoding /WinAnsiEncoding /ToUnicode 20 0 R >>",
+		synthObj{20, streamObjBody("", cmapData)},
+	)
 	if table, ok := decodeSimpleFontCmap(font); ok {
-		t.Errorf("decodeSimpleFontCmap(font with /Encoding /WinAnsiEncoding) = (%v, true), want ok=false — a font with a real, non-Null /Encoding already decodes correctly and must not be touched", table)
+		t.Errorf("decodeSimpleFontCmap(font with /Encoding /WinAnsiEncoding and a valid ToUnicode) = (%v, true), want ok=false — a font with a real, non-Null /Encoding already decodes correctly and must not be touched", table)
 	}
 }
 
