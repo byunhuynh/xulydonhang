@@ -81,6 +81,31 @@ func extractPageText(page pdf.Page) (string, error) {
 	if err != nil {
 		return "", err
 	}
+	// Some real FujiMart PDFs (confirmed: a subset using the ".VnArial"/
+	// ".VnTime" simple TrueType font family instead of the CID/Identity-H
+	// fonts most real FujiMart PDFs use) embed a malformed ToUnicode CMap
+	// whose /CMapType 2 begincodespacerange declares 2-byte character
+	// codes (e.g. "<0020><00f9>") while every actual beginbfrange entry
+	// underneath uses 1-byte codes (e.g. "<00><00><0020>") — a real bug
+	// in whatever tool generated these specific PDFs, confirmed present
+	// identically across all font resources on the affected pages. This
+	// vendored PDF library's own CMap reader trusts the (wrong) 2-byte
+	// declaration, so its codespace-range membership check never matches
+	// a real 1-byte code, and every single character — not just
+	// Vietnamese diacritics, ALL of it, digits and ASCII letters
+	// included — decodes to U+FFFD. See pdfcmapfallback.go for the fix:
+	// a from-scratch content-stream walk (mirroring this library's own
+	// GetPlainText operator-by-operator, but built on this package's
+	// exported API) that ignores the bad codespacerange declaration and
+	// just trusts each simple font's bfrange/bfchar entries' own 1-byte
+	// code width — correct per the PDF spec, since simple (non-Type0)
+	// fonts always use 1-byte codes regardless of what a malformed CMap
+	// claims.
+	if isGarbledText(text) {
+		if corrected, ok := extractPageTextViaCorrectedCmap(page); ok {
+			return corrected, nil
+		}
+	}
 	if strings.Count(text, "\n") >= minPlausibleLines {
 		return text, nil
 	}
