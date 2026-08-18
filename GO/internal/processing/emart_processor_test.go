@@ -315,3 +315,92 @@ func TestRealProcessor_EmartInvoiceBonusRowSkipsCleanlyWhenNoSkuMentioned(t *tes
 		}
 	}
 }
+
+// TestRealProcessor_EmartMultiCTKMSecondPartGetsKMRoiNote covers the i>0
+// branch of the multi-CTKM "|"-split loop — the exact branch the Task 4
+// Critical AO-placement fix's gate (`if i != 0`) must still allow
+// through, not just correctly withhold at i==0 (already covered by
+// TestRealProcessor_EmartNoBraceBonusRowUsesKMRoiNote). Flagged as an
+// untested gap by this plan's final whole-branch review: none of the 9
+// currently-available real fixtures contain a "|"-split promo.
+//
+// Uses sample_emart_order.pdf's real first product (barcode
+// 8809174900138, OU Qty 48, per-unit price 26950 — confirmed by direct
+// extraction of đơn hàng/08-2026/4501866956.PDF during planning) with a
+// two-part no-brace promo "2+1 SP0002|1+1 SP0001" (both parts are "X+1"
+// matches mentioning known internal SKUs already present in the
+// productdata test fixture — see TestFindSkusMentioned). Both parts lack
+// {...} braces, so both trigger Emart's own no-brace fallback path — the
+// first (i==0) writes the fallback onto the MAIN row only; the second
+// (i==1) must write it onto ITS OWN bonus row.
+func TestRealProcessor_EmartMultiCTKMSecondPartGetsKMRoiNote(t *testing.T) {
+	store, err := productdata.Load("productdata/testdata/data.xlsx")
+	if err != nil {
+		t.Fatalf("Load productdata failed: %v", err)
+	}
+	excelPath := copyTestWorkbookForProcessor(t)
+
+	const promoValue = "2+1 SP0002|1+1 SP0001"
+	priceCsv := [][]string{
+		{"STT", "Mã hàng", "Tên", "Giá", "1/1-31/12"},
+		{"1", "8809174900138", "Chai thả toilet", "26950", promoValue},
+	}
+	pricingSource := &fixturePricingSource{index: pricing.ParseIndex(priceCsv)}
+
+	rp := &RealProcessor{Store: store, Pricing: pricingSource, ExcelPath: excelPath}
+	if _, err := rp.Process(context.Background(), "testdata/sample_emart_order.pdf", 1); err != nil {
+		t.Fatalf("Process returned error: %v", err)
+	}
+
+	f, err := excelize.OpenFile(excelPath)
+	if err != nil {
+		t.Fatalf("failed reopening written workbook: %v", err)
+	}
+	defer f.Close()
+	sheetRows, err := f.GetRows("Don dat hang")
+	if err != nil {
+		t.Fatalf("failed reading Don dat hang rows: %v", err)
+	}
+
+	const colSKU, colPromoNote, colPromoBundleSku = 16, 40, 41
+	cell := func(row []string, idx int) string {
+		if idx < len(row) {
+			return row[idx]
+		}
+		return ""
+	}
+
+	var mainRow, firstBonusRow, secondBonusRow []string
+	for _, row := range sheetRows {
+		switch cell(row, colSKU) {
+		case "8809174900138":
+			mainRow = row
+		case "SP0002":
+			firstBonusRow = row
+		case "SP0001":
+			secondBonusRow = row
+		}
+	}
+	if mainRow == nil || firstBonusRow == nil || secondBonusRow == nil {
+		t.Fatalf("missing expected rows: main=%v first(SP0002)=%v second(SP0001)=%v", mainRow, firstBonusRow, secondBonusRow)
+	}
+
+	// i==0 (SP0002's bonus row): AO stays empty, main row carries the fallback.
+	if got := cell(mainRow, colPromoNote); got != "KM Rời - Không Che Barcode" {
+		t.Errorf("main row PromoNote (AO) = %q, want %q", got, "KM Rời - Không Che Barcode")
+	}
+	if got := cell(firstBonusRow, colPromoNote); got != "" {
+		t.Errorf("i==0 bonus row (SP0002) PromoNote (AO) = %q, want empty", got)
+	}
+
+	// i>0 (SP0001's bonus row): this IS where the fallback note must
+	// land, per xulydonhang.py:5230 (the "if i > 0:" branch) — the exact
+	// branch the Task 4 Critical fix's `if i != 0` gate must still allow
+	// through.
+	if got := cell(secondBonusRow, colPromoNote); got != "KM Rời - Không Che Barcode" {
+		t.Errorf("i>0 bonus row (SP0001) PromoNote (AO) = %q, want %q (this is the branch the Task 4 AO fix must still fire for)", got, "KM Rời - Không Che Barcode")
+	}
+	if got := cell(secondBonusRow, colPromoBundleSku); got != "" {
+		t.Errorf("i>0 bonus row (SP0001) PromoBundleSku (AP) = %q, want empty (no-brace fallback never writes AP)", got)
+	}
+}

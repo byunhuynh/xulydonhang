@@ -72,18 +72,21 @@ func TestPdfOpen_StillFailsOnGenuinelyMalformedFile(t *testing.T) {
 
 func TestPdfOpen_OpensRealEmartPDFWithTrailingGarbage(t *testing.T) {
 	// The real, confirmed case this fix was written for: a genuine
-	// production PDF, not a synthetic one. Skips gracefully if the repo
-	// layout this test expects isn't present (e.g. a CI checkout without
-	// the đơn hàng folder), matching this project's established pattern
-	// for tests that depend on real, large data files outside the repo's
-	// own tracked test fixtures.
-	path := filepath.Join("..", "..", "..", "đơn hàng", "08-2026", "4501866956.PDF")
+	// production PDF, not a synthetic one. Reads from this repo's own
+	// stable, git-tracked emart/testdata/realpdfs/ directory (Task 5)
+	// rather than the live đơn hàng/ tree every other vendor's tests
+	// still depend on — that live folder was demonstrated mid-plan to be
+	// an unstable dependency (reorganized by a live, concurrently-running
+	// production instance of this same application), which is exactly
+	// why this test now points here instead. Still skips gracefully if
+	// even this stable path is somehow absent (e.g. a sparse checkout).
+	path := filepath.Join("emart", "testdata", "realpdfs", "4501866956.pdf")
 	if _, statErr := os.Stat(path); statErr != nil {
 		t.Skipf("real sample PDF not found at %s: %v", path, statErr)
 	}
 	f, r, err := pdfOpen(path)
 	if err != nil {
-		t.Fatalf("pdfOpen returned error for real Emart PDF 4501866956.PDF: %v", err)
+		t.Fatalf("pdfOpen returned error for real Emart PDF 4501866956.pdf: %v", err)
 	}
 	defer f.Close()
 	if r.NumPage() != 1 {
@@ -125,25 +128,26 @@ func TestStripInlineImageData_NoOpWhenNoInlineImage(t *testing.T) {
 }
 
 func TestPdfOpen_ExtractsTextFromRealEmartPDFsWithInlineImages(t *testing.T) {
-	// The real, confirmed case this fix was written for. All 17 real
-	// Emart PDFs embed an inline image in their content stream; 15 of
-	// them previously failed page.GetPlainText() outright. Skips
-	// gracefully if the repo layout this test expects isn't present,
-	// matching this project's established pattern for tests depending on
-	// real, large data files outside the repo's own tracked fixtures.
-	dir := filepath.Join("..", "..", "..", "đơn hàng", "08-2026")
-	names := []string{
-		"4501866956.PDF", "4501866958.PDF", "4501873464.PDF", "4501873471.PDF",
-		"4501873478.PDF", "4501875697.PDF", "4501875698.PDF", "4501875699.PDF",
-		"4501878295.PDF", "4501880037.PDF", "4501880038.PDF", "4501880119.PDF",
-		"4501880122.PDF", "4501880895.PDF", "4501880904.PDF", "4501880907.PDF",
-		"4501881986.PDF",
+	// The real, confirmed case this fix was written for: real Emart PDFs
+	// embed an inline image in their content stream, which previously
+	// made page.GetPlainText() fail outright. Reads every PDF present in
+	// this repo's own stable, git-tracked emart/testdata/realpdfs/
+	// directory (Task 5) — as of this writing that's 9 of the original
+	// 17 real Emart PDFs found (the other 8 were still pending in a live
+	// production instance's own processing queue when Task 5 ran); using
+	// a glob instead of a hardcoded filename list means this test picks
+	// up the remaining 8 automatically whenever they're added later, with
+	// no test change required.
+	dir := filepath.Join("emart", "testdata", "realpdfs")
+	paths, err := filepath.Glob(filepath.Join(dir, "*.pdf"))
+	if err != nil {
+		t.Fatalf("failed globbing %s: %v", dir, err)
 	}
-	if _, statErr := os.Stat(filepath.Join(dir, names[0])); statErr != nil {
-		t.Skipf("real Emart PDF corpus not found at %s: %v", dir, statErr)
+	if len(paths) == 0 {
+		t.Skipf("no real Emart PDFs found under %s", dir)
 	}
-	for _, name := range names {
-		path := filepath.Join(dir, name)
+	for _, path := range paths {
+		name := filepath.Base(path)
 		f, r, err := pdfOpen(path)
 		if err != nil {
 			t.Errorf("%s: pdfOpen returned error: %v", name, err)

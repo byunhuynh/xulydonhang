@@ -22,6 +22,13 @@ import (
 // pdf.Open failure, so callers (extractPageTexts, and ultimately
 // RealProcessor.Process) handle it via their existing "không đọc được
 // PDF" / Failed-row error path instead of taking down the app.
+//
+// The returned *os.File is no longer the pdf.Reader's actual data
+// source (that's now always an in-memory byte slice — see the
+// inline-image-stripping and %%EOF-trimming steps below): it exists
+// only so callers can defer f.Close() on the open file handle. Do not
+// assume closing or otherwise touching this *os.File affects anything
+// the returned *pdf.Reader still needs.
 func pdfOpen(path string) (f *os.File, r *pdf.Reader, err error) {
 	defer func() {
 		if rec := recover(); rec != nil {

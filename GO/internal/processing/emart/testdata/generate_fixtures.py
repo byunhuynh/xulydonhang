@@ -199,7 +199,10 @@ def _move_with_retry(src, dst, attempts=5, delay=0.5):
 def main():
     os.makedirs(FIXTURES_DIR, exist_ok=True)
 
-    pdf_paths = sorted(glob.glob(os.path.join(REALPDFS_DIR, "*.pdf")))
+    pdf_paths = sorted(set(
+        glob.glob(os.path.join(REALPDFS_DIR, "*.pdf")) +
+        glob.glob(os.path.join(REALPDFS_DIR, "*.PDF"))
+    ))
     print(f"Found {len(pdf_paths)} candidate PDFs in {REALPDFS_DIR}")
 
     generated = 0

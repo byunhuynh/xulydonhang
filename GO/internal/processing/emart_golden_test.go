@@ -18,6 +18,17 @@ import (
 // case is confirmed; add entries here only with a comment citing the
 // specific PDF/Python-line evidence — never to silence an unexplained
 // diff.
+//
+// Coverage note: this test currently validates against 9 of the
+// originally-targeted 17 real Emart PDFs. The other 8 were not available
+// when the golden fixtures (emart/testdata/fixtures/) and their source
+// PDFs (emart/testdata/realpdfs/) were generated — a live, concurrently-
+// running production instance of this same application was still
+// processing them at the time. Adding them later is a matter of copying
+// the additional real PDFs into emart/testdata/realpdfs/ and re-running
+// emart/testdata/generate_fixtures.py; this test and
+// TestPdfOpen_ExtractsTextFromRealEmartPDFsWithInlineImages both glob
+// their inputs, so no code change is needed here when that happens.
 var knownDivergences_Emart = map[string]bool{}
 
 func loadFrozenEmartPricingSource(t *testing.T) *fixturePricingSource {
