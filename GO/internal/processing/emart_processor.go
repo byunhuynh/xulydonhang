@@ -218,8 +218,10 @@ func (p *RealProcessor) processEmartSegment(filePath, text, pageLabel string) (O
 			if coop.ExtractBraceContent(promoPart) == "" {
 				mainRowNote = "KM Rời - Không Che Barcode"
 				mainRowBundleSku = ""
-				bonusRow.PromoNote = "KM Rời - Không Che Barcode"
 				bonusRow.PromoBundleSku = ""
+				if i != 0 {
+					bonusRow.PromoNote = "KM Rời - Không Che Barcode"
+				}
 			}
 
 			if i == 0 {
