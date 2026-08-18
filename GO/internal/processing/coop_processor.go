@@ -143,6 +143,17 @@ func (p *RealProcessor) Process(ctx context.Context, filePath string, stt int) (
 			}
 			rows = append(rows, row)
 
+		case "FujiMart":
+			row, err := p.processFujimartSegment(filePath, text, pageLabel)
+			if err != nil {
+				rows = append(rows, OrderRow{
+					FileName: filepath.Base(filePath), Page: pageLabel, System: "FujiMart",
+					Status: fmt.Sprintf("%s - %v", StatusFailed, err), StatusKind: StatusKindFailed,
+				})
+				continue
+			}
+			rows = append(rows, row)
+
 		default:
 			reason := "không nhận diện được nhà cung cấp"
 			if v != "" {
