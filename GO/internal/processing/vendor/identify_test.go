@@ -173,3 +173,40 @@ func TestIdentify_EmartCheckedBetweenSatraAndWinmart(t *testing.T) {
 		t.Fatalf("Identify with Emart marker = %q, want %q", got, "Emart")
 	}
 }
+
+func TestIdentify_RecognizesFujiMartByTaxCode(t *testing.T) {
+	cases := []struct {
+		name string
+		text string
+		want string
+	}{
+		{"real tax code", "Header\n251000000161\nfooter", "FujiMart"},
+		{"unrelated number", "Header\n999999999999\nfooter", ""},
+		{"no marker at all", "nothing relevant here", ""},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			got := Identify(c.text)
+			if got != c.want {
+				t.Fatalf("Identify(%q) = %q, want %q", c.text, got, c.want)
+			}
+		})
+	}
+}
+
+func TestIdentify_FujiMartCheckedAfterWinmart(t *testing.T) {
+	// Python's real identify_vendor order (xulydonhang.py:90-179) has
+	// Kingfood -> CN-HCM -> SHOPEE-CHOICE between Winmart and FujiMart,
+	// all three unported to Go. Since none of them exist in Go today,
+	// FujiMart's case only needs to be appended after Winmart's (the
+	// current last case), not inserted mid-sequence, to preserve the
+	// correct relative order among vendors that actually exist in Go.
+	// This test doesn't have a genuine ordering conflict to construct (no
+	// unported vendor's pattern is available), so it documents the
+	// intent for a future reader, mirroring
+	// TestIdentify_WinmartCheckedAfterSatra's own rationale.
+	got := Identify("251000000161")
+	if got != "FujiMart" {
+		t.Fatalf("Identify with FujiMart marker = %q, want %q", got, "FujiMart")
+	}
+}

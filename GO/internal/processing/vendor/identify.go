@@ -44,17 +44,21 @@ var (
 	// alternation, no case-insensitivity flag in Python (the supplier
 	// code string itself is fixed, so case sensitivity is moot).
 	winmartPattern = regexp.MustCompile(`Nhà cung cấp \(Supplier\): 0002011398`)
+	// FujiMart's identify pattern (xulydonhang.py:128-129): a single
+	// literal numeric substring (the vendor's own tax code), no
+	// alternation.
+	fujimartPattern = regexp.MustCompile(`251000000161`)
 )
 
 // Identify tries to recognize which retail vendor produced this
 // page/PO text, mirroring xulydonhang.py's identify_vendor. Coop, BigC,
-// Lotte, Satra, Emart, and Winmart are implemented in that order (order
-// is load-bearing and mirrors Python's real identify_vendor precedence).
-// Python's real order still has Kingfood/CN-HCM between Emart and
-// Winmart that aren't ported yet — a future implementer adding one of
-// those must insert it at the correct relative position, not simply
-// append. Identify returns "" for anything that isn't one of the six
-// implemented vendors.
+// Lotte, Satra, Emart, Winmart, and FujiMart are implemented in that order
+// (order is load-bearing and mirrors Python's real identify_vendor
+// precedence). Python's real order still has Kingfood/CN-HCM/SHOPEE-CHOICE
+// between Winmart and FujiMart that aren't ported yet — a future
+// implementer adding one of those must insert it at the correct relative
+// position, not simply append. Identify returns "" for anything that isn't
+// one of the seven implemented vendors.
 func Identify(text string) string {
 	cleaned := strings.TrimSpace(whitespacePattern.ReplaceAllString(text, " "))
 	if coopPattern.MatchString(cleaned) {
@@ -74,6 +78,9 @@ func Identify(text string) string {
 	}
 	if winmartPattern.MatchString(cleaned) {
 		return "Winmart"
+	}
+	if fujimartPattern.MatchString(cleaned) {
+		return "FujiMart"
 	}
 	return ""
 }
