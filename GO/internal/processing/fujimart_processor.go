@@ -108,7 +108,21 @@ func (p *RealProcessor) processFujimartSegment(filePath, text, pageLabel string)
 		finalPrice := realPrice
 
 		for _, promo := range promos {
-			value := promo.Value
+			// Same CR normalization BigC's/Emart's own promo.Value read
+			// needed (bigc_processor.go:254, emart_processor.go:163):
+			// openpyxl's write/read round-trip of the frozen fixture
+			// silently normalizes a bare '\r' in the source Google
+			// Sheets CSV to '\n' (independently of any adjacent '\n'),
+			// while Go's excelize instead escapes '\r' as "&#xD;" and
+			// leaves it untouched. Normalizing here reproduces Python's
+			// effective (if incidentally mangled) AQ output instead of
+			// diverging on a cosmetic CR/LF difference. Confirmed via
+			// real fixture mismatches on 101003302607001286.pdf row 1,
+			// 103001302608001342.pdf row 5, 104001302607001834.pdf row
+			// 5, 105001302608000288.pdf row 5, and
+			// 117003302607000942.pdf row 5 (all col AQ, all "\r\n" vs
+			// "\n\n").
+			value := strings.ReplaceAll(promo.Value, "\r", "\n")
 			if value == "" {
 				continue
 			}
