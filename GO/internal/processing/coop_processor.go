@@ -106,6 +106,17 @@ func (p *RealProcessor) Process(ctx context.Context, filePath string, stt int) (
 			}
 			rows = append(rows, row)
 
+		case "Emart":
+			row, err := p.processEmartSegment(filePath, text, pageLabel)
+			if err != nil {
+				rows = append(rows, OrderRow{
+					FileName: filepath.Base(filePath), Page: pageLabel, System: "Emart",
+					Status: fmt.Sprintf("%s - %v", StatusFailed, err), StatusKind: StatusKindFailed,
+				})
+				continue
+			}
+			rows = append(rows, row)
+
 		case "Winmart":
 			// Re-extract this page's text with extractWinmartPageText
 			// instead of using the shared pass's `text` directly — see
