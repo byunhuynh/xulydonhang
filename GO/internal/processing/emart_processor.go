@@ -150,7 +150,18 @@ func (p *RealProcessor) processEmartSegment(filePath, text, pageLabel string) (O
 		finalPrice := realPrice
 
 		for _, promo := range promos {
-			value := promo.Value
+			// Same CR normalization BigC's own promo.Value read needed
+			// (bigc_processor.go:270): openpyxl's write/read round-trip
+			// of the frozen fixture silently normalizes a bare '\r' in
+			// the source Google Sheets CSV to '\n' (independently of any
+			// adjacent '\n'), while Go's excelize instead escapes '\r'
+			// as "&#xD;" and leaves it untouched. Normalizing here
+			// reproduces Python's effective (if incidentally mangled)
+			// AQ output instead of diverging on a cosmetic CR/LF
+			// difference. Confirmed via real fixture mismatches on
+			// 4501866956.pdf row 5, 4501873471.pdf row 1, and
+			// 4501873478.pdf row 3 (all col AQ, all "\r\n" vs "\n\n").
+			value := strings.ReplaceAll(promo.Value, "\r", "\n")
 			if value == "" {
 				continue
 			}
@@ -243,6 +254,13 @@ func (p *RealProcessor) processEmartSegment(filePath, text, pageLabel string) (O
 	// kmhoadon maps to zero SKUs); this mirrors buildInvoiceBonusRow's
 	// own len(skus)==0 guard instead of reproducing that risk.
 	if invoicePromo := priceIndex.FindInvoicePromotion(entryDate); invoicePromo != "" {
+		// Same CR normalization as the per-item promo.Value read above,
+		// same root cause (openpyxl round-trip quirk in the frozen
+		// fixture, see comment above) — applied here too so an
+		// invoice-level promo landing in PromoContent (line ~269) can't
+		// hit the same cosmetic CR/LF divergence, even though no
+		// currently-available fixture happens to exercise this path.
+		invoicePromo = strings.ReplaceAll(invoicePromo, "\r", "\n")
 		invoiceSkus := p.Store.FindSkusMentioned(invoicePromo)
 		if amount, ok := coop.ExtractMoneyAmount(invoicePromo); ok && amount > 0 && len(invoiceSkus) > 0 {
 			invoiceSku := invoiceSkus[0]
