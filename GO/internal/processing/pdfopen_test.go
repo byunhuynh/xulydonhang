@@ -90,3 +90,74 @@ func TestPdfOpen_OpensRealEmartPDFWithTrailingGarbage(t *testing.T) {
 		t.Errorf("NumPage() = %d, want 1", r.NumPage())
 	}
 }
+
+func TestStripInlineImageData_RemovesPayloadKeepsLength(t *testing.T) {
+	original := []byte("q 1 0 0 1 0 0 cm BI /W 2 /H 2 ID \x00\x01/weird\x02bytes\x03 EI Q")
+	stripped := stripInlineImageData(append([]byte(nil), original...))
+
+	if len(stripped) != len(original) {
+		t.Fatalf("len(stripped) = %d, want %d (length must be preserved)", len(stripped), len(original))
+	}
+	// Everything up to and including "ID " must be untouched, and " EI Q" at
+	// the end must be untouched — only the payload bytes in between change.
+	prefix := []byte("q 1 0 0 1 0 0 cm BI /W 2 /H 2 ID ")
+	if string(stripped[:len(prefix)]) != string(prefix) {
+		t.Errorf("prefix changed: got %q, want %q", stripped[:len(prefix)], prefix)
+	}
+	suffix := []byte("EI Q")
+	if string(stripped[len(stripped)-len(suffix):]) != string(suffix) {
+		t.Errorf("suffix changed: got %q, want %q", stripped[len(stripped)-len(suffix):], suffix)
+	}
+	payload := stripped[len(prefix) : len(stripped)-len(suffix)-1] // -1 excludes the space before "EI"
+	for i, b := range payload {
+		if b != ' ' {
+			t.Fatalf("payload byte %d = %q, want a space (stripped)", i, b)
+		}
+	}
+}
+
+func TestStripInlineImageData_NoOpWhenNoInlineImage(t *testing.T) {
+	original := []byte("q 1 0 0 1 0 0 cm BT /F1 12 Tf (Hello) Tj ET Q")
+	stripped := stripInlineImageData(append([]byte(nil), original...))
+	if string(stripped) != string(original) {
+		t.Errorf("stripInlineImageData changed a stream with no inline image:\ngot  %q\nwant %q", stripped, original)
+	}
+}
+
+func TestPdfOpen_ExtractsTextFromRealEmartPDFsWithInlineImages(t *testing.T) {
+	// The real, confirmed case this fix was written for. All 17 real
+	// Emart PDFs embed an inline image in their content stream; 15 of
+	// them previously failed page.GetPlainText() outright. Skips
+	// gracefully if the repo layout this test expects isn't present,
+	// matching this project's established pattern for tests depending on
+	// real, large data files outside the repo's own tracked fixtures.
+	dir := filepath.Join("..", "..", "..", "đơn hàng", "08-2026")
+	names := []string{
+		"4501866956.PDF", "4501866958.PDF", "4501873464.PDF", "4501873471.PDF",
+		"4501873478.PDF", "4501875697.PDF", "4501875698.PDF", "4501875699.PDF",
+		"4501878295.PDF", "4501880037.PDF", "4501880038.PDF", "4501880119.PDF",
+		"4501880122.PDF", "4501880895.PDF", "4501880904.PDF", "4501880907.PDF",
+		"4501881986.PDF",
+	}
+	if _, statErr := os.Stat(filepath.Join(dir, names[0])); statErr != nil {
+		t.Skipf("real Emart PDF corpus not found at %s: %v", dir, statErr)
+	}
+	for _, name := range names {
+		path := filepath.Join(dir, name)
+		f, r, err := pdfOpen(path)
+		if err != nil {
+			t.Errorf("%s: pdfOpen returned error: %v", name, err)
+			continue
+		}
+		page := r.Page(1)
+		text, err := page.GetPlainText(nil)
+		f.Close()
+		if err != nil {
+			t.Errorf("%s: page.GetPlainText returned error: %v", name, err)
+			continue
+		}
+		if len(text) == 0 {
+			t.Errorf("%s: page.GetPlainText returned empty text", name)
+		}
+	}
+}
