@@ -100,3 +100,61 @@ func TestParseOrderInfo_MissingStoreNameStillSucceeds(t *testing.T) {
 		t.Errorf("storeName = %q, want empty", storeName)
 	}
 }
+
+func TestExtractProducts_ParsesTableRowsAndDropsZeroPrice(t *testing.T) {
+	text := "Article Code Unit Barcode Description PO Unit Qty. in Box PO Qty. Pur. Price(-VAT) Amount(-VAT) Free PO\n" +
+		"1234567\n" +
+		"893615673120\n" +
+		"Nước giặt Blue kháng khuẩn\n" +
+		"EA\n" +
+		"4\n" +
+		"48\n" +
+		"26.950\n" +
+		"1.293.600\n" +
+		"0\n" +
+		"7654321\n" +
+		"893615673999\n" +
+		"Free sample item\n" +
+		"EA\n" +
+		"1\n" +
+		"2\n" +
+		"0\n" +
+		"0\n" +
+		"1\n" +
+		"Total Amount(without VAT) :\n" +
+		"trailing text not part of the table"
+
+	products := ExtractProducts(text)
+	if len(products) != 1 {
+		t.Fatalf("len(products) = %d, want 1 (zero-price second item must be dropped)", len(products))
+	}
+	got := products[0]
+	if got.Barcode != "893615673120" {
+		t.Errorf("Barcode = %q, want %q", got.Barcode, "893615673120")
+	}
+	if got.OUQty != 48 {
+		t.Errorf("OUQty = %d, want %d (PO Qty. column, not Qty. in Box)", got.OUQty, 48)
+	}
+	if got.UnitPrice != "26950" {
+		t.Errorf("UnitPrice = %q, want %q (dot-stripped per-unit price, NOT the Amount column)", got.UnitPrice, "26950")
+	}
+}
+
+func TestExtractProducts_NoTableMarkerReturnsEmpty(t *testing.T) {
+	// Python's real code would crash here (calling .group(1) on the
+	// re.search's None result) — this port returns an empty slice
+	// instead, per this codebase's established clean-failure policy; the
+	// caller (processEmartSegment) treats an empty product list as an
+	// order-level error.
+	products := ExtractProducts("no Article Code marker anywhere in this text")
+	if products != nil {
+		t.Errorf("ExtractProducts = %v, want nil", products)
+	}
+}
+
+func TestExtractProducts_NoMatchingRowsReturnsEmpty(t *testing.T) {
+	products := ExtractProducts("Article Code\nnothing shaped like a product row\nTotal Amount(without VAT) :")
+	if products != nil {
+		t.Errorf("ExtractProducts = %v, want nil", products)
+	}
+}

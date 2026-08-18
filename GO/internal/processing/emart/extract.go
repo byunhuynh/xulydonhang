@@ -2,6 +2,7 @@ package emart
 
 import (
 	"regexp"
+	"strconv"
 	"strings"
 )
 
@@ -75,4 +76,90 @@ func formatEmartDate(s string) string {
 		s = s[:10]
 	}
 	return strings.ReplaceAll(s, ".", "/")
+}
+
+// productTablePattern isolates the product-table region of the page text
+// before the product-line regex runs, mirroring xulydonhang.py:9339-9340
+// exactly:
+//
+//	text = re.search(r"Article Code\s*(.*?)\s*Total Amount\(without VAT\) :", text, re.DOTALL)
+//	text = text.group(1).strip()
+//
+// re.DOTALL makes "." match newlines too — mirrored with Go's (?s) flag.
+var productTablePattern = regexp.MustCompile(`(?s)Article Code\s*(.*?)\s*Total Amount\(without VAT\) :`)
+
+// productLinePattern mirrors laydanhsanpham_emart's compiled regex
+// (xulydonhang.py:6616-6624) exactly: 7 fields — a 7-digit article code,
+// a 12-13 digit barcode, a non-greedy description, a >=2-letter unit
+// code, a "Qty. in Box" integer, a "PO Qty." integer, and a purchase-
+// price field (dots as thousands separators, comma as a possible
+// decimal separator). Go has no re.VERBOSE mode; the pattern below is
+// the same shape with the VERBOSE-only whitespace/comments removed. The
+// original also uses re.DOTALL, mirrored with (?s) so the non-greedy
+// description group can span newlines exactly as Python's does.
+//
+// Capture groups (1-based, matching Python's declaration order):
+// 1=article_code (discarded), 2=barcode, 3=description (discarded),
+// 4=unit (discarded), 5=qty_in_box (discarded — NOT what "OU Qty" uses),
+// 6=quantity (this is "OU Qty" — match.group("quantity"), the PO
+// Qty. column), 7=purchase_price (the per-unit "Pur. Price(-VAT)").
+var productLinePattern = regexp.MustCompile(`(?s)(\d{7})\s*(\d{12,13})\s*\s*(.+?)\s+([A-Z]{2,})\s+\s*(\d+)\s+\s*(\d+)\s+\s*([\d.,]+)`)
+
+// Product is one extracted Emart product line. UnitPrice is a
+// dot-stripped numeric string (Emart's PDF table uses "." as a thousands
+// separator, e.g. "26.950" -> "26950") holding the PER-UNIT purchase
+// price (the "Pur. Price(-VAT)" column) — NOT a line total, despite
+// Python's own dict key for this field being "Total Price"
+// (laydanhsanpham_emart, xulydonhang.py:6635-6639). write_to_dondathang_emart
+// uses this value directly as giahoadon with NO division by quantity
+// (xulydonhang.py:5095) — a real, easy-to-miss difference from Winmart,
+// whose same-named field genuinely is a line total and must be divided.
+type Product struct {
+	Barcode   string
+	OUQty     int
+	UnitPrice string
+}
+
+// ExtractProducts mirrors laydanhsanpham_emart (xulydonhang.py:6614-6644)
+// plus the table-isolation step that always runs immediately before it
+// in process_file's Emart branch (xulydonhang.py:9339-9340). If the
+// "Article Code...Total Amount(without VAT) :" isolation doesn't match
+// at all, Python's real code would crash (calling .group(1) on None);
+// this returns nil instead, per this codebase's established
+// clean-failure policy.
+//
+// purchase_price_value == 0 items are dropped entirely during extraction
+// (xulydonhang.py:6627-6628, "continue") — unlike Winmart, there is no
+// "mark the previous row's AO/AP" side effect for a zero-price Emart
+// item here; it simply never appears in the returned slice.
+func ExtractProducts(text string) []Product {
+	tableMatch := productTablePattern.FindStringSubmatch(text)
+	if tableMatch == nil {
+		return nil
+	}
+	tableText := strings.TrimSpace(tableMatch[1])
+
+	var products []Product
+	for _, m := range productLinePattern.FindAllStringSubmatch(tableText, -1) {
+		// purchase_price = match.group("purchase_price").replace(".", "")
+		unitPrice := strings.ReplaceAll(m[7], ".", "")
+		// purchase_price_value = float(purchase_price.replace(",", "."))
+		// A malformed price (ParseFloat error) is NOT treated as zero —
+		// it falls through and the item is kept, so a genuinely
+		// unexpected price format surfaces as a visible price-mismatch
+		// row downstream rather than silently vanishing.
+		if value, err := strconv.ParseFloat(strings.ReplaceAll(unitPrice, ",", "."), 64); err == nil && value == 0 {
+			continue
+		}
+		qty, err := strconv.Atoi(m[6])
+		if err != nil {
+			continue
+		}
+		products = append(products, Product{
+			Barcode:   m[2],
+			OUQty:     qty,
+			UnitPrice: unitPrice,
+		})
+	}
+	return products
 }
