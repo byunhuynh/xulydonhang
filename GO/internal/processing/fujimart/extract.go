@@ -48,14 +48,13 @@ var validDatePattern = regexp.MustCompile(`^\d{2}/\d{2}/\d{4}$`)
 // reconstructable from the plain text layer alone.
 //
 // entryDate (xulydonhang.py:8853-8857): the line 3 positions BEFORE the
-// line containing "Sè §¬n:" — a positional offset within this PDF
+// LAST line containing "Sè §¬n:" — a positional offset within this PDF
 // template's fixed "values-then-labels" block, NOT a marker-adjacent
 // value. Confirmed identical relative line ordering in both PyMuPDF's
 // and this repo's own extractPageTexts output across multiple real
-// FujiMart PDFs during planning.
-//
-// poNumber (xulydonhang.py:8885-8887): the line immediately AFTER the
-// line whose content exactly equals the entryDate value.
+// FujiMart PDFs during planning. Python's loop has no early exit either,
+// so the last matching line wins if the marker text appears more than
+// once.
 //
 // cancelDate (xulydonhang.py:8859): Python assumes the "Ngµy giao:"
 // label and its value sit on the SAME line and splits on the literal
@@ -66,6 +65,13 @@ var validDatePattern = regexp.MustCompile(`^\d{2}/\d{2}/\d{4}$`)
 //
 // Cross-validate/fallback ±2 days (xulydonhang.py:8862-8884): ported
 // exactly, no simplification.
+//
+// poNumber (xulydonhang.py:8885-8887): the line immediately AFTER the
+// line whose content exactly equals entryDate — computed AFTER both
+// cross-validation blocks below, using the FINAL resolved entryDate
+// (which may be the raw value, a backfilled value, or "Không tìm thấy"),
+// exactly like Python's re.search runs after its own cross-validation
+// block, not before.
 //
 // storeInfo (xulydonhang.py:8895-8899, via OCR of "Nơi nhận:"): the
 // 5-digit store code (the line right after "N¬i nhËn:") + " " + the
@@ -91,14 +97,6 @@ func ParseOrderInfo(text string) (poNumber, entryDate, cancelDate, storeInfo str
 	for i, l := range lines {
 		if strings.Contains(l, "Sè §¬n:") && i >= 3 {
 			entryDate = lines[i-3]
-			break
-		}
-	}
-
-	for i, l := range lines {
-		if l == entryDate && i+1 < len(lines) {
-			poNumber = lines[i+1]
-			break
 		}
 	}
 
@@ -118,6 +116,19 @@ func ParseOrderInfo(text string) (poNumber, entryDate, cancelDate, storeInfo str
 			if t, err := time.Parse("02/01/2006", cancelDate); err == nil {
 				entryDate = t.AddDate(0, 0, -2).Format("02/01/2006")
 			}
+		}
+	}
+
+	// poNumber must be looked up using the FULLY-RESOLVED entryDate (after
+	// both cross-validation blocks above), not the raw position-based
+	// value — mirrors Python's re.search(rf'^{entry_date}\s*\n(.+)', ...)
+	// at xulydonhang.py:8885-8887, which runs after cross-validation
+	// (xulydonhang.py:8862-8884), so a backfilled or "Không tìm thấy"
+	// entryDate is what Python actually searches for.
+	for i, l := range lines {
+		if l == entryDate && i+1 < len(lines) {
+			poNumber = lines[i+1]
+			break
 		}
 	}
 
