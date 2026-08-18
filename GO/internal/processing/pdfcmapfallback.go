@@ -53,13 +53,21 @@ import (
 // isGarbledText reports whether text is dominated by the Unicode
 // replacement character (U+FFFD) — the signature of a PDF text-decode
 // failure (see extractPageText's doc comment for the confirmed real
-// FujiMart case this detects: a malformed embedded ToUnicode CMap). This
-// is the ONLY gate that keeps extractPageTextViaCorrectedCmap from
-// engaging on other vendors' already-correctly-decoding PDFs — see this
-// file's own top-of-file doc comment. A small, fixed sample-size floor
-// (20 non-whitespace runes) avoids false-triggering on tiny/near-empty
-// pages where a couple of legitimately-unmappable glyphs could otherwise
-// look "mostly garbled" by ratio alone.
+// FujiMart case this detects: a malformed embedded ToUnicode CMap).
+// Because this ranges over s with `for _, r := range s`, it counts not
+// only literal U+FFFD characters already present in the string but also
+// every invalid UTF-8 byte sequence encountered along the way — Go's
+// range loop yields utf8.RuneError (the same value as U+FFFD) for those
+// too. That's desirable here: raw non-UTF-8 byte soup (e.g. from a
+// font's nopEncoder fallback path) is exactly the kind of "badly broken"
+// extraction this gate exists to catch, not just a decoder that already
+// wrote out an explicit replacement character. This is the ONLY gate
+// that keeps extractPageTextViaCorrectedCmap from engaging on other
+// vendors' already-correctly-decoding PDFs — see this file's own top-of-
+// file doc comment. A small, fixed sample-size floor (20 non-whitespace
+// runes) avoids false-triggering on tiny/near-empty pages where a couple
+// of legitimately-unmappable glyphs could otherwise look "mostly
+// garbled" by ratio alone.
 func isGarbledText(text string) bool {
 	var total, garbled int
 	for _, r := range text {
@@ -242,7 +250,19 @@ func decodeSimpleFontCmap(font pdf.Font) (map[byte]rune, bool) {
 //     leaving whatever font was already active in effect. GetPlainText
 //     panics on this too (`panic("bad TL")`), again losing the whole
 //     page's accumulated text via its top-level recover. This function
-//     keeps processing the rest of the page instead.
+//     keeps processing the rest of the page instead. The same class of
+//     divergence applies to Tj, ', and " as well: each is guarded here
+//     by its own `if len(args) == N` check (lines ~343-356 below) that
+//     simply does nothing when the argument count doesn't match, while
+//     GetPlainText's real operator switch panics on exactly that
+//     condition for all three (`panic("bad Tj operator")`,
+//     `panic("bad ' operator")`, `panic("bad \" operator")`,
+//     confirmed in the vendored library's page.go) — again losing the
+//     whole page via its top-level recover, where this function just
+//     skips the one malformed call and keeps going. (This is distinct
+//     from item 2 above, which covers what happens for a WELL-formed,
+//     3-argument " call — a separate, always-triggered bug in the real
+//     library, not an argument-count mismatch.)
 //
 // Deliberately does NOT reuse the position-based (X/Y-bucketing)
 // reconstructLinesFromContent approach: confirmed against a real

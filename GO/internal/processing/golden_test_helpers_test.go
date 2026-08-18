@@ -4,12 +4,25 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 	"testing"
 
 	"github.com/xuri/excelize/v2"
 
 	"order-processor/internal/processing/pricing"
 )
+
+// whitespaceRunPattern collapses any run of whitespace to a single space —
+// used only by the column-E whitespace-tolerant comparison below.
+var whitespaceRunPattern = regexp.MustCompile(`\s+`)
+
+// collapseWhitespace normalizes runs of whitespace to a single space, for
+// comparisons that need to tolerate a documented whitespace-only
+// divergence (see the column-E handling in compareRowsAgainstFixture)
+// without also masking a genuine content bug.
+func collapseWhitespace(s string) string {
+	return whitespaceRunPattern.ReplaceAllString(s, " ")
+}
 
 // fixturePricingSource is a PricingSource that always returns the same
 // frozen *pricing.Index — used by both the "real sample file" processor
@@ -124,11 +137,27 @@ func compareRowsAgainstFixture(t *testing.T, excelPath string, fixture fixtureDa
 		}
 
 		for _, col := range textColumns {
-			if isAllowed(i, col) {
-				continue
-			}
 			expected := stringify(expectedRow[col])
 			got := cell(col)
+			if isAllowed(i, col) {
+				// Column E's allowlist entries (currently FujiMart-only —
+				// see knownDivergences_Fujimart's own comment) document a
+				// specific, evidenced whitespace-run-width divergence, not
+				// a license to ignore the cell outright: collapse runs of
+				// whitespace to a single space on both sides and still
+				// compare, so a genuine content bug (wrong branch name,
+				// wrong store code, an undecoded mojibake character) hiding
+				// behind the same allowlist entry still fails this test.
+				// Every other column keeps the original blanket-skip
+				// behavior, unchanged for the other 5 vendors' golden
+				// tests that also share this helper.
+				if col == "E" {
+					if collapseWhitespace(expected) != collapseWhitespace(got) {
+						*mismatches = append(*mismatches, fmt.Sprintf("%s row %d col %s: got %q, want %q (mismatch even after whitespace-run normalization)", fixture.SourcePDF, i, col, got, expected))
+					}
+				}
+				continue
+			}
 			if expected != got {
 				*mismatches = append(*mismatches, fmt.Sprintf("%s row %d col %s: got %q, want %q", fixture.SourcePDF, i, col, got, expected))
 			}

@@ -199,6 +199,15 @@ func (p *RealProcessor) processFujimartSegment(filePath, text, pageLabel string)
 	// first matched SKU (kiemtra[0]), not a joined list, the same
 	// divergence already handled for Winmart/Emart.
 	if invoicePromo := priceIndex.FindInvoicePromotion(entryDate); invoicePromo != "" {
+		// Same CR normalization as the per-item promo.Value read above,
+		// same root cause (openpyxl round-trip quirk in the frozen
+		// fixture — see the comment on that line) — applied here too so
+		// an invoice-level promo landing in PromoContent (AQ, below) and
+		// PromoNote (AO, via ExtractBraceContent) can't hit the same
+		// cosmetic CR/LF divergence, mirroring Emart's own invoice-level
+		// fix (emart_processor.go, around its own FindInvoicePromotion
+		// call).
+		invoicePromo = strings.ReplaceAll(invoicePromo, "\r", "\n")
 		invoiceSkus := p.Store.FindSkusMentioned(invoicePromo)
 		if amount, ok := coop.ExtractMoneyAmount(invoicePromo); ok && amount > 0 && len(invoiceSkus) > 0 {
 			invoiceSku := invoiceSkus[0]
