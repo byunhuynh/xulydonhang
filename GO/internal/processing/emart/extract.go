@@ -6,60 +6,96 @@ import (
 	"strings"
 )
 
-var (
-	// poNumberPattern mirrors xulydonhang.py:9316 exactly:
-	// r"PO No\.\s*\n\s*:? ?([^\n]+)". NOTE: Go's regexp \s is ASCII-only
-	// where Python's is Unicode-aware (matches U+00A0 non-breaking
-	// space too) — if a real Emart PDF's marker line has NBSP padding,
-	// this may need the same explicit NBSP-normalization treatment
-	// already applied for Satra/BigC (see those packages' extract.go for
-	// the precedent). Verify against real fixtures in Task 5/6; not
-	// pre-emptively "fixed" here without evidence it's needed.
-	poNumberPattern = regexp.MustCompile(`PO No\.\s*\n\s*:? ?([^\n]+)`)
-	// entryDatePattern mirrors xulydonhang.py:9322.
-	entryDatePattern = regexp.MustCompile(`Order By / Date\s*\n\s*:? ?([^\n]+)`)
-	// cancelDatePattern mirrors xulydonhang.py:9327.
-	cancelDatePattern = regexp.MustCompile(`Delivery Date\s*\n\s*:? ?([^\n]+)`)
-	// storeNamePattern mirrors xulydonhang.py:9333: r"^Delivery to :\s*(.+)"
-	// with re.MULTILINE -> Go's (?m) flag.
-	storeNamePattern = regexp.MustCompile(`(?m)^Delivery to :\s*(.+)`)
-)
+// valueAfterLabel finds the line containing label, then returns its
+// value. It checks THREE layouts, in order: (1) same-line — label,
+// optional colon, and value all on the label's own line (Python's real
+// storeName regex, `^Delivery to :\s*(.+)`, assumes exactly this shape,
+// and Task 2's original tests exercise it); (2)/(3) label alone on its
+// own line, then the first of the following 2 lines that isn't just a
+// colon on its own (with optional surrounding whitespace) — covering
+// BOTH the 2-line layout Python's PO-No./date patterns assume (colon and
+// value together, right after the label) AND a confirmed, real 3-line
+// layout this repo's actual Go PDF text extraction produces for these
+// specific PDFs (label, then a lone ":" line, then the value) — see
+// ParseOrderInfo's own doc comment for the concrete evidence. In every
+// case a leading ":" on the candidate value is stripped, then the result
+// is trimmed. Returns ("", false) if the label isn't found, or if none
+// of the same-line remainder or the next 2 lines after it is a real
+// (non-colon-only) value.
+func valueAfterLabel(lines []string, label string) (string, bool) {
+	for i, line := range lines {
+		idx := strings.Index(line, label)
+		if idx == -1 {
+			continue
+		}
+
+		if rest := strings.TrimSpace(line[idx+len(label):]); rest != "" {
+			rest = strings.TrimPrefix(rest, ":")
+			if rest = strings.TrimSpace(rest); rest != "" {
+				return rest, true
+			}
+		}
+
+		for j := i + 1; j < len(lines) && j <= i+2; j++ {
+			candidate := strings.TrimSpace(lines[j])
+			if candidate == ":" || candidate == "" {
+				continue
+			}
+			candidate = strings.TrimPrefix(candidate, ":")
+			return strings.TrimSpace(candidate), true
+		}
+		return "", false
+	}
+	return "", false
+}
 
 // ParseOrderInfo mirrors the PO-number/date/store-name extraction inline
-// in process_file's Emart branch (xulydonhang.py:9314-9338) — Python
-// doesn't factor this into its own named function (unlike Winmart's
-// ParseOrderInfo), but this port still gathers it into one function per
-// this codebase's established per-vendor package convention.
+// in process_file's Emart branch (xulydonhang.py:9314-9338). Python's
+// own regexes assume the label, an optional colon, and the value fit on
+// at most 2 lines (colon-and-value together, right after the label) —
+// confirmed, by direct extraction of 7 of the 17 real Emart PDFs through
+// this repo's actual PDF pipeline (extractPageTexts), that this repo's
+// Go PDF library instead produces a 3-line layout for these specific
+// real files: label, then a lone ":" on its own line, then the value
+// (e.g. "PO No.\n:\n4501866956\n", not Python's assumed
+// "PO No.\n: 4501866956\n"). valueAfterLabel handles both shapes
+// uniformly by scanning lines directly instead of relying on a
+// newline-count-sensitive regex — this is a genuine cross-library
+// text-layout difference (the PDF's real content, not a transcription
+// bug), the same general class of issue already fixed once for Winmart
+// elsewhere in this codebase.
 //
-// ok=false only when the PO-number OR either date marker isn't found —
-// Python's real code would carry a None value into several downstream
-// string operations in that case (e.g. STT_donhang_str = f"-{po_number}"
-// silently becomes the literal text "-None"), which this port treats as
-// a clean failure instead, per this codebase's established policy. A
-// missing store name, by contrast, is genuinely tolerated by Python
-// itself (order_file still proceeds, just flags a warning status) — see
-// storeName's own handling below, which does NOT gate ok.
+// ok=false only when the PO-number OR either date marker fails to
+// resolve to a real value — Python's real code would carry a None value
+// into several downstream string operations in that case (e.g.
+// STT_donhang_str = f"-{po_number}" silently becomes the literal text
+// "-None"), which this port treats as a clean failure instead, per this
+// codebase's established policy. A missing store name, by contrast, is
+// genuinely tolerated by Python itself (order processing still
+// proceeds, just flags a warning status) — see storeName's own handling
+// below, which does NOT gate ok.
 func ParseOrderInfo(text string) (poNumber, entryDate, cancelDate, storeName string, ok bool) {
-	poMatch := poNumberPattern.FindStringSubmatch(text)
-	if poMatch == nil {
+	lines := strings.Split(text, "\n")
+
+	poNumber, poOk := valueAfterLabel(lines, "PO No.")
+	if !poOk {
 		return "", "", "", "", false
 	}
-	poNumber = strings.TrimSpace(poMatch[1])
 
-	entryMatch := entryDatePattern.FindStringSubmatch(text)
-	if entryMatch == nil {
+	entryValue, entryOk := valueAfterLabel(lines, "Order By / Date")
+	if !entryOk {
 		return "", "", "", "", false
 	}
-	entryDate = formatEmartDate(strings.TrimSpace(entryMatch[1]))
+	entryDate = formatEmartDate(entryValue)
 
-	cancelMatch := cancelDatePattern.FindStringSubmatch(text)
-	if cancelMatch == nil {
+	cancelValue, cancelOk := valueAfterLabel(lines, "Delivery Date")
+	if !cancelOk {
 		return "", "", "", "", false
 	}
-	cancelDate = formatEmartDate(strings.TrimSpace(cancelMatch[1]))
+	cancelDate = formatEmartDate(cancelValue)
 
-	if storeMatch := storeNamePattern.FindStringSubmatch(text); storeMatch != nil {
-		storeName = strings.Split(storeMatch[1], "   ")[0]
+	if storeValue, storeOk := valueAfterLabel(lines, "Delivery to"); storeOk {
+		storeName = strings.Split(storeValue, "   ")[0]
 	}
 
 	return poNumber, entryDate, cancelDate, storeName, true

@@ -62,6 +62,47 @@ func TestParseOrderInfo_NoColonPrefix(t *testing.T) {
 	}
 }
 
+func TestParseOrderInfo_HandlesColonOnItsOwnLine(t *testing.T) {
+	// The REAL layout this repo's Go PDF pipeline produces for actual
+	// Emart PDFs — confirmed via direct extraction of
+	// đơn hàng/08-2026/4501866956.PDF and 6 other real files during
+	// this fix's investigation: label, then a lone ":" on its own line,
+	// then the value — three lines, not Python's assumed two.
+	text := "Some Header\n" +
+		"PO No.\n" +
+		":\n" +
+		"4501866956\n" +
+		"Order By / Date\n" +
+		":\n" +
+		"03.08.2026 / NGUYEN HOANG NHAT NAM\n" +
+		"Delivery to\n" +
+		":\n" +
+		"EMART GO VAP   366 Phan Văn Trị, P.An Nhơn, TP.HCM  \n" +
+		"Delivery Date\n" +
+		":\n" +
+		"05.08.2026\n" +
+		"VAT\n" +
+		":\n" +
+		"8%"
+
+	poNumber, entryDate, cancelDate, storeName, ok := ParseOrderInfo(text)
+	if !ok {
+		t.Fatal("ParseOrderInfo returned ok=false for the real 3-line layout, want true")
+	}
+	if poNumber != "4501866956" {
+		t.Errorf("poNumber = %q, want %q", poNumber, "4501866956")
+	}
+	if entryDate != "03/08/2026" {
+		t.Errorf("entryDate = %q, want %q", entryDate, "03/08/2026")
+	}
+	if cancelDate != "05/08/2026" {
+		t.Errorf("cancelDate = %q, want %q", cancelDate, "05/08/2026")
+	}
+	if storeName != "EMART GO VAP" {
+		t.Errorf("storeName = %q, want %q", storeName, "EMART GO VAP")
+	}
+}
+
 func TestParseOrderInfo_MissingPONumberFailsCleanly(t *testing.T) {
 	// Python would carry a None po_number into several downstream string
 	// operations (e.g. STT_donhang_str = f"-{po_number}" -> "-None"),
