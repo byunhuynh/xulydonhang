@@ -48,6 +48,14 @@ type Row struct {
 	// zero) case count — so BigC rows set this true to distinguish "no
 	// value" from "computed value of zero".
 	NoCaseCount bool
+	// StoreName writes to column K — used only by Emart's header row,
+	// which conditionally writes one of 3 hardcoded full Vietnamese
+	// store names (xulydonhang.py:5046-5051) or nothing at all for an
+	// unrecognized store. Every other row type and every other vendor
+	// leaves this at its zero value (""), which writes an empty K cell —
+	// functionally identical to Python's conditional "don't touch K at
+	// all" for those cases, since both read back as blank.
+	StoreName string
 }
 
 // WriteOrderRows appends rows to the "Don dat hang" sheet, mirroring
@@ -118,6 +126,7 @@ func writeRow(f *excelize.File, rowNum int, row Row, redFillStyle int) error {
 		{"D", row.CancelDate},
 		{"E", row.ShipTo},
 		{"G", row.CustomerCode},
+		{"K", row.StoreName},
 		{"L", row.Description},
 		{"Q", row.SKU},
 		{"V", row.Warehouse},

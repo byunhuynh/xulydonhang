@@ -54,6 +54,34 @@ func TestWriteOrderRows_WritesColumnsAndFormula(t *testing.T) {
 	}
 }
 
+func TestWriteOrderRows_WritesStoreNameToColumnK(t *testing.T) {
+	path := copyTestWorkbook(t)
+
+	rows := []Row{
+		{EntryDate: "05/08/2026", OrderNumber: "ĐĐHEMART-4501866956", Status: "Chưa thực hiện", IsNoteRow: true, ProductName: "EMART PO4501866956", StoreName: "SIÊU THỊ EMART PHAN VĂN TRỊ"},
+		{SKU: "8936156731203", Qty: 48, UnitPrice: 26950, ProductName: "Nước giặt Blue", UseZFormula: true},
+	}
+
+	if err := WriteOrderRows(path, rows, ""); err != nil {
+		t.Fatalf("WriteOrderRows returned error: %v", err)
+	}
+
+	f, err := excelize.OpenFile(path)
+	if err != nil {
+		t.Fatalf("failed reopening workbook: %v", err)
+	}
+	defer f.Close()
+
+	headerK, _ := f.GetCellValue("Don dat hang", "K9")
+	if headerK != "SIÊU THỊ EMART PHAN VĂN TRỊ" {
+		t.Fatalf("K9 (header StoreName) = %q, want %q", headerK, "SIÊU THỊ EMART PHAN VĂN TRỊ")
+	}
+	productK, _ := f.GetCellValue("Don dat hang", "K10")
+	if productK != "" {
+		t.Fatalf("K10 (product row, StoreName unset) = %q, want empty", productK)
+	}
+}
+
 func TestWriteOrderRows_PriceMismatchGetsRedFillAndComment(t *testing.T) {
 	path := copyTestWorkbook(t)
 
