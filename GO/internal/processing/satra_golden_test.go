@@ -35,6 +35,17 @@ func loadFrozenSatraPricingSource(t *testing.T) *fixturePricingSource {
 	return &fixturePricingSource{index: pricing.ParseIndex(frozen.RawRows)}
 }
 
+// TestRealProcessor_MatchesGoldenFixtures_Satra runs against stable,
+// git-tracked real PDFs under satra/testdata/realpdfs/ instead of the live
+// đơn hàng/08-2026/ folder, which is continuously reorganized by a
+// concurrently-running production instance of this application (files get
+// moved into a dated archive and renamed) — matching the pattern
+// established by Emart/FujiMart/Kingfood/Coop/Lotte. 33 of the 36 original
+// fixtures' source PDFs were recoverable from the đơn hàng/mẫu đơn hàng/
+// archive tree; the remaining 3 (P-005523317, P-005523651, P-005523835 —
+// all with entry dates of 15-17/08/2026, the most recent batch at the time
+// of this search) were not yet archived and have been moved to
+// satra/testdata/fixtures_missing_pdf/ pending their PDFs resurfacing.
 func TestRealProcessor_MatchesGoldenFixtures_Satra(t *testing.T) {
 	fixturePaths, err := filepath.Glob("satra/testdata/fixtures/*.json")
 	if err != nil {
@@ -67,7 +78,7 @@ func TestRealProcessor_MatchesGoldenFixtures_Satra(t *testing.T) {
 			t.Fatalf("failed parsing %s: %v", fixturePath, err)
 		}
 
-		pdfPath := filepath.Join("..", "..", "..", "đơn hàng", "08-2026", fixture.SourcePDF)
+		pdfPath := filepath.Join("satra", "testdata", "realpdfs", fixture.SourcePDF)
 		excelPath := filepath.Join(t.TempDir(), "dondathang.xlsx")
 		copyFile(t, "excelwriter/testdata/dondathang.xlsx", excelPath)
 
