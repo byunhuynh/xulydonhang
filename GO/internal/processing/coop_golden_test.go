@@ -29,6 +29,20 @@ func loadFrozenPricingSource(t *testing.T) *fixturePricingSource {
 	return &fixturePricingSource{index: pricing.ParseIndex(frozen.RawRows)}
 }
 
+// Coverage note: this test validates against the 151 real Coop PDFs that
+// could still be located (out of the 155 fixtures originally generated),
+// committed into coop/testdata/realpdfs/ instead of being read from the
+// live đơn hàng/ tree — that tree is continuously reorganized by a real,
+// concurrently-running production instance of this application (files get
+// moved into a dated archive under "đơn hàng/mẫu đơn hàng/<date>/" and
+// renamed), which made every fixture here fail before this migration. See
+// the sibling Emart/FujiMart/Kingfood golden tests for the same pattern.
+// The 4 fixtures whose source PDFs could not be located in either the live
+// folder or the archive (103108366-00, 103125805-00, 103125992-00,
+// 103133307-00) were moved to coop/testdata/fixtures_missing_pdf/ (not
+// deleted — they remain valid ground truth if their PDFs ever resurface)
+// so this test's glob no longer picks them up and reports them as
+// mismatches on every run.
 func TestRealProcessor_MatchesGoldenFixtures(t *testing.T) {
 	fixturePaths, err := filepath.Glob("coop/testdata/fixtures/*.json")
 	if err != nil {
@@ -61,7 +75,7 @@ func TestRealProcessor_MatchesGoldenFixtures(t *testing.T) {
 			t.Fatalf("failed parsing %s: %v", fixturePath, err)
 		}
 
-		pdfPath := filepath.Join("..", "..", "..", "đơn hàng", "08-2026", fixture.SourcePDF)
+		pdfPath := filepath.Join("coop", "testdata", "realpdfs", fixture.SourcePDF)
 		excelPath := filepath.Join(t.TempDir(), "dondathang.xlsx")
 		copyFile(t, "excelwriter/testdata/dondathang.xlsx", excelPath)
 
