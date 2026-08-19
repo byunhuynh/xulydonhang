@@ -1,13 +1,23 @@
 """
 Throwaway dev tool — NOT part of the shipped Go or Python app.
 
-Runs the CURRENT xulydonhang.py Satra pipeline against every real PDF in
-đơn hàng/08-2026/ that identify_vendor recognizes as Satra, capturing the
-resulting dondathang.xlsx rows (and the live-fetched Google Sheets
-price/promotion data for the SATRA sheet) into JSON fixtures under
+Runs the CURRENT xulydonhang.py Satra pipeline against every real PDF
+committed into GO/internal/processing/satra/testdata/realpdfs/ that
+identify_vendor recognizes as Satra, capturing the resulting
+dondathang.xlsx rows (and the live-fetched Google Sheets price/promotion
+data for the SATRA sheet) into JSON fixtures under
 GO/internal/processing/satra/testdata/fixtures/. The Go golden test
 (Task 7) diffs RealProcessor's output against these fixtures instead of
 against a live Google Sheets fetch, so it's deterministic and offline.
+
+Originally this harness read source PDFs from the live đơn hàng/08-2026/
+folder, but that tree is continuously reorganized by a concurrently-running
+production instance of this application (files get moved into a dated
+archive and renamed), which broke every fixture generated that way. Fixed
+by pointing at the git-tracked, stable satra/testdata/realpdfs/ snapshot
+instead (33 of the original 36 fixtures' source PDFs were recoverable —
+see the migration commit preceding this one), matching the pattern already
+established by Coop/Lotte's own REALPDFS_DIR constant.
 
 Run from the repo root:
     .venv/Scripts/python.exe GO/internal/processing/satra/testdata/generate_fixtures.py
@@ -17,6 +27,7 @@ import json
 import os
 import shutil
 import sys
+import time
 
 # Same depth as Lotte's harness: this script sits 5 directory levels below
 # repo root (GO/internal/processing/satra/testdata/generate_fixtures.py),
@@ -38,6 +49,9 @@ if hasattr(sys.stderr, "reconfigure"):
 import openpyxl  # noqa: E402
 import xulydonhang  # noqa: E402
 
+REALPDFS_DIR = os.path.join(
+    REPO_ROOT, "GO", "internal", "processing", "satra", "testdata", "realpdfs"
+)
 FIXTURES_DIR = os.path.join(
     REPO_ROOT, "GO", "internal", "processing", "satra", "testdata", "fixtures"
 )
@@ -196,11 +210,43 @@ def process_one_pdf(path):
         doc.close()
 
 
+def _restore_with_retry(backup, real_target, attempts=20, delay=1.0):
+    """Restore the production dondathang.xlsx from its per-iteration backup.
+
+    Uses a single os.replace() (atomic overwrite-in-place on Windows, no
+    separate remove-then-move) instead of a remove()-then-move() pair, and
+    a large retry budget. This is the exact fix discovered during Coop's
+    fixture regeneration (see coop/testdata/generate_fixtures.py and the
+    Coop/Lotte migration reports) — applied here directly rather than
+    rediscovered: the original remove()+move() pair could have os.remove()
+    hit a transient Windows file lock (e.g. Defender/OneDrive scanning the
+    just-copied file), exhaust its retry budget, and raise BEFORE the
+    restore ever ran, silently abandoning the production-file restore
+    mid-run. Collapsing to one atomic os.replace() closes that window; the
+    backup file is never deleted until this call succeeds, so nothing is
+    lost even if all attempts fail (in which case the exception is left to
+    propagate and stop the run, per this project's file-safety protocol).
+    """
+    last_err = None
+    for i in range(attempts):
+        try:
+            os.replace(backup, real_target)
+            return
+        except OSError as e:
+            last_err = e
+            if i == attempts - 1:
+                raise
+            time.sleep(delay)
+
+
 def main():
     os.makedirs(FIXTURES_DIR, exist_ok=True)
 
-    pdf_paths = sorted(glob.glob(os.path.join(REPO_ROOT, "đơn hàng", "08-2026", "*.pdf")))
-    print(f"Found {len(pdf_paths)} candidate PDFs")
+    pdf_paths = sorted(set(
+        glob.glob(os.path.join(REALPDFS_DIR, "*.pdf")) +
+        glob.glob(os.path.join(REALPDFS_DIR, "*.PDF"))
+    ))
+    print(f"Found {len(pdf_paths)} candidate PDFs in {REALPDFS_DIR}")
 
     generated = 0
     skipped = 0
@@ -232,8 +278,7 @@ def main():
             skipped += 1
             rows = None
         finally:
-            os.remove(real_target)
-            shutil.move(backup, real_target)
+            _restore_with_retry(backup, real_target)
             if os.path.exists(SCRATCH_XLSX):
                 os.remove(SCRATCH_XLSX)
 
