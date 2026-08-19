@@ -221,14 +221,21 @@ func TestIdentify_KingfoodCheckedBetweenEmartAndWinmart(t *testing.T) {
 	// FIRST vendor in this project whose Identify case must be inserted
 	// mid-chain rather than appended at the end — every prior vendor's
 	// correct relative position happened to already be "at the end" of
-	// the then-current Go chain. There's no genuine ordering CONFLICT to
-	// construct here (Kingfood's own marker, a plain tax-code substring,
-	// doesn't overlap any other vendor's pattern), so this test
-	// documents the intent for a future reader, mirroring
-	// TestIdentify_EmartCheckedBetweenSatraAndWinmart's own rationale.
-	got := Identify("0313403198")
+	// the then-current Go chain.
+	//
+	// This is a genuine ordering assertion, not just a recognition check
+	// (recognition alone is already covered by
+	// TestIdentify_RecognizesKingfoodByTaxCode above): the input text
+	// below contains BOTH Kingfood's marker (0313403198) and Winmart's
+	// marker (winmartPattern: "Nhà cung cấp (Supplier): 0002011398") so
+	// there is an actual ordering conflict for Identify to resolve. Since
+	// Kingfood's check runs before Winmart's in the chain, the result
+	// must be "Kingfood". If the chain were ever reordered to put
+	// Winmart's check first, this test would catch it.
+	text := "Header\n0313403198\nNhà cung cấp (Supplier): 0002011398\nfooter"
+	got := Identify(text)
 	if got != "Kingfood" {
-		t.Fatalf("Identify with Kingfood marker = %q, want %q", got, "Kingfood")
+		t.Fatalf("Identify with both Kingfood and Winmart markers = %q, want %q", got, "Kingfood")
 	}
 }
 

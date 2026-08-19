@@ -219,6 +219,20 @@ func (p *RealProcessor) processKingfoodSegment(filePath, text, pageLabel string)
 	// Does NOT reuse the shared buildInvoiceBonusRow — Q gets only the
 	// first matched SKU (kiemtra[0]), not a joined list, the same
 	// divergence already handled for Winmart/Emart/FujiMart.
+	//
+	// KNOWN PYTHON DIVERGENCE (documented, not fixed): real Python's
+	// xulydonhang.py:4131 calls find_all_promotions_by_sku_and_time("Hóa
+	// Đơn", entry_date) WITHOUT the vendor argument — the only one of the
+	// 10 equivalent call sites in the whole file to omit it. Because the
+	// function's signature defaults sheet_name to "Coop", real Python
+	// therefore actually reads Kingfood's invoice-level promo from the
+	// COOP sheet, not the KINGFOOD sheet — almost certainly an
+	// unintentional bug (every other vendor's own call site correctly
+	// passes its vendor). priceIndex here was fetched via
+	// p.Pricing.FetchIndex("KINGFOOD"), so this port deliberately reads
+	// from the correct KINGFOOD sheet instead, per this project's policy
+	// of not preserving old Python bugs. Currently latent: no real
+	// "Hóa Đơn" promo rows exist in either sheet's captured data.
 	if invoicePromo := priceIndex.FindInvoicePromotion(entryDate); invoicePromo != "" {
 		invoicePromo = strings.ReplaceAll(invoicePromo, "\r", "\n")
 		invoiceSkus := p.Store.FindSkusMentioned(invoicePromo)

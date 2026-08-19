@@ -26,6 +26,18 @@ import (
 // them later is a matter of copying into realpdfs/ and re-running
 // generate_fixtures.py — this test globs its inputs, so no code change
 // is needed here when that happens.
+//
+// Known-but-not-fixture-triggered divergence: real Python's invoice-
+// level promo lookup (xulydonhang.py:4131) omits the vendor argument to
+// find_all_promotions_by_sku_and_time, so it actually reads from the
+// COOP sheet's default rather than KINGFOOD's — the only one of 10
+// similar call sites in the file to do so, almost certainly an
+// unintentional Python bug. This Go port (kingfood_processor.go,
+// priceIndex.FindInvoicePromotion) deliberately reads from the correct
+// KINGFOOD sheet instead, per this project's policy of not preserving
+// old bugs. No entry exists below for it because none of the 9 real
+// fixtures contain a "Hóa Đơn" promo row to trigger the divergence —
+// it is latent, not exercised by current test data.
 var knownDivergences_Kingfood = map[string]bool{}
 
 func loadFrozenKingfoodPricingSource(t *testing.T) *fixturePricingSource {
