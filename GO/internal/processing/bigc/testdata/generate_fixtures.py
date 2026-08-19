@@ -2,9 +2,11 @@
 Throwaway dev tool — NOT part of the shipped Go or Python app.
 
 Runs the CURRENT xulydonhang.py BigC pipeline against every real PDF in
-đơn hàng/08-2026/ that identify_vendor recognizes as BigC, capturing the
-resulting dondathang.xlsx rows (and the live-fetched Google Sheets
-price/promotion data for the BIGC sheet) into JSON fixtures under
+bigc/testdata/realpdfs/ (stable, git-tracked source PDFs recovered from
+the đơn hàng/mẫu đơn hàng/ archive — see the BigC testdata migration
+report) that identify_vendor recognizes as BigC, capturing the resulting
+dondathang.xlsx rows (and the live-fetched Google Sheets price/promotion
+data for the BIGC sheet) into JSON fixtures under
 GO/internal/processing/bigc/testdata/fixtures/. The Go golden test
 (Task 8) diffs RealProcessor's output against these fixtures instead of
 against a live Google Sheets fetch, so it's deterministic and offline.
@@ -46,6 +48,9 @@ if hasattr(sys.stderr, "reconfigure"):
 import openpyxl  # noqa: E402
 import xulydonhang  # noqa: E402
 
+REALPDFS_DIR = os.path.join(
+    REPO_ROOT, "GO", "internal", "processing", "bigc", "testdata", "realpdfs"
+)
 FIXTURES_DIR = os.path.join(
     REPO_ROOT, "GO", "internal", "processing", "bigc", "testdata", "fixtures"
 )
@@ -221,31 +226,30 @@ def process_one_pdf(path, start_row):
         doc.close()
 
 
-def _remove_with_retry(path, attempts=5, delay=0.5):
-    """os.remove wrapped with retry-with-backoff. Windows Defender's
-    real-time scanner can transiently hold a lock on a freshly-saved
-    .xlsx right after openpyxl's wb.save() closes it, which surfaces here
-    as a PermissionError ([WinError 5] Access is denied). Retrying a few
-    times with a short delay lets the scan finish and the lock clear
-    before we give up and let the exception propagate for real."""
+def _restore_with_retry(backup, real_target, attempts=20, delay=1.0):
+    """Restore the production dondathang.xlsx from its per-iteration backup.
+
+    Uses a single os.replace() (atomic overwrite-in-place on Windows, no
+    separate remove-then-move) instead of a remove()-then-move() pair, and
+    a large retry budget. This is the exact fix discovered during Coop's
+    fixture regeneration (see coop/testdata/generate_fixtures.py and the
+    Coop/Lotte/Satra migration reports) — applied here directly rather than
+    rediscovered: the original remove()+move() pair could have os.remove()
+    hit a transient Windows file lock (e.g. Defender/OneDrive scanning the
+    just-copied file), exhaust its retry budget, and raise BEFORE the
+    restore ever ran, silently abandoning the production-file restore
+    mid-run. Collapsing to one atomic os.replace() closes that window; the
+    backup file is never deleted until this call succeeds, so nothing is
+    lost even if all attempts fail (in which case the exception is left to
+    propagate and stop the run, per this project's file-safety protocol).
+    """
+    last_err = None
     for i in range(attempts):
         try:
-            os.remove(path)
+            os.replace(backup, real_target)
             return
-        except PermissionError:
-            if i == attempts - 1:
-                raise
-            time.sleep(delay)
-
-
-def _move_with_retry(src, dst, attempts=5, delay=0.5):
-    """shutil.move wrapped with the same retry-with-backoff as
-    _remove_with_retry, and for the same reason (transient AV lock)."""
-    for i in range(attempts):
-        try:
-            shutil.move(src, dst)
-            return
-        except PermissionError:
+        except OSError as e:
+            last_err = e
             if i == attempts - 1:
                 raise
             time.sleep(delay)
@@ -254,8 +258,11 @@ def _move_with_retry(src, dst, attempts=5, delay=0.5):
 def main():
     os.makedirs(FIXTURES_DIR, exist_ok=True)
 
-    pdf_paths = sorted(glob.glob(os.path.join(REPO_ROOT, "đơn hàng", "08-2026", "*.pdf")))
-    print(f"Found {len(pdf_paths)} candidate PDFs")
+    pdf_paths = sorted(set(
+        glob.glob(os.path.join(REALPDFS_DIR, "*.pdf")) +
+        glob.glob(os.path.join(REALPDFS_DIR, "*.PDF"))
+    ))
+    print(f"Found {len(pdf_paths)} candidate PDFs in {REALPDFS_DIR}")
 
     generated = 0
     skipped = 0
@@ -285,8 +292,7 @@ def main():
             skipped += 1
             rows = None
         finally:
-            _remove_with_retry(real_target)
-            _move_with_retry(backup, real_target)
+            _restore_with_retry(backup, real_target)
             if os.path.exists(SCRATCH_XLSX):
                 os.remove(SCRATCH_XLSX)
 
