@@ -106,3 +106,90 @@ func ParseOrderInfo(text string) (poNumber, entryDate, cancelDate string, ok boo
 	ok = poNumber != "" && entryOk && cancelOk
 	return poNumber, entryDate, cancelDate, ok
 }
+
+// tableStartPattern mirrors lamsachdonhang_kingfood's start marker
+// (xulydonhang.py:6674): case-insensitive "Khu vực", the last column
+// header immediately before the first product row. Applied to
+// TAB-NORMALIZED text (Go's raw extraction has "Khu\tvực", a tab
+// between the two words, same class of divergence as the PO/date
+// labels in ParseOrderInfo).
+var tableStartPattern = regexp.MustCompile(`(?i)Khu vực`)
+
+// productLinePattern mirrors laydanhsachsanpham_kingfood's compiled
+// regex (xulydonhang.py:6707-6724) exactly: 6 capturing groups — STT,
+// 13-digit barcode, a non-greedy multi-line product name, unit (one of
+// a fixed 5-word set), quantity, then a fixed 4-line skip block before
+// the final price field. Go has no re.VERBOSE mode; the pattern below
+// is the same shape with the VERBOSE-only whitespace/comments removed.
+// No re.MULTILINE equivalent needed — the pattern never references ^/$.
+var productLinePattern = regexp.MustCompile(`(\d+)\s*\n(\d{13})\s*\n((?:.+\n)+?)(HỘP|TÚI|CHAI|LON|GÓI)\s*\n([\d.]+)\s*\n\d+\s*\n.+\s*\n(?:.*\n){4}([0-9.,]+)`)
+
+// Product is one extracted Kingfood product line. Only Barcode, OUQty,
+// and TotalPrice are used downstream by processKingfoodSegment — Python
+// captures "Product Name"/Unit too (xulydonhang.py:6752-6758) but
+// write_to_dondathang_kingfood never reads them (product name is always
+// re-looked-up via timten_sanpham, xulydonhang.py:3946), so this struct
+// omits them entirely.
+//
+// TotalPrice keeps the field's Python name even though the value is
+// actually a PER-UNIT final price (post-discount), not a line total —
+// see processKingfoodSegment's own doc comment (Task 4) for the full
+// explanation; this struct intentionally does NOT rename the field, to
+// stay traceable to the source column name "Total Price" in
+// laydanhsachsanpham_kingfood's own dict.
+//
+// TotalPrice is left as a RAW string (e.g. "52.195,073", Vietnamese/
+// European number format: period=thousands, comma=decimal) — NOT
+// parsed here. parseKingfoodPrice (kingfood_processor.go, Task 4)
+// converts it; this package has no float-parsing dependency.
+type Product struct {
+	Barcode    string
+	OUQty      string
+	TotalPrice string
+}
+
+// extractProductTable mirrors lamsachdonhang_kingfood (xulydonhang.py:
+// 6672-6695): find the FIRST "Khu vực" (case-insensitive, xulydonhang.py's
+// own re.search takes the first match, not the last — confirmed by
+// direct reading, no rfind used here unlike FujiMart's marker), take
+// everything after it, then cut at the first "TỔNG CỘNG" that begins its
+// own line (Python's `(?<=\n)TỔNG CỘNG` lookbehind — Go's RE2 has no
+// lookbehind support, so this searches for the literal "\nTỔNG CỘNG"
+// substring instead, equivalent for this purpose). If either marker is
+// missing, Python returns the literal string "Không có sản phẩm" (never
+// crashes); this returns "" instead, treated as "no products" by
+// ExtractProducts.
+func extractProductTable(text string) string {
+	normalized := normalizeTabs(text)
+	loc := tableStartPattern.FindStringIndex(normalized)
+	if loc == nil {
+		return ""
+	}
+	after := normalized[loc[1]:]
+	endIdx := strings.Index(after, "\nTỔNG CỘNG")
+	if endIdx < 0 {
+		return ""
+	}
+	return strings.TrimSpace(after[:endIdx])
+}
+
+// ExtractProducts mirrors laydanhsachsanpham_kingfood
+// (xulydonhang.py:6698-6758) plus the table-isolation step that always
+// runs immediately before it (lamsachdonhang_kingfood, xulydonhang.py:
+// 6672-6695, called from :6700).
+func ExtractProducts(text string) []Product {
+	table := extractProductTable(text)
+	if table == "" {
+		return nil
+	}
+
+	var products []Product
+	for _, m := range productLinePattern.FindAllStringSubmatch(table, -1) {
+		products = append(products, Product{
+			Barcode:    m[2],
+			OUQty:      strings.ReplaceAll(m[5], ".", ""),
+			TotalPrice: m[6],
+		})
+	}
+	return products
+}
