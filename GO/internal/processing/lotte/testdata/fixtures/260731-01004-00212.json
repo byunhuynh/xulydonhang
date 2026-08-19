@@ -46,8 +46,8 @@
       "U": "Không",
       "V": "LA_TP",
       "X": 8,
-      "Y": 162273,
-      "Z": "=Y24*X24",
+      "Y": 0,
+      "Z": "=Y2539*X2539",
       "Z_is_formula": true,
       "AE": 8,
       "AJ": "MT_MN",
@@ -58,8 +58,8 @@
       "AT": 30.4,
       "AU": 2,
       "AV": 60,
-      "Y_has_comment": false,
-      "Y_fill": "00000000"
+      "Y_has_comment": true,
+      "Y_fill": "00FF0000"
     }
   ]
 }

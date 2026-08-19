@@ -46,8 +46,8 @@
       "U": "Không",
       "V": "TP_HN_12",
       "X": 8,
-      "Y": 65295.75,
-      "Z": "=Y24*X24",
+      "Y": 0,
+      "Z": "=Y2539*X2539",
       "Z_is_formula": true,
       "AE": 8,
       "AJ": "MT_MB",
@@ -58,8 +58,8 @@
       "AT": 18.4,
       "AU": 1,
       "AV": 60,
-      "Y_has_comment": false,
-      "Y_fill": "00000000"
+      "Y_has_comment": true,
+      "Y_fill": "00FF0000"
     },
     {
       "row_number_offset": 2,
@@ -106,8 +106,8 @@
       "U": "Không",
       "V": "TP_HN_12",
       "X": 8,
-      "Y": 65295.75,
-      "Z": "=Y26*X26",
+      "Y": 0,
+      "Z": "=Y2541*X2541",
       "Z_is_formula": true,
       "AE": 8,
       "AJ": "MT_MB",
@@ -118,8 +118,8 @@
       "AT": 18.4,
       "AU": 1,
       "AV": 60,
-      "Y_has_comment": false,
-      "Y_fill": "00000000"
+      "Y_has_comment": true,
+      "Y_fill": "00FF0000"
     },
     {
       "row_number_offset": 4,
@@ -166,8 +166,8 @@
       "U": "Không",
       "V": "TP_HN_12",
       "X": 20,
-      "Y": 27818.25,
-      "Z": "=Y28*X28",
+      "Y": 30600,
+      "Z": "=Y2543*X2543",
       "Z_is_formula": true,
       "AE": 8,
       "AJ": "MT_MB",
@@ -178,8 +178,8 @@
       "AT": 10,
       "AU": 1,
       "AV": 60,
-      "Y_has_comment": false,
-      "Y_fill": "00000000"
+      "Y_has_comment": true,
+      "Y_fill": "00FF0000"
     },
     {
       "row_number_offset": 6,
@@ -197,7 +197,7 @@
       "V": "TP_HN_12",
       "X": 24,
       "Y": 32145.6,
-      "Z": "=Y29*X29",
+      "Z": "=Y2544*X2544",
       "Z_is_formula": true,
       "AE": 8,
       "AJ": "MT_MB",
@@ -227,7 +227,7 @@
       "V": "TP_HN_12",
       "X": 24,
       "Y": 32145.6,
-      "Z": "=Y30*X30",
+      "Z": "=Y2545*X2545",
       "Z_is_formula": true,
       "AE": 8,
       "AJ": "MT_MB",

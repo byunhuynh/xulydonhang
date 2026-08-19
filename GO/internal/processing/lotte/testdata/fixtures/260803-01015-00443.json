@@ -46,8 +46,8 @@
       "U": "Không",
       "V": "LA_TP",
       "X": 20,
-      "Y": 27818.25,
-      "Z": "=Y24*X24",
+      "Y": 30600,
+      "Z": "=Y2539*X2539",
       "Z_is_formula": true,
       "AE": 8,
       "AJ": "MT_MN",
@@ -58,8 +58,8 @@
       "AT": 10,
       "AU": 1,
       "AV": 60,
-      "Y_has_comment": false,
-      "Y_fill": "00000000"
+      "Y_has_comment": true,
+      "Y_fill": "00FF0000"
     },
     {
       "row_number_offset": 2,
@@ -77,7 +77,7 @@
       "V": "LA_TP",
       "X": 24,
       "Y": 32145.6,
-      "Z": "=Y25*X25",
+      "Z": "=Y2540*X2540",
       "Z_is_formula": true,
       "AE": 8,
       "AJ": "MT_MN",

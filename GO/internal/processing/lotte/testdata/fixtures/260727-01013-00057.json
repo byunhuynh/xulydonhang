@@ -46,8 +46,8 @@
       "U": "Không",
       "V": "LA_TP",
       "X": 24,
-      "Y": 65295.75,
-      "Z": "=Y24*X24",
+      "Y": 0,
+      "Z": "=Y2539*X2539",
       "Z_is_formula": true,
       "AE": 8,
       "AJ": "MT_MN",
@@ -58,8 +58,8 @@
       "AT": 55.2,
       "AU": 3,
       "AV": 60,
-      "Y_has_comment": false,
-      "Y_fill": "00000000"
+      "Y_has_comment": true,
+      "Y_fill": "00FF0000"
     },
     {
       "row_number_offset": 2,
@@ -106,8 +106,8 @@
       "U": "Không",
       "V": "LA_TP",
       "X": 24,
-      "Y": 65295.75,
-      "Z": "=Y26*X26",
+      "Y": 0,
+      "Z": "=Y2541*X2541",
       "Z_is_formula": true,
       "AE": 8,
       "AJ": "MT_MN",
@@ -118,8 +118,8 @@
       "AT": 55.2,
       "AU": 3,
       "AV": 60,
-      "Y_has_comment": false,
-      "Y_fill": "00000000"
+      "Y_has_comment": true,
+      "Y_fill": "00FF0000"
     },
     {
       "row_number_offset": 4,

@@ -2,9 +2,11 @@
 Throwaway dev tool — NOT part of the shipped Go or Python app.
 
 Runs the CURRENT xulydonhang.py Lotte pipeline against every real PDF in
-đơn hàng/08-2026/ that identify_vendor recognizes as Lotte, capturing the
-resulting dondathang.xlsx rows (and the live-fetched Google Sheets
-price/promotion data for the LOTTE sheet) into JSON fixtures under
+lotte/testdata/realpdfs/ (git-tracked, stable copies located from the live
+đơn hàng/08-2026/ folder and the đơn hàng/mẫu đơn hàng/ archive — see the
+Lotte testdata migration report) that identify_vendor recognizes as Lotte,
+capturing the resulting dondathang.xlsx rows (and the live-fetched Google
+Sheets price/promotion data for the LOTTE sheet) into JSON fixtures under
 GO/internal/processing/lotte/testdata/fixtures/. The Go golden test
 (Task 9) diffs RealProcessor's output against these fixtures instead of
 against a live Google Sheets fetch, so it's deterministic and offline.
@@ -17,6 +19,7 @@ import json
 import os
 import shutil
 import sys
+import time
 
 # Same depth as Coop's harness: this script sits 5 directory levels below
 # repo root (GO/internal/processing/lotte/testdata/generate_fixtures.py),
@@ -41,8 +44,39 @@ import xulydonhang  # noqa: E402
 FIXTURES_DIR = os.path.join(
     REPO_ROOT, "GO", "internal", "processing", "lotte", "testdata", "fixtures"
 )
+REALPDFS_DIR = os.path.join(
+    REPO_ROOT, "GO", "internal", "processing", "lotte", "testdata", "realpdfs"
+)
 TEMPLATE_XLSX = os.path.join(REPO_ROOT, "dondathang.xlsx")
 SCRATCH_XLSX = os.path.join(REPO_ROOT, "dondathang_fixture_scratch.xlsx")
+
+
+def _restore_with_retry(backup, real_target, attempts=20, delay=1.0):
+    """Atomically restore real_target from backup via os.replace() (a single
+    atomic overwrite, no separate remove step), with a generous retry
+    budget for transient Windows file-lock flakiness (e.g. a concurrently
+    running instance of the production app briefly holding the file open).
+
+    This replaces the original two-step os.remove() + shutil.move()
+    sequence, which had a real bug found during Coop's fixture
+    regeneration: os.remove() could exhaust its own retry budget and raise
+    *before* shutil.move() ever ran, abandoning the production-file
+    restore mid-run inside the `finally:` block. os.replace() is atomic on
+    Windows (backed by MoveFileExW with MOVEFILE_REPLACE_EXISTING), so
+    there is no window where real_target is missing or where a failure can
+    leave the restore half-done.
+    """
+    last_err = None
+    for attempt in range(1, attempts + 1):
+        try:
+            os.replace(backup, real_target)
+            return
+        except OSError as e:
+            last_err = e
+            time.sleep(delay)
+    raise RuntimeError(
+        f"Failed to restore {real_target} from {backup} after {attempts} attempts: {last_err}"
+    )
 
 # --- Monkey-patch network/upload side effects out (identical shape to
 # Coop's harness; find_price_by_sku/find_all_promotions_by_sku_and_time
@@ -177,7 +211,7 @@ def process_one_pdf(path):
 def main():
     os.makedirs(FIXTURES_DIR, exist_ok=True)
 
-    pdf_paths = sorted(glob.glob(os.path.join(REPO_ROOT, "đơn hàng", "08-2026", "*.pdf")))
+    pdf_paths = sorted(glob.glob(os.path.join(REALPDFS_DIR, "*.pdf")))
     print(f"Found {len(pdf_paths)} candidate PDFs")
 
     generated = 0
@@ -210,8 +244,7 @@ def main():
             skipped += 1
             rows = None
         finally:
-            os.remove(real_target)
-            shutil.move(backup, real_target)
+            _restore_with_retry(backup, real_target)
             if os.path.exists(SCRATCH_XLSX):
                 os.remove(SCRATCH_XLSX)
 
