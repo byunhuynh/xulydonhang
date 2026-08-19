@@ -457,6 +457,19 @@ func loadFrozenBigcPricingSource(t *testing.T) *fixturePricingSource {
 	return &fixturePricingSource{index: pricing.ParseIndex(frozen.RawRows)}
 }
 
+// TestRealProcessor_MatchesGoldenFixtures_BigC runs against stable,
+// git-tracked real PDFs under bigc/testdata/realpdfs/ instead of the live
+// đơn hàng/08-2026/ folder, which is continuously reorganized by a
+// concurrently-running production instance of this application (files get
+// moved into a dated archive and renamed) — matching the pattern
+// established by Emart/FujiMart/Kingfood/Coop/Lotte/Satra. 25 of the 29
+// original fixtures' source PDFs were recoverable from the đơn hàng/mẫu
+// đơn hàng/ archive tree; the remaining 4 (2631057733376, 2631057733450 —
+// entry date 31/07/2026, the oldest batch at the time of this search — and
+// 2633058059999, 2633058060149 — entry date 14/08/2026, the most recent
+// batch) were not found in either the live folder or the archive and have
+// been moved to bigc/testdata/fixtures_missing_pdf/ pending their PDFs
+// resurfacing.
 func TestRealProcessor_MatchesGoldenFixtures_BigC(t *testing.T) {
 	fixturePaths, err := filepath.Glob("bigc/testdata/fixtures/*.json")
 	if err != nil {
@@ -489,7 +502,7 @@ func TestRealProcessor_MatchesGoldenFixtures_BigC(t *testing.T) {
 			t.Fatalf("failed parsing %s: %v", fixturePath, err)
 		}
 
-		pdfPath := filepath.Join("..", "..", "..", "đơn hàng", "08-2026", fixture.SourcePDF)
+		pdfPath := filepath.Join("bigc", "testdata", "realpdfs", fixture.SourcePDF)
 		excelPath := filepath.Join(t.TempDir(), "dondathang.xlsx")
 		copyFile(t, "excelwriter/testdata/dondathang.xlsx", excelPath)
 
