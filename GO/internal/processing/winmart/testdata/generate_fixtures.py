@@ -2,7 +2,9 @@
 Throwaway dev tool — NOT part of the shipped Go or Python app.
 
 Runs the CURRENT xulydonhang.py Winmart pipeline against every real PDF in
-đơn hàng/08-2026/ that identify_vendor recognizes as Winmart, capturing the
+winmart/testdata/realpdfs/ (stable, git-tracked source PDFs recovered from
+the đơn hàng/mẫu đơn hàng/ archive tree — see winmart_golden_test.go's
+doc comment) that identify_vendor recognizes as Winmart, capturing the
 resulting dondathang.xlsx rows (and the live-fetched Google Sheets
 price/promotion data for the WINMART sheet) into JSON fixtures under
 GO/internal/processing/winmart/testdata/fixtures/. The Go golden test
@@ -20,14 +22,16 @@ finished writing every Winmart page in the file — each write call commits
 its rows to the sheet immediately, so the snapshot reflects the union of
 every page's rows as soon as the loop completes.
 
-4 of the 16 real Winmart PDFs found under đơn hàng/08-2026/ crash the
-real, unmodified xulydonhang.py itself with "unsupported operand
-type(s) for +=: 'float' and 'str'" inside write_to_dondathang_winmart —
-a genuine, pre-existing bug in the legacy Python system, not something
-this harness or the Go port is responsible for fixing. They are SKIPped
-with that exact error printed, not silently dropped. As of this
-writing the 4 are: 4194159303.pdf, 4194159910.pdf, 4194159918.pdf,
-4901307989.pdf — all 4 have zero golden fixture coverage.
+4 of the 16 real Winmart PDFs originally found under đơn hàng/08-2026/
+crash the real, unmodified xulydonhang.py itself with "unsupported
+operand type(s) for +=: 'float' and 'str'" inside
+write_to_dondathang_winmart — a genuine, pre-existing bug in the legacy
+Python system, not something this harness or the Go port is
+responsible for fixing. They were SKIPped with that exact error
+printed, not silently dropped, and were never recovered into
+realpdfs/. As of this writing the 4 are: 4194159303.pdf,
+4194159910.pdf, 4194159918.pdf, 4901307989.pdf — all 4 have zero golden
+fixture coverage.
 
 Run from the repo root:
     .venv/Scripts/python.exe GO/internal/processing/winmart/testdata/generate_fixtures.py
@@ -62,6 +66,9 @@ import xulydonhang  # noqa: E402
 
 FIXTURES_DIR = os.path.join(
     REPO_ROOT, "GO", "internal", "processing", "winmart", "testdata", "fixtures"
+)
+REALPDFS_DIR = os.path.join(
+    REPO_ROOT, "GO", "internal", "processing", "winmart", "testdata", "realpdfs"
 )
 TEMPLATE_XLSX = os.path.join(REPO_ROOT, "dondathang.xlsx")
 SCRATCH_XLSX = os.path.join(REPO_ROOT, "dondathang_fixture_scratch.xlsx")
@@ -243,33 +250,27 @@ def process_one_pdf(path):
         doc.close()
 
 
-def _remove_with_retry(path, attempts=5, delay=0.5):
-    """os.remove wrapped with retry-with-backoff. Windows Defender's
-    real-time scanner can transiently hold a lock on a freshly-saved
-    .xlsx right after openpyxl's wb.save() closes it, which surfaces here
-    as a PermissionError ([WinError 5] Access is denied). Retrying a few
-    times with a short delay lets the scan finish and the lock clear
-    before we give up and let the exception propagate for real.
+def _restore_with_retry(backup, real_target, attempts=20, delay=1.0):
+    """Atomically restores real_target from backup via os.replace(),
+    wrapped with retry-with-backoff. Windows Defender's real-time scanner
+    can transiently hold a lock on a freshly-saved .xlsx right after
+    openpyxl's wb.save() closes it, which surfaces here as a
+    PermissionError ([WinError 5] Access is denied).
 
-    (BigC's Task 7 added this hardening reactively, after a transient
-    Windows file-lock crashed its harness mid-restore on the last PDF;
-    this harness includes it from the start.)"""
+    This deliberately uses a SINGLE os.replace() call rather than the
+    separate os.remove()-then-shutil.move() shape used by earlier
+    harnesses. That two-step shape was a genuine bug discovered during
+    Coop's fixture regeneration: an os.remove() failure could exhaust its
+    own retry budget and raise out of the finally: block BEFORE the
+    shutil.move() restore ever ran, silently abandoning the production-
+    file restore mid-run. os.replace() is atomic (overwrite-in-place, no
+    separate remove step), so there is no window where the restore can be
+    half-done. The 20-attempt/1.0s budget (vs. the original two helpers'
+    5x0.5s each) matches the hardened helper reused verbatim across
+    Coop/Lotte/Satra/BigC's harnesses after that fix."""
     for i in range(attempts):
         try:
-            os.remove(path)
-            return
-        except PermissionError:
-            if i == attempts - 1:
-                raise
-            time.sleep(delay)
-
-
-def _move_with_retry(src, dst, attempts=5, delay=0.5):
-    """shutil.move wrapped with the same retry-with-backoff as
-    _remove_with_retry, and for the same reason (transient AV lock)."""
-    for i in range(attempts):
-        try:
-            shutil.move(src, dst)
+            os.replace(backup, real_target)
             return
         except PermissionError:
             if i == attempts - 1:
@@ -280,7 +281,10 @@ def _move_with_retry(src, dst, attempts=5, delay=0.5):
 def main():
     os.makedirs(FIXTURES_DIR, exist_ok=True)
 
-    pdf_paths = sorted(glob.glob(os.path.join(REPO_ROOT, "đơn hàng", "08-2026", "*.pdf")))
+    pdf_paths = sorted(set(
+        glob.glob(os.path.join(REALPDFS_DIR, "*.pdf"))
+        + glob.glob(os.path.join(REALPDFS_DIR, "*.PDF"))
+    ))
     print(f"Found {len(pdf_paths)} candidate PDFs")
 
     generated = 0
@@ -313,8 +317,7 @@ def main():
             skipped += 1
             rows = None
         finally:
-            _remove_with_retry(real_target)
-            _move_with_retry(backup, real_target)
+            _restore_with_retry(backup, real_target)
             if os.path.exists(SCRATCH_XLSX):
                 os.remove(SCRATCH_XLSX)
 
