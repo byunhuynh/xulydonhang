@@ -48,6 +48,19 @@ func loadFrozenWinmartPricingSource(t *testing.T) *fixturePricingSource {
 	return &fixturePricingSource{index: pricing.ParseIndex(frozen.RawRows)}
 }
 
+// TestRealProcessor_MatchesGoldenFixtures_Winmart runs against stable,
+// git-tracked real PDFs under winmart/testdata/realpdfs/ instead of the
+// live đơn hàng/08-2026/ folder, which is continuously reorganized by a
+// concurrently-running production instance of this application (files get
+// moved into a dated archive and renamed) — matching the pattern
+// established by Emart/FujiMart/Kingfood/Coop/Lotte/Satra/BigC. All 12 of
+// the original fixtures' source PDFs were recoverable from the đơn hàng/mẫu
+// đơn hàng/ archive tree, each with exactly one bracket-suffix match — no
+// unlocatable fixtures, so there is no winmart/testdata/fixtures_missing_pdf/
+// directory. See knownDivergences_Winmart's doc comment above for the
+// separate, pre-existing coverage gap (4 of the original 16 real Winmart
+// PDFs crash the real, unmodified xulydonhang.py itself and were never
+// given fixtures at all).
 func TestRealProcessor_MatchesGoldenFixtures_Winmart(t *testing.T) {
 	fixturePaths, err := filepath.Glob("winmart/testdata/fixtures/*.json")
 	if err != nil {
@@ -80,7 +93,7 @@ func TestRealProcessor_MatchesGoldenFixtures_Winmart(t *testing.T) {
 			t.Fatalf("failed parsing %s: %v", fixturePath, err)
 		}
 
-		pdfPath := filepath.Join("..", "..", "..", "đơn hàng", "08-2026", fixture.SourcePDF)
+		pdfPath := filepath.Join("winmart", "testdata", "realpdfs", fixture.SourcePDF)
 		excelPath := filepath.Join(t.TempDir(), "dondathang.xlsx")
 		copyFile(t, "excelwriter/testdata/dondathang.xlsx", excelPath)
 
