@@ -37,6 +37,14 @@ func loadFrozenLottePricingSource(t *testing.T) *fixturePricingSource {
 	return &fixturePricingSource{index: pricing.ParseIndex(frozen.RawRows)}
 }
 
+// Coverage note: 57/60 of Lotte's original golden fixtures' source PDFs
+// were locatable (live folder or the đơn hàng/mẫu đơn hàng/ archive) and
+// are committed under lotte/testdata/realpdfs/. The remaining 3
+// (260814-01004-00222, 260814-01005-00018, 260814-01012-00035) were not
+// found anywhere under đơn hàng/ and their fixture JSONs were moved (via
+// git mv, not deleted) to lotte/testdata/fixtures_missing_pdf/ so they no
+// longer report as permanent failures here, while staying in git history
+// ready to be restored if their PDFs ever resurface.
 func TestRealProcessor_MatchesGoldenFixtures_Lotte(t *testing.T) {
 	fixturePaths, err := filepath.Glob("lotte/testdata/fixtures/*.json")
 	if err != nil {
@@ -69,7 +77,7 @@ func TestRealProcessor_MatchesGoldenFixtures_Lotte(t *testing.T) {
 			t.Fatalf("failed parsing %s: %v", fixturePath, err)
 		}
 
-		pdfPath := filepath.Join("..", "..", "..", "đơn hàng", "08-2026", fixture.SourcePDF)
+		pdfPath := filepath.Join("lotte", "testdata", "realpdfs", fixture.SourcePDF)
 		excelPath := filepath.Join(t.TempDir(), "dondathang.xlsx")
 		copyFile(t, "excelwriter/testdata/dondathang.xlsx", excelPath)
 
