@@ -194,6 +194,44 @@ func TestIdentify_RecognizesFujiMartByTaxCode(t *testing.T) {
 	}
 }
 
+func TestIdentify_RecognizesKingfoodByTaxCode(t *testing.T) {
+	cases := []struct {
+		name string
+		text string
+		want string
+	}{
+		{"real tax code", "Header\n0313403198\nfooter", "Kingfood"},
+		{"unrelated number", "Header\n999999999999\nfooter", ""},
+		{"no marker at all", "nothing relevant here", ""},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			got := Identify(c.text)
+			if got != c.want {
+				t.Fatalf("Identify(%q) = %q, want %q", c.text, got, c.want)
+			}
+		})
+	}
+}
+
+func TestIdentify_KingfoodCheckedBetweenEmartAndWinmart(t *testing.T) {
+	// Real xulydonhang.py order (xulydonhang.py:90-129): ...Emart(111) ->
+	// Kingfood(114) -> [CN-HCM, unported](118) -> Winmart(121) ->
+	// [SHOPEE-CHOICE, unported](125) -> FujiMart(128). Kingfood is the
+	// FIRST vendor in this project whose Identify case must be inserted
+	// mid-chain rather than appended at the end — every prior vendor's
+	// correct relative position happened to already be "at the end" of
+	// the then-current Go chain. There's no genuine ordering CONFLICT to
+	// construct here (Kingfood's own marker, a plain tax-code substring,
+	// doesn't overlap any other vendor's pattern), so this test
+	// documents the intent for a future reader, mirroring
+	// TestIdentify_EmartCheckedBetweenSatraAndWinmart's own rationale.
+	got := Identify("0313403198")
+	if got != "Kingfood" {
+		t.Fatalf("Identify with Kingfood marker = %q, want %q", got, "Kingfood")
+	}
+}
+
 func TestIdentify_FujiMartCheckedAfterWinmart(t *testing.T) {
 	// Python's real identify_vendor order (xulydonhang.py:90-179) has
 	// Kingfood -> CN-HCM between Emart and Winmart, and SHOPEE-CHOICE

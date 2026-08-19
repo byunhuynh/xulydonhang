@@ -39,6 +39,12 @@ var (
 	// costs nothing to keep and guards against a future PDF that happens
 	// to use it).
 	emartPattern = regexp.MustCompile(`CONG TY TNHH TMDV XNK HA THANH \(101017\)|THISO RETAIL COMPANY LIMITED`)
+	// Kingfood's identify pattern (xulydonhang.py:114-115): a single
+	// literal numeric substring (the vendor's own tax code), no
+	// alternation. Real Python order places Kingfood immediately after
+	// Emart and before CN-HCM (unported)/Winmart — see Identify's own
+	// doc comment for the full chain.
+	kingfoodPattern = regexp.MustCompile(`0313403198`)
 	// Winmart's identify pattern (xulydonhang.py:121-122): a single
 	// literal regex against the whitespace-normalized page text, no
 	// alternation, no case-insensitivity flag in Python (the supplier
@@ -52,13 +58,13 @@ var (
 
 // Identify tries to recognize which retail vendor produced this
 // page/PO text, mirroring xulydonhang.py's identify_vendor. Coop, BigC,
-// Lotte, Satra, Emart, Winmart, and FujiMart are implemented in that order
-// (order is load-bearing and mirrors Python's real identify_vendor
-// precedence). Python's real order still has Kingfood and CN-HCM between
-// Emart and Winmart, and SHOPEE-CHOICE between Winmart and FujiMart, that
-// aren't ported yet — a future implementer adding one of those must insert
-// it at the correct relative position, not simply append. Identify returns
-// "" for anything that isn't one of the seven implemented vendors.
+// Lotte, Satra, Emart, Kingfood, Winmart, and FujiMart are implemented in
+// that order (order is load-bearing and mirrors Python's real
+// identify_vendor precedence). Python's real order still has CN-HCM between
+// Kingfood and Winmart, and SHOPEE-CHOICE between Winmart and FujiMart,
+// that aren't ported yet — a future implementer adding one of those must
+// insert it at the correct relative position, not simply append. Identify
+// returns "" for anything that isn't one of the eight implemented vendors.
 func Identify(text string) string {
 	cleaned := strings.TrimSpace(whitespacePattern.ReplaceAllString(text, " "))
 	if coopPattern.MatchString(cleaned) {
@@ -75,6 +81,9 @@ func Identify(text string) string {
 	}
 	if emartPattern.MatchString(cleaned) {
 		return "Emart"
+	}
+	if kingfoodPattern.MatchString(cleaned) {
+		return "Kingfood"
 	}
 	if winmartPattern.MatchString(cleaned) {
 		return "Winmart"
