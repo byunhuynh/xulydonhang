@@ -65,6 +65,31 @@ var deliveryAddressPattern = regexp.MustCompile(`(?s)Địa chỉ giao hàng\s*:
 // in jmart_golden_test.go: this heuristic is verified correct for
 // exactly this one real address and not proven to generalize to a
 // differently-shaped line-wrap in a future JMart PDF.
+//
+// KNOWN, CURRENTLY UNMITIGATED FALSE-POSITIVE RISK: this pattern cannot
+// distinguish a genuine line-wrap fusion from a genuine Vietnamese
+// house-number suffix like "Bis"/"Ter" (French-derived, still common in
+// real Vietnamese addresses — e.g. "12Bis Nguyễn Thị Minh Khai", "5Ter
+// Lê Duẩn", or even "L1 – 02Bis Tầng 1"), since those also have a digit
+// directly touching an uppercase letter that starts a real word, with
+// no space. This pattern WOULD spuriously inject a newline into any of
+// those (e.g. "12Bis..." -> "12\nBis..."), corrupting an
+// already-correct address the exact same way it repairs a genuinely
+// fused one. ReplaceAllString also fires on every matching occurrence
+// in the string, not just a single known wrap point, so a longer
+// address containing more than one such transition would take more
+// than one spurious injection.
+//
+// Deliberately NOT "fixed" with a smarter heuristic (e.g. word-length
+// or diacritic checks to tell "Bis"/"Ter" apart from a real wrapped
+// word): with only ONE real JMart PDF available for this entire
+// vendor, there is no real evidence here to validate a more elaborate
+// rule against — inventing one now would be an unverified guess, which
+// this project's methodology treats as worse than an honestly
+// documented gap. If a future real JMart sample surfaces this exact
+// false positive (a "Bis"/"Ter"-style suffix getting corrupted), THAT
+// is the evidence needed to design a real fix — not something to
+// pre-empt without it.
 var addressLineWrapGapPattern = regexp.MustCompile(`(\d)(\p{Lu}\p{Ll})`)
 
 // ParseOrderInfo mirrors the JMart branch of process_file

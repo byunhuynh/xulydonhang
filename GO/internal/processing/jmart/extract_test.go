@@ -59,6 +59,33 @@ func TestParseOrderInfo_ExtractsRealSampleFields(t *testing.T) {
 	}
 }
 
+func TestParseOrderInfo_AddressWithoutFusionBugPassesThroughUnchanged(t *testing.T) {
+	// Inertness check for addressLineWrapGapPattern (extract.go): an
+	// address that does NOT have the fusion bug — i.e. already has a
+	// real space between a house number and the following capitalized
+	// word, no digit-immediately-touching-an-uppercase-letter transition
+	// anywhere — must come out of ParseOrderInfo byte-for-byte identical
+	// to what was captured, with the repair regex firing zero times.
+	// TestParseOrderInfo_ExtractsRealSampleFields above only proves the
+	// repair fires correctly on the ONE known-broken real input; nothing
+	// previously proved it leaves an already-correct address alone.
+	const address = "45 Lê Lợi, Phường Bến Nghé, Quận 1, TP.Hồ Chí Minh"
+	text := "Ngày in : 05/07/2026\n" +
+		"Số phiếu đặt: DH01010844\n" +
+		"Địa chỉ giao hàng:\n" +
+		address + "\n" +
+		"SĐT nhận hàng :\n" +
+		"0707346346\n"
+
+	_, _, _, deliveryAddress, ok := ParseOrderInfo(text)
+	if !ok {
+		t.Fatal("ParseOrderInfo returned ok=false, want true")
+	}
+	if deliveryAddress != address {
+		t.Errorf("deliveryAddress = %q, want %q unchanged (addressLineWrapGapPattern must be inert on an already-correct address)", deliveryAddress, address)
+	}
+}
+
 func TestParseOrderInfo_MissingEntryDateMarkerFailsCleanly(t *testing.T) {
 	// No "Ngày in" marker at all -> ok=false. Mirrors Python's real
 	// crash risk here (xulydonhang.py:8146's .group(1) has no try/except
