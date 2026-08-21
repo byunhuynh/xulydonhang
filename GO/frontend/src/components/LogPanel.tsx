@@ -4,7 +4,13 @@ import { useAppStore } from '../store/appStore'
 import { SectionHeader } from './SectionHeader'
 
 function lineAccent(line: string): string {
+  // Order matters: "SAI GIÁ" carries the same ⚠️ marker as other,
+  // lower-stakes warnings (e.g. "đã có 1 batch đang xử lý") — it needs
+  // to read as danger (red), not just warning (amber), so it's checked
+  // before the generic ⚠️/❌ fallbacks.
+  if (line.includes('SAI GIÁ')) return 'border-danger/60 text-danger font-semibold'
   if (line.includes('❌')) return 'border-danger/60 text-danger'
+  if (line.includes('Đúng giá')) return 'border-success/60 text-success'
   if (line.includes('⚠️')) return 'border-warning/60 text-warning'
   if (line.includes('🚀')) return 'border-accent/60 text-accent'
   return 'border-transparent text-ink'

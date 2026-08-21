@@ -52,26 +52,33 @@ const skuLogPromoMaxLen = 60
 // runBatch, which emits OrderRow.SkuLog before that row's own
 // "process:row"). Pure formatting of values every vendor's per-product
 // loop already computes for its own Excel write (matched, khuyenmai,
-// invoicePrice, the system's own expected price); this function adds no
-// new computation, so it carries zero risk to any vendor's existing
-// price/promo logic.
-func formatSkuLogLine(sku, productName string, matched bool, invoicePrice, systemPrice float64, promoText string) string {
+// invoicePrice, the system's own expected price) plus promoDateRange —
+// the pricing sheet's own column header for whatever promo row matched
+// (a "D/M-D/M" range, e.g. "1/1-31/12"; see pricing.Promotion.Column),
+// already available in every vendor's promo loop but not previously
+// threaded through. This function adds no new computation, so it
+// carries zero risk to any vendor's existing price/promo logic.
+func formatSkuLogLine(sku, productName string, matched bool, invoicePrice, systemPrice float64, promoText, promoDateRange string) string {
 	label := sku
 	if productName != "" {
 		label = sku + " " + productName
 	}
 	promo := truncatePromoText(promoText)
+	promoSuffix := ""
+	if promo != "" && promoDateRange != "" {
+		promoSuffix = fmt.Sprintf(" (áp dụng %s)", promoDateRange)
+	}
 
 	if matched {
 		if promo == "" {
-			return fmt.Sprintf("%s — đúng giá", label)
+			return fmt.Sprintf("%s — Đúng giá", label)
 		}
-		return fmt.Sprintf("%s — đúng giá, KM: %s", label, promo)
+		return fmt.Sprintf("%s — Đúng giá, KM: %s%s", label, promo, promoSuffix)
 	}
 	if promo == "" {
-		return fmt.Sprintf("%s — ⚠️ SAI GIÁ (hóa đơn %.0f, hệ thống %.0f)", label, invoicePrice, systemPrice)
+		return fmt.Sprintf("%s — ⚠️ SAI GIÁ! Giá đúng: %.0f, Giá trên PO: %.0f", label, systemPrice, invoicePrice)
 	}
-	return fmt.Sprintf("%s — ⚠️ SAI GIÁ (hóa đơn %.0f, hệ thống %.0f, đã thử KM: %s)", label, invoicePrice, systemPrice, promo)
+	return fmt.Sprintf("%s — ⚠️ SAI GIÁ! Giá đúng: %.0f, Giá trên PO: %.0f, đã thử KM: %s%s", label, systemPrice, invoicePrice, promo, promoSuffix)
 }
 
 // truncatePromoText collapses a (possibly multi-line, CR-normalized)

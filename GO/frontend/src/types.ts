@@ -7,6 +7,7 @@ export interface OrderRow {
   donGia: string
   status: string
   statusKind: string
+  priceMismatchCount: number
 }
 
 export interface LogEntry {

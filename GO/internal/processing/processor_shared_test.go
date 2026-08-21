@@ -6,40 +6,51 @@ import (
 )
 
 func TestFormatSkuLogLine_MatchedNoPromo(t *testing.T) {
-	got := formatSkuLogLine("8936156730886", "Cà phê G7 3in1", true, 133806, 133806, "")
-	want := "8936156730886 Cà phê G7 3in1 — đúng giá"
+	got := formatSkuLogLine("8936156730886", "Cà phê G7 3in1", true, 133806, 133806, "", "")
+	want := "8936156730886 Cà phê G7 3in1 — Đúng giá"
 	if got != want {
 		t.Fatalf("got %q, want %q", got, want)
 	}
 }
 
 func TestFormatSkuLogLine_MatchedWithPromo(t *testing.T) {
-	got := formatSkuLogLine("8936156730886", "Cà phê G7 3in1", true, 133806, 133806, "Mua 1 tặng 1")
-	want := "8936156730886 Cà phê G7 3in1 — đúng giá, KM: Mua 1 tặng 1"
+	got := formatSkuLogLine("8936156730886", "Cà phê G7 3in1", true, 133806, 133806, "Mua 1 tặng 1", "1/1-31/12")
+	want := "8936156730886 Cà phê G7 3in1 — Đúng giá, KM: Mua 1 tặng 1 (áp dụng 1/1-31/12)"
+	if got != want {
+		t.Fatalf("got %q, want %q", got, want)
+	}
+}
+
+func TestFormatSkuLogLine_MatchedWithPromoButNoDateRange(t *testing.T) {
+	// promoDateRange can legitimately be "" (e.g. a caller that hasn't
+	// threaded pricing.Promotion.Column through yet) — must not print a
+	// dangling "(áp dụng )".
+	got := formatSkuLogLine("SP0001", "", true, 1000, 1000, "Mua 1 tặng 1", "")
+	want := "SP0001 — Đúng giá, KM: Mua 1 tặng 1"
 	if got != want {
 		t.Fatalf("got %q, want %q", got, want)
 	}
 }
 
 func TestFormatSkuLogLine_MismatchNoPromo(t *testing.T) {
-	got := formatSkuLogLine("SP0005", "Sữa tươi", false, 133806, 120000, "")
-	want := "SP0005 Sữa tươi — ⚠️ SAI GIÁ (hóa đơn 133806, hệ thống 120000)"
+	got := formatSkuLogLine("SP0005", "Sữa tươi", false, 133806, 120000, "", "")
+	want := "SP0005 Sữa tươi — ⚠️ SAI GIÁ! Giá đúng: 120000, Giá trên PO: 133806"
 	if got != want {
 		t.Fatalf("got %q, want %q", got, want)
 	}
 }
 
 func TestFormatSkuLogLine_MismatchWithPromo(t *testing.T) {
-	got := formatSkuLogLine("SP0005", "Sữa tươi", false, 133806, 120000, "Giảm 10%")
-	want := "SP0005 Sữa tươi — ⚠️ SAI GIÁ (hóa đơn 133806, hệ thống 120000, đã thử KM: Giảm 10%)"
+	got := formatSkuLogLine("SP0005", "Sữa tươi", false, 133806, 120000, "Giảm 10%", "15/8-20/8")
+	want := "SP0005 Sữa tươi — ⚠️ SAI GIÁ! Giá đúng: 120000, Giá trên PO: 133806, đã thử KM: Giảm 10% (áp dụng 15/8-20/8)"
 	if got != want {
 		t.Fatalf("got %q, want %q", got, want)
 	}
 }
 
 func TestFormatSkuLogLine_NoProductNameFallsBackToSkuOnly(t *testing.T) {
-	got := formatSkuLogLine("SP0009", "", true, 1000, 1000, "")
-	want := "SP0009 — đúng giá"
+	got := formatSkuLogLine("SP0009", "", true, 1000, 1000, "", "")
+	want := "SP0009 — Đúng giá"
 	if got != want {
 		t.Fatalf("got %q, want %q", got, want)
 	}

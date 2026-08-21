@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { FaCircle, FaCheck } from 'react-icons/fa6'
+import { FaCircle, FaCheck, FaCircleCheck, FaTriangleExclamation } from 'react-icons/fa6'
 import { useAppStore } from '../store/appStore'
 import type { OrderRow } from '../types'
 import { SectionHeader } from './SectionHeader'
@@ -11,6 +11,7 @@ const columns: { key: keyof OrderRow; label: string }[] = [
   { key: 'maKhachHang', label: 'Mã khách hàng' },
   { key: 'po', label: 'PO' },
   { key: 'donGia', label: 'Đơn giá' },
+  { key: 'priceMismatchCount', label: 'Đối soát giá' },
   { key: 'status', label: 'Trạng thái' },
 ]
 
@@ -26,6 +27,31 @@ function statusMeta(row: OrderRow): { classes: string; label: string } {
     default:
       return { classes: 'bg-white/5 text-muted', label: status }
   }
+}
+
+// priceMeta renders a dedicated reconciliation badge, independent of the
+// overall processing Status column — a "Hoàn thành" row can still carry
+// mismatched SKUs (that's exactly what statusKind "warning" means), so
+// this makes that fact visible as its own column instead of only living
+// inside the Trạng thái text.
+function priceMeta(row: OrderRow): { classes: string; label: string; icon: 'ok' | 'warn' | 'none' } {
+  if (row.statusKind === 'failed') {
+    return { classes: 'bg-white/5 text-muted', label: '—', icon: 'none' }
+  }
+  if (row.priceMismatchCount > 0) {
+    return {
+      classes: 'bg-danger/15 text-danger',
+      label: `${row.priceMismatchCount} mã sai giá`,
+      icon: 'warn',
+    }
+  }
+  return { classes: 'bg-success/15 text-success', label: 'Đúng giá', icon: 'ok' }
+}
+
+function formatMoney(value: string): string {
+  const n = Number(value)
+  if (Number.isNaN(n)) return value
+  return n.toLocaleString('vi-VN')
 }
 
 export function ResultTable() {
@@ -65,11 +91,17 @@ export function ResultTable() {
             )}
             {rows.map((row, i) => {
               const meta = statusMeta(row)
+              const price = priceMeta(row)
               return (
                 <tr key={i} className="transition-colors hover:bg-white/[0.03]">
                   {columns.map((c) => {
                     const cellKey = `${i}-${c.key}`
-                    const copyValue = c.key === 'status' ? meta.label : String(row[c.key] ?? '')
+                    const copyValue =
+                      c.key === 'status'
+                        ? meta.label
+                        : c.key === 'priceMismatchCount'
+                          ? price.label
+                          : String(row[c.key] ?? '')
                     const isCopied = copiedKey === cellKey
                     return (
                       <td
@@ -91,8 +123,16 @@ export function ResultTable() {
                             <FaCircle size={5} />
                             {meta.label}
                           </span>
+                        ) : c.key === 'priceMismatchCount' ? (
+                          <span
+                            className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 font-sans font-semibold ${price.classes}`}
+                          >
+                            {price.icon === 'ok' && <FaCircleCheck size={11} />}
+                            {price.icon === 'warn' && <FaTriangleExclamation size={11} />}
+                            {price.label}
+                          </span>
                         ) : c.key === 'donGia' ? (
-                          <span className="font-semibold text-accent">{row[c.key]}</span>
+                          <span className="font-semibold text-accent">{formatMoney(row[c.key])}</span>
                         ) : (
                           row[c.key]
                         )}
