@@ -1,7 +1,10 @@
 @import '@fontsource/be-vietnam-pro/400.css';
 @import '@fontsource/be-vietnam-pro/500.css';
+@import '@fontsource/be-vietnam-pro/600.css';
 @import '@fontsource/be-vietnam-pro/700.css';
+@import '@fontsource/be-vietnam-pro/800.css';
 @import '@fontsource/jetbrains-mono/400.css';
+@import '@fontsource/jetbrains-mono/500.css';
 @import '@fontsource/jetbrains-mono/600.css';
 
 @tailwind base;
@@ -17,11 +20,45 @@ body {
   @apply bg-bg text-ink font-sans;
   user-select: none;
   -webkit-user-select: none;
+  background-image:
+    radial-gradient(ellipse 900px 520px at 10% -12%, rgba(40, 197, 242, 0.09), transparent 60%),
+    radial-gradient(ellipse 700px 520px at 105% 25%, rgba(139, 137, 214, 0.14), transparent 60%),
+    repeating-linear-gradient(115deg, transparent 0 38px, rgba(154, 149, 196, 0.02) 38px 39px);
+  background-attachment: fixed;
 }
 
 .selectable {
   user-select: text;
   -webkit-user-select: text;
+}
+
+* {
+  scrollbar-width: thin;
+  scrollbar-color: #2c2853 transparent;
+}
+
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background-color: #2c2853;
+  border-radius: 999px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background-color: #28c5f2;
+}
+
+::-webkit-scrollbar-corner {
+  background: transparent;
 }
 
 img, .no-drag {

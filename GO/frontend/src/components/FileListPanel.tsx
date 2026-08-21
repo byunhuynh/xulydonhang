@@ -1,7 +1,17 @@
 import { useState } from 'react'
-import { FaArrowsRotate, FaFolderOpen } from 'react-icons/fa6'
+import { FaArrowsRotate, FaFolderOpen, FaXmark } from 'react-icons/fa6'
 import { useAppStore } from '../store/appStore'
 import { SelectFiles, ScanOrderFolder } from '../../wailsjs/go/main/App'
+import { SectionHeader } from './SectionHeader'
+
+function fileKind(path: string): string {
+  const ext = path.split('.').pop()?.toUpperCase() ?? ''
+  return ext.length <= 4 ? ext : ext.slice(0, 4)
+}
+
+function fileName(path: string): string {
+  return path.split(/[\\/]/).pop() ?? path
+}
 
 export function FileListPanel() {
   const files = useAppStore((s) => s.files)
@@ -44,6 +54,17 @@ export function FileListPanel() {
     })
   }
 
+  function removeOne(f: string, e: React.MouseEvent) {
+    e.stopPropagation()
+    removeFiles([f])
+    setSelected((prev) => {
+      const next = new Set(prev)
+      next.delete(f)
+      return next
+    })
+    appendLog(`Đã xóa 1 file khỏi danh sách.`)
+  }
+
   function handleKeyDown(e: React.KeyboardEvent) {
     if (e.key === 'Delete' && selected.size > 0) {
       removeFiles([...selected])
@@ -53,15 +74,27 @@ export function FileListPanel() {
   }
 
   return (
-    <section className="flex h-full flex-col rounded-xl border border-border bg-panel p-3">
-      <h2 className="mb-2 text-sm font-semibold text-muted">1. Danh sách file đầu vào</h2>
+    <section className="flex h-full flex-col rounded-xl border border-border bg-panel p-3.5">
+      <SectionHeader
+        index="01"
+        title="Danh sách file đầu vào"
+        action={
+          <button
+            onClick={reload}
+            disabled={isProcessing}
+            className="inline-flex items-center gap-1.5 text-xs font-medium text-muted transition-colors hover:text-accent disabled:opacity-40"
+          >
+            <FaArrowsRotate /> Tải lại
+          </button>
+        }
+      />
       <ul
         tabIndex={0}
         onKeyDown={handleKeyDown}
-        className="selectable flex-1 overflow-auto rounded-lg border border-border bg-bg font-mono text-xs"
+        className="selectable flex-1 overflow-auto rounded-lg border border-border bg-bg p-2"
       >
         {files.length === 0 && (
-          <li className="p-3 text-muted">
+          <li className="flex h-full items-center justify-center rounded-lg border border-dashed border-border p-6 text-center font-mono text-xs text-muted">
             Chưa có file nào. Kéo-thả file vào cửa sổ hoặc bấm "Chọn file...".
           </li>
         )}
@@ -69,26 +102,36 @@ export function FileListPanel() {
           <li
             key={f}
             onClick={(e) => toggleSelect(f, e)}
-            className={`cursor-pointer truncate border-b border-border px-3 py-1.5 ${
-              selected.has(f) ? 'bg-accent/20 text-accent' : 'text-ink'
+            className={`group mb-1.5 flex cursor-pointer items-center gap-2.5 rounded-lg border px-2.5 py-2 last:mb-0 ${
+              selected.has(f)
+                ? 'border-accent/50 bg-accent/10'
+                : 'border-border bg-panel/50 hover:border-border/80 hover:bg-panel'
             }`}
           >
-            {f}
+            <span className="flex h-6 w-9 flex-shrink-0 items-center justify-center rounded bg-accent/15 font-mono text-[9px] font-bold text-accent">
+              {fileKind(f)}
+            </span>
+            <span
+              className={`flex-1 truncate font-mono text-xs ${selected.has(f) ? 'text-accent' : 'text-ink'}`}
+              title={f}
+            >
+              {fileName(f)}
+            </span>
+            <button
+              onClick={(e) => removeOne(f, e)}
+              title="Xóa khỏi danh sách"
+              className="flex-shrink-0 rounded p-1 text-muted opacity-0 transition-all hover:text-danger group-hover:opacity-100"
+            >
+              <FaXmark size={13} />
+            </button>
           </li>
         ))}
       </ul>
-      <div className="mt-2 flex gap-2">
-        <button
-          onClick={reload}
-          disabled={isProcessing}
-          className="inline-flex flex-1 items-center justify-center gap-2 rounded-lg bg-accent/10 px-3 py-2 text-sm font-medium text-accent hover:bg-accent/20 disabled:opacity-40"
-        >
-          <FaArrowsRotate /> Tải lại đơn hàng
-        </button>
+      <div className="mt-2.5">
         <button
           onClick={pickFiles}
           disabled={isProcessing}
-          className="inline-flex flex-1 items-center justify-center gap-2 rounded-lg border border-border px-3 py-2 text-sm font-medium text-ink hover:border-accent disabled:opacity-40"
+          className="inline-flex w-full items-center justify-center gap-2 rounded-lg border border-border px-3 py-2 text-sm font-medium text-ink transition-colors hover:border-accent hover:text-accent disabled:opacity-40"
         >
           <FaFolderOpen /> Chọn file...
         </button>

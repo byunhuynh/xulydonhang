@@ -8,3 +8,8 @@ export interface OrderRow {
   status: string
   statusKind: string
 }
+
+export interface LogEntry {
+  time: string
+  text: string
+}

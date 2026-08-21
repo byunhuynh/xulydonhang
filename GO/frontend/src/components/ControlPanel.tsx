@@ -1,7 +1,8 @@
 import { useEffect } from 'react'
-import { FaPaperPlane, FaCloudArrowUp, FaRocket } from 'react-icons/fa6'
+import { FaPaperPlane, FaCloudArrowUp, FaRocket, FaSpinner } from 'react-icons/fa6'
 import { useAppStore } from '../store/appStore'
-import { GetSTT, SetSTT, ProcessFiles } from '../../wailsjs/go/main/App'
+import { GetSTT, ProcessFiles } from '../../wailsjs/go/main/App'
+import { SectionHeader } from './SectionHeader'
 
 export function ControlPanel() {
   const stt = useAppStore((s) => s.stt)
@@ -12,20 +13,16 @@ export function ControlPanel() {
   const appendLog = useAppStore((s) => s.appendLog)
   const resetRows = useAppStore((s) => s.resetRows)
 
+  // STT (số thứ tự đơn hàng) không còn ô nhập tay trên UI, nhưng vẫn cần
+  // load giá trị hiện tại từ backend khi mở app — ProcessFiles vẫn cần
+  // số bắt đầu đúng, và backend tự tăng/tự lưu lại sau mỗi lần xử lý
+  // (app.go runBatch → cfg.SetSTT) mà không cần UI can thiệp.
   useEffect(() => {
     GetSTT()
       .then(setStt)
       .catch((err) => appendLog(`❌ Lỗi đọc STT: ${String(err)}`))
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
-
-  async function handleSttBlur() {
-    try {
-      await SetSTT(stt)
-    } catch (err) {
-      appendLog(`❌ Lỗi ghi STT: ${String(err)}`)
-    }
-  }
 
   async function handleProcess() {
     if (files.length === 0) {
@@ -44,40 +41,47 @@ export function ControlPanel() {
   }
 
   return (
-    <section className="flex h-full flex-col justify-between rounded-xl border border-border bg-panel p-3">
-      <div>
-        <h2 className="mb-2 text-sm font-semibold text-muted">2. Cấu hình &amp; Thực thi</h2>
-        <label className="text-xs text-muted">Số thứ tự đơn hàng bắt đầu</label>
-        <input
-          type="number"
-          value={stt}
-          disabled={isProcessing}
-          onChange={(e) => setStt(Number(e.target.value))}
-          onBlur={handleSttBlur}
-          className="selectable mt-1 w-full rounded-lg border border-border bg-bg px-3 py-2 text-center font-mono text-lg text-ink focus:border-accent focus:outline-none disabled:opacity-40"
-        />
-      </div>
-      <div className="mt-4 flex flex-col gap-2">
-        <button
-          disabled
+    <section className="flex h-full flex-col overflow-y-auto rounded-xl border border-border bg-panel p-3.5">
+      <SectionHeader index="02" title="Cấu hình & Thực thi" />
+      <div className="flex flex-1 flex-col justify-end gap-2">
+        <div
           title="Sẽ có ở giai đoạn sau"
-          className="inline-flex items-center justify-center gap-2 rounded-lg bg-[#0068ff]/20 px-3 py-2 text-sm font-medium text-[#0068ff] opacity-40"
+          className="flex flex-col gap-1 rounded-lg border border-dashed border-border px-3 py-2 text-sm font-medium text-muted"
         >
-          <FaPaperPlane /> Gửi thông báo Zalo
-        </button>
-        <button
-          disabled
+          <span className="inline-flex items-center gap-2 whitespace-nowrap opacity-60">
+            <FaPaperPlane /> Gửi thông báo Zalo
+          </span>
+          <span className="self-start rounded-full bg-white/5 px-2 py-0.5 font-mono text-[9px] font-bold tracking-wide text-muted">
+            SẮP RA MẮT
+          </span>
+        </div>
+        <div
           title="Sẽ có ở giai đoạn sau"
-          className="inline-flex items-center justify-center gap-2 rounded-lg border border-border px-3 py-2 text-sm font-medium text-muted opacity-40"
+          className="flex flex-col gap-1 rounded-lg border border-dashed border-border px-3 py-2 text-sm font-medium text-muted"
         >
-          <FaCloudArrowUp /> Push MISA
-        </button>
+          <span className="inline-flex items-center gap-2 whitespace-nowrap opacity-60">
+            <FaCloudArrowUp /> Push MISA
+          </span>
+          <span className="self-start rounded-full bg-white/5 px-2 py-0.5 font-mono text-[9px] font-bold tracking-wide text-muted">
+            SẮP RA MẮT
+          </span>
+        </div>
         <button
           onClick={handleProcess}
           disabled={isProcessing}
-          className="inline-flex items-center justify-center gap-2 rounded-lg bg-success px-3 py-3 text-sm font-bold text-bg hover:brightness-110 disabled:opacity-40"
+          className={`mt-1.5 inline-flex items-center justify-center gap-2 rounded-lg bg-gradient-to-br from-accent to-[#1a9dc4] px-3 py-3.5 text-sm font-extrabold tracking-wide text-[#0a1620] transition-transform hover:brightness-110 active:scale-[0.98] disabled:opacity-60 ${
+            !isProcessing ? 'animate-pulse-glow' : ''
+          }`}
         >
-          <FaRocket /> XỬ LÝ ĐƠN HÀNG
+          {isProcessing ? (
+            <>
+              <FaSpinner className="animate-spin" /> ĐANG XỬ LÝ...
+            </>
+          ) : (
+            <>
+              <FaRocket /> XỬ LÝ ĐƠN HÀNG
+            </>
+          )}
         </button>
       </div>
     </section>

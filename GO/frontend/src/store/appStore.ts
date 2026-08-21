@@ -1,11 +1,11 @@
 import { create } from 'zustand'
-import type { OrderRow } from '../types'
+import type { LogEntry, OrderRow } from '../types'
 
 interface AppState {
   files: string[]
   stt: number
   isProcessing: boolean
-  logLines: string[]
+  logLines: LogEntry[]
   rows: OrderRow[]
   setFiles: (files: string[]) => void
   addFiles: (files: string[]) => void
@@ -35,7 +35,13 @@ export const useAppStore = create<AppState>((set) => ({
     })),
   setStt: (stt) => set({ stt }),
   setProcessing: (isProcessing) => set({ isProcessing }),
-  appendLog: (line) => set((state) => ({ logLines: [...state.logLines, line] })),
+  appendLog: (line) =>
+    set((state) => ({
+      logLines: [
+        ...state.logLines,
+        { time: new Date().toLocaleTimeString('vi-VN', { hour12: false }), text: line },
+      ],
+    })),
   clearLog: () => set({ logLines: [] }),
   appendRow: (row) => set((state) => ({ rows: [...state.rows, row] })),
   resetRows: () => set({ rows: [] }),
