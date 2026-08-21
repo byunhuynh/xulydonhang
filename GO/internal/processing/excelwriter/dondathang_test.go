@@ -30,8 +30,12 @@ func TestWriteOrderRows_WritesColumnsAndFormula(t *testing.T) {
 		{SKU: "3564270-4", Qty: 24, UnitPrice: 33726, ProductName: "Chai tay toilet", UseZFormula: true},
 	}
 
-	if err := WriteOrderRows(path, rows, "COOPMART PO102945235-00 (Tổng trọng lượng: 4.32 kg)"); err != nil {
+	startRow, err := WriteOrderRows(path, rows, "COOPMART PO102945235-00 (Tổng trọng lượng: 4.32 kg)")
+	if err != nil {
 		t.Fatalf("WriteOrderRows returned error: %v", err)
+	}
+	if startRow != 9 {
+		t.Fatalf("startRow = %d, want 9 (the test template has 8 existing header rows)", startRow)
 	}
 
 	f, err := excelize.OpenFile(path)
@@ -62,7 +66,7 @@ func TestWriteOrderRows_WritesStoreNameToColumnK(t *testing.T) {
 		{SKU: "8936156731203", Qty: 48, UnitPrice: 26950, ProductName: "Nước giặt Blue", UseZFormula: true},
 	}
 
-	if err := WriteOrderRows(path, rows, ""); err != nil {
+	if _, err := WriteOrderRows(path, rows, ""); err != nil {
 		t.Fatalf("WriteOrderRows returned error: %v", err)
 	}
 
@@ -88,7 +92,7 @@ func TestWriteOrderRows_PriceMismatchGetsRedFillAndComment(t *testing.T) {
 	rows := []Row{
 		{SKU: "3564270-4", Qty: 24, UnitPrice: 33000, InvoicePrice: 33726, PriceMismatch: true, UseZFormula: true},
 	}
-	if err := WriteOrderRows(path, rows, ""); err != nil {
+	if _, err := WriteOrderRows(path, rows, ""); err != nil {
 		t.Fatalf("WriteOrderRows returned error: %v", err)
 	}
 
@@ -112,5 +116,90 @@ func TestWriteOrderRows_PriceMismatchGetsRedFillAndComment(t *testing.T) {
 	}
 	if len(comment) != 1 {
 		t.Fatalf("comments = %d, want 1: %+v", len(comment), comment)
+	}
+}
+
+func TestConfirmPrice_OverwritesValueAndClearsMismatchFlag(t *testing.T) {
+	path := copyTestWorkbook(t)
+	rows := []Row{
+		{SKU: "3564270-4", Qty: 24, UnitPrice: 33000, InvoicePrice: 33726, PriceMismatch: true, UseZFormula: true},
+	}
+	if _, err := WriteOrderRows(path, rows, ""); err != nil {
+		t.Fatalf("WriteOrderRows returned error: %v", err)
+	}
+
+	if err := ConfirmPrice(path, 9, 33726); err != nil {
+		t.Fatalf("ConfirmPrice returned error: %v", err)
+	}
+
+	f, err := excelize.OpenFile(path)
+	if err != nil {
+		t.Fatalf("failed reopening workbook: %v", err)
+	}
+	defer f.Close()
+
+	val, err := f.GetCellValue("Don dat hang", "Y9")
+	if err != nil {
+		t.Fatalf("GetCellValue: %v", err)
+	}
+	if val != "33726" {
+		t.Fatalf("Y9 = %q, want %q", val, "33726")
+	}
+
+	styleID, err := f.GetCellStyle("Don dat hang", "Y9")
+	if err != nil {
+		t.Fatalf("GetCellStyle: %v", err)
+	}
+	if styleID != 0 {
+		t.Fatalf("Y9 style = %d, want 0 (red-fill mismatch style cleared)", styleID)
+	}
+
+	comments, err := f.GetComments("Don dat hang")
+	if err != nil {
+		t.Fatalf("GetComments: %v", err)
+	}
+	for _, c := range comments {
+		if c.Cell == "Y9" {
+			t.Fatalf("comment still present at Y9 after ConfirmPrice: %+v", c)
+		}
+	}
+}
+
+func TestConfirmPrice_RejectsRowWithNoMismatchComment(t *testing.T) {
+	path := copyTestWorkbook(t)
+	rows := []Row{
+		{SKU: "3564270-4", Qty: 24, UnitPrice: 33726, ProductName: "Chai tay toilet", UseZFormula: true},
+	}
+	if _, err := WriteOrderRows(path, rows, ""); err != nil {
+		t.Fatalf("WriteOrderRows returned error: %v", err)
+	}
+
+	err := ConfirmPrice(path, 9, 30000)
+	if err == nil {
+		t.Fatal("ConfirmPrice returned nil error, want a rejection — row 9 was never flagged as a price mismatch")
+	}
+
+	f, err2 := excelize.OpenFile(path)
+	if err2 != nil {
+		t.Fatalf("failed reopening workbook: %v", err2)
+	}
+	defer f.Close()
+	val, _ := f.GetCellValue("Don dat hang", "Y9")
+	if val != "33726" {
+		t.Fatalf("Y9 = %q, want unchanged %q (rejected before any write)", val, "33726")
+	}
+}
+
+func TestConfirmPrice_RejectsRowOutsideSheetBounds(t *testing.T) {
+	path := copyTestWorkbook(t)
+	rows := []Row{
+		{SKU: "3564270-4", Qty: 24, UnitPrice: 33000, InvoicePrice: 33726, PriceMismatch: true, UseZFormula: true},
+	}
+	if _, err := WriteOrderRows(path, rows, ""); err != nil {
+		t.Fatalf("WriteOrderRows returned error: %v", err)
+	}
+
+	if err := ConfirmPrice(path, 99999, 33726); err == nil {
+		t.Fatal("ConfirmPrice returned nil error for a row far outside the real sheet, want a rejection")
 	}
 }

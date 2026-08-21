@@ -64,16 +64,16 @@ type Row struct {
 // of the first row written — mirroring write_to_dondathang's final
 // `sheet[f"L{start_row}"] = ...` step, which only happens once the
 // order's total weight is known.
-func WriteOrderRows(path string, rows []Row, headerDescription string) error {
+func WriteOrderRows(path string, rows []Row, headerDescription string) (startRow int, err error) {
 	f, err := excelize.OpenFile(path)
 	if err != nil {
-		return fmt.Errorf("excelwriter: open %s: %w", path, err)
+		return 0, fmt.Errorf("excelwriter: open %s: %w", path, err)
 	}
 	defer f.Close()
 
 	existingRows, err := f.GetRows(sheetName)
 	if err != nil {
-		return fmt.Errorf("excelwriter: read %s: %w", sheetName, err)
+		return 0, fmt.Errorf("excelwriter: read %s: %w", sheetName, err)
 	}
 	currentRow := len(existingRows) + 1
 	firstRow := currentRow
@@ -82,20 +82,77 @@ func WriteOrderRows(path string, rows []Row, headerDescription string) error {
 		Fill: excelize.Fill{Type: "pattern", Color: []string{"FF0000"}, Pattern: 1},
 	})
 	if err != nil {
-		return fmt.Errorf("excelwriter: create red fill style: %w", err)
+		return 0, fmt.Errorf("excelwriter: create red fill style: %w", err)
 	}
 
 	for _, row := range rows {
 		if err := writeRow(f, currentRow, row, redFill); err != nil {
-			return err
+			return 0, err
 		}
 		currentRow++
 	}
 
 	if headerDescription != "" {
 		if err := f.SetCellValue(sheetName, fmt.Sprintf("L%d", firstRow), headerDescription); err != nil {
-			return fmt.Errorf("excelwriter: set header description: %w", err)
+			return 0, fmt.Errorf("excelwriter: set header description: %w", err)
 		}
+	}
+
+	if err := f.Save(); err != nil {
+		return 0, fmt.Errorf("excelwriter: save %s: %w", path, err)
+	}
+	return firstRow, nil
+}
+
+// ConfirmPrice overwrites the price (column Y) of a row that
+// WriteOrderRows already wrote and flagged as a price mismatch —
+// clearing the red-fill style and the "Kiểm tra lại giá mã này!"
+// comment, since the user has now explicitly reviewed and decided
+// which price to keep (the PO's own invoice price, or the system's
+// computed price — the caller passes whichever one it wants written).
+//
+// Requires Y{row} to currently carry a mismatch comment. excelize does
+// NOT validate row bounds on SetCellValue (confirmed empirically: it
+// silently writes far outside a sheet's real data rather than
+// erroring), and DeleteComment on an uncommented cell is a silent
+// no-op rather than an error — so this function's own explicit
+// "does a comment exist at Y{row}" check is the ONLY thing that
+// rejects a stale or out-of-range row argument. Without it, a bad
+// `row` value would either silently do nothing (DeleteComment) or
+// silently create a nonsense cell far outside the real sheet
+// (SetCellValue) instead of surfacing as an error.
+func ConfirmPrice(path string, row int, price float64) error {
+	f, err := excelize.OpenFile(path)
+	if err != nil {
+		return fmt.Errorf("excelwriter: open %s: %w", path, err)
+	}
+	defer f.Close()
+
+	cell := fmt.Sprintf("Y%d", row)
+
+	comments, err := f.GetComments(sheetName)
+	if err != nil {
+		return fmt.Errorf("excelwriter: read comments: %w", err)
+	}
+	hasMismatchComment := false
+	for _, c := range comments {
+		if c.Cell == cell {
+			hasMismatchComment = true
+			break
+		}
+	}
+	if !hasMismatchComment {
+		return fmt.Errorf("excelwriter: %s không còn ở trạng thái chờ xác nhận giá (không có comment cảnh báo sai giá)", cell)
+	}
+
+	if err := f.SetCellValue(sheetName, cell, price); err != nil {
+		return fmt.Errorf("excelwriter: set %s: %w", cell, err)
+	}
+	if err := f.DeleteComment(sheetName, cell); err != nil {
+		return fmt.Errorf("excelwriter: delete comment at %s: %w", cell, err)
+	}
+	if err := f.SetCellStyle(sheetName, cell, cell, 0); err != nil {
+		return fmt.Errorf("excelwriter: reset style at %s: %w", cell, err)
 	}
 
 	if err := f.Save(); err != nil {
