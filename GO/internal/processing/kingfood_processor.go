@@ -108,6 +108,7 @@ func (p *RealProcessor) processKingfoodSegment(filePath, text, pageLabel string)
 	saigia := 0
 	totalWeight := 0.0
 	totalValue := 0.0
+	var skuLog []string
 
 	for _, rawProduct := range products {
 		barcode := p.Store.ResolveSku(rawProduct.Barcode)
@@ -162,6 +163,7 @@ func (p *RealProcessor) processKingfoodSegment(filePath, text, pageLabel string)
 		if len(promos) == 0 && closeEnough(invoicePrice, realPrice) {
 			matched = true
 		}
+		skuLog = append(skuLog, formatSkuLogLine(barcode, productInfo.Name, matched, invoicePrice, finalPrice, khuyenmai))
 
 		productRow := excelwriter.Row{
 			EntryDate: entryDate, DebtDays: coopDebtDays, OrderNumber: orderNum,
@@ -282,5 +284,6 @@ func (p *RealProcessor) processKingfoodSegment(filePath, text, pageLabel string)
 	return OrderRow{
 		FileName: filepath.Base(filePath), Page: pageLabel, System: "Kingfood", MaKhachHang: kingfoodCustomerCode,
 		PO: poNumber, DonGia: fmt.Sprintf("%.0f", totalValue), Status: statusText, StatusKind: statusKind,
+		SkuLog: skuLog,
 	}, nil
 }

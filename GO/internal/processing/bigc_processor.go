@@ -64,6 +64,7 @@ type storePageResult struct {
 	weightKg float64
 	saigia   int
 	tongtien float64
+	skuLog   []string
 	err      error
 }
 
@@ -134,6 +135,7 @@ func (p *RealProcessor) processBigcDocument(filePath string, pageTexts []string)
 		orderRows = append(orderRows, OrderRow{
 			FileName: filepath.Base(filePath), Page: pageLabel, System: "BigC", MaKhachHang: customerCode,
 			PO: poNumber, DonGia: fmt.Sprintf("%.0f", result.tongtien), Status: statusText, StatusKind: statusKind,
+			SkuLog: result.skuLog,
 		})
 	}
 
@@ -210,6 +212,7 @@ func (p *RealProcessor) processBigcStorePage(storePageText string, priceList []b
 
 	var weightKg, tongtien float64
 	saigia := 0
+	var skuLog []string
 
 	for _, item := range items {
 		barcode := p.Store.ResolveSku(item.Barcode)
@@ -288,6 +291,7 @@ func (p *RealProcessor) processBigcStorePage(storePageText string, priceList []b
 		if len(promos) == 0 && closeEnough(invoicePrice, finalPrice) {
 			matched = true
 		}
+		skuLog = append(skuLog, formatSkuLogLine(barcode, productInfo.Name, matched, invoicePrice, finalPrice, khuyenmai))
 
 		// Promo bonus-row check (xulydonhang.py:4754-4808). BigC has NO
 		// khuyenmai.split('|') loop (confirmed structurally different
@@ -443,7 +447,7 @@ func (p *RealProcessor) processBigcStorePage(storePageText string, priceList []b
 		}
 	}
 
-	return storePageResult{rows: rows, weightKg: weightKg, saigia: saigia, tongtien: tongtien}
+	return storePageResult{rows: rows, weightKg: weightKg, saigia: saigia, tongtien: tongtien, skuLog: skuLog}
 }
 
 // parseNumericField mirrors the repeated "strip commas, coerce to

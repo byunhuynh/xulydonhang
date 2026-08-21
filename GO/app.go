@@ -187,6 +187,9 @@ func (a *App) runBatch(emitter Emitter, files []string, stt int) {
 			continue
 		}
 		for _, row := range rows {
+			for _, line := range row.SkuLog {
+				emitter.Emit("process:log", line)
+			}
 			emitter.Emit("process:row", row)
 			current++
 		}

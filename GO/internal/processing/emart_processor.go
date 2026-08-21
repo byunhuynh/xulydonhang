@@ -123,6 +123,7 @@ func (p *RealProcessor) processEmartSegment(filePath, text, pageLabel string) (O
 	saigia := 0
 	totalWeight := 0.0
 	totalValue := 0.0
+	var skuLog []string
 
 	for _, rawProduct := range products {
 		barcode := p.Store.ResolveSku(rawProduct.Barcode)
@@ -179,6 +180,7 @@ func (p *RealProcessor) processEmartSegment(filePath, text, pageLabel string) (O
 		if len(promos) == 0 && closeEnough(invoicePrice, realPrice) {
 			matched = true
 		}
+		skuLog = append(skuLog, formatSkuLogLine(barcode, productInfo.Name, matched, invoicePrice, finalPrice, lastExaminedPromo))
 
 		productRow := excelwriter.Row{
 			EntryDate: entryDate, DebtDays: coopDebtDays, OrderNumber: orderNum,
@@ -307,5 +309,6 @@ func (p *RealProcessor) processEmartSegment(filePath, text, pageLabel string) (O
 	return OrderRow{
 		FileName: filepath.Base(filePath), Page: pageLabel, System: "Emart", MaKhachHang: emartCustomerCode,
 		PO: poNumber, DonGia: fmt.Sprintf("%.0f", totalValue), Status: statusText, StatusKind: statusKind,
+		SkuLog: skuLog,
 	}, nil
 }

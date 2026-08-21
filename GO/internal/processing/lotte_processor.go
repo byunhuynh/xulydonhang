@@ -99,6 +99,7 @@ func (p *RealProcessor) processLotteSegment(filePath, text, pageLabel string) (O
 	saigia := 0
 	totalWeight := 0.0
 	totalValue := 0.0
+	var skuLog []string
 
 	for _, rawProduct := range products {
 		barcode := p.Store.ResolveSku(rawProduct.Barcode)
@@ -141,6 +142,7 @@ func (p *RealProcessor) processLotteSegment(filePath, text, pageLabel string) (O
 		if len(promos) == 0 && closeEnough(invoicePrice, realPrice) {
 			matched = true
 		}
+		skuLog = append(skuLog, formatSkuLogLine(barcode, productInfo.Name, matched, invoicePrice, finalPrice, lastExaminedPromo))
 
 		productRow := excelwriter.Row{
 			EntryDate: info.EntryDate, DebtDays: coopDebtDays, OrderNumber: lotteOrderNumber(info.PONumber),
@@ -237,5 +239,6 @@ func (p *RealProcessor) processLotteSegment(filePath, text, pageLabel string) (O
 	return OrderRow{
 		FileName: filepath.Base(filePath), Page: pageLabel, System: "Lotte", MaKhachHang: customerCode,
 		PO: info.PONumber, DonGia: fmt.Sprintf("%.0f", totalValue), Status: statusText, StatusKind: statusKind,
+		SkuLog: skuLog,
 	}, nil
 }

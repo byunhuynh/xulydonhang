@@ -2,6 +2,7 @@ package processing
 
 import (
 	"context"
+	"strings"
 	"testing"
 
 	"github.com/xuri/excelize/v2"
@@ -39,6 +40,24 @@ func TestRealProcessor_ProcessesRealSampleJMartFile(t *testing.T) {
 	}
 	if rows[0].PO != "DH01010844" {
 		t.Fatalf("PO = %q, want %q", rows[0].PO, "DH01010844")
+	}
+	// SkuLog: one diagnostic line per real product (3), populated end-to-
+	// end through the real extraction -> price-match -> formatSkuLogLine
+	// pipeline, not just the isolated formatter unit tests. This
+	// pricingSource has no real price data (FindPrice returns "" for
+	// every barcode), so every real product's invoice price legitimately
+	// fails to match a 0 system price — confirming the mismatch-message
+	// branch fires on real extracted data, with the real barcode present.
+	if len(rows[0].SkuLog) != 3 {
+		t.Fatalf("len(SkuLog) = %d, want 3 (one per real product); got %v", len(rows[0].SkuLog), rows[0].SkuLog)
+	}
+	for i, line := range rows[0].SkuLog {
+		if !strings.Contains(line, "SAI GIÁ") {
+			t.Errorf("SkuLog[%d] = %q, want it to contain %q (no real price data in this test's pricingSource)", i, line, "SAI GIÁ")
+		}
+	}
+	if !strings.Contains(rows[0].SkuLog[0], "8936156730886") {
+		t.Errorf("SkuLog[0] = %q, want it to contain the real first product's barcode %q", rows[0].SkuLog[0], "8936156730886")
 	}
 
 	f, err := excelize.OpenFile(excelPath)

@@ -41,6 +41,55 @@ func closeEnough(a, b float64) bool {
 	return math.Abs(a-b) <= relTol*math.Max(math.Abs(a), math.Abs(b))
 }
 
+// skuLogPromoMaxLen caps how much of a promo's raw text (which can be a
+// full multi-line sheet cell) appears in one log line, so a long promo
+// description doesn't dominate the log panel.
+const skuLogPromoMaxLen = 60
+
+// formatSkuLogLine builds one human-readable diagnostic line for a
+// single product — price-match status and any promotion detected —
+// surfaced in real time via the "process:log" channel (see app.go's
+// runBatch, which emits OrderRow.SkuLog before that row's own
+// "process:row"). Pure formatting of values every vendor's per-product
+// loop already computes for its own Excel write (matched, khuyenmai,
+// invoicePrice, the system's own expected price); this function adds no
+// new computation, so it carries zero risk to any vendor's existing
+// price/promo logic.
+func formatSkuLogLine(sku, productName string, matched bool, invoicePrice, systemPrice float64, promoText string) string {
+	label := sku
+	if productName != "" {
+		label = sku + " " + productName
+	}
+	promo := truncatePromoText(promoText)
+
+	if matched {
+		if promo == "" {
+			return fmt.Sprintf("%s — đúng giá", label)
+		}
+		return fmt.Sprintf("%s — đúng giá, KM: %s", label, promo)
+	}
+	if promo == "" {
+		return fmt.Sprintf("%s — ⚠️ SAI GIÁ (hóa đơn %.0f, hệ thống %.0f)", label, invoicePrice, systemPrice)
+	}
+	return fmt.Sprintf("%s — ⚠️ SAI GIÁ (hóa đơn %.0f, hệ thống %.0f, đã thử KM: %s)", label, invoicePrice, systemPrice, promo)
+}
+
+// truncatePromoText collapses a (possibly multi-line, CR-normalized)
+// promo cell into one short, log-line-friendly snippet.
+func truncatePromoText(promo string) string {
+	if promo == "" {
+		return ""
+	}
+	oneLine := strings.Join(strings.Fields(promo), " ")
+	// Truncate by rune, not byte, so a cut point never lands mid-way
+	// through a multi-byte UTF-8 Vietnamese character.
+	runes := []rune(oneLine)
+	if len(runes) > skuLogPromoMaxLen {
+		return string(runes[:skuLogPromoMaxLen]) + "..."
+	}
+	return oneLine
+}
+
 // stripBlankLines drops every line that is empty or all-whitespace,
 // rejoining the rest with "\n". Originally written for Lotte (see
 // processLotteSegment's comment for why this is needed: it reconstructs

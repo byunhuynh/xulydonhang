@@ -147,6 +147,7 @@ func (p *RealProcessor) processSatraSegment(filePath, text, pageLabel string) (O
 	saigia := 0
 	totalWeight := 0.0
 	totalValue := 0.0
+	var skuLog []string
 
 	for _, rawProduct := range products {
 		barcode := p.Store.ResolveSku(rawProduct.Barcode)
@@ -206,6 +207,7 @@ func (p *RealProcessor) processSatraSegment(filePath, text, pageLabel string) (O
 		if matched {
 			unitPrice = invoicePrice
 		}
+		skuLog = append(skuLog, formatSkuLogLine(barcode, productInfo.Name, matched, invoicePrice, finalPrice, lastExaminedPromo))
 
 		productRow := excelwriter.Row{
 			EntryDate: entryDate, DebtDays: coopDebtDays, OrderNumber: satraOrderNumber(poNumber),
@@ -276,5 +278,6 @@ func (p *RealProcessor) processSatraSegment(filePath, text, pageLabel string) (O
 	return OrderRow{
 		FileName: filepath.Base(filePath), Page: pageLabel, System: "Satra", MaKhachHang: customerCode,
 		PO: poNumber, DonGia: fmt.Sprintf("%.0f", totalValue), Status: statusText, StatusKind: statusKind,
+		SkuLog: skuLog,
 	}, nil
 }
