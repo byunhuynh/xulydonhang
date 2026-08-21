@@ -90,6 +90,16 @@ var deliveryAddressPattern = regexp.MustCompile(`(?s)Địa chỉ giao hàng\s*:
 // false positive (a "Bis"/"Ter"-style suffix getting corrupted), THAT
 // is the evidence needed to design a real fix — not something to
 // pre-empt without it.
+//
+// KNOWN FALSE-NEGATIVE GAP (symmetric to the false-positive risk above):
+// requiring a LOWERCASE letter after the capital (\p{Lu}\p{Ll}) means an
+// all-caps continuation word — e.g. a hypothetical wrap producing
+// "346BẾN VÂN ĐỒN" — would NOT be repaired, silently diverging from
+// Python's real inserted "\n". Not hypothetical for this template: this
+// same PDF's supplier-address block is fully uppercase
+// ("666/46 ĐƯỜNG 3/2.P.14.QUẬN 10,TP.HCM"), so an all-caps delivery
+// address is a real shape this vendor's PDFs can produce, just not one
+// this pattern currently covers.
 var addressLineWrapGapPattern = regexp.MustCompile(`(\d)(\p{Lu}\p{Ll})`)
 
 // ParseOrderInfo mirrors the JMart branch of process_file
@@ -99,9 +109,17 @@ var addressLineWrapGapPattern = regexp.MustCompile(`(\d)(\p{Lu}\p{Ll})`)
 // attribute 'group'. This port returns ok=false cleanly instead, per
 // this codebase's established policy. delivery_address has a SOFTER
 // guard in Python (`if m else None`, defaulting to None rather than
-// crashing) — but this port still gates ok on it resolving too, since a
-// missing delivery address would otherwise silently write an empty
-// ShipTo value with no signal anything went wrong.
+// crashing) at the regex site itself — but real Python does NOT ship a
+// literal None into Excel: write_to_dondathang_kingfood (the shared
+// function both Kingfood and JMart call) applies
+// `delivery = delivery or "KHO SEEDLOG"` (xulydonhang.py:3865) before
+// writing ShipTo, so a missing marker in real Python means the order
+// still processes normally with ShipTo="KHO SEEDLOG". This port
+// deliberately diverges from that: it gates ok on the address resolving
+// too, failing the whole page instead of silently substituting a
+// possibly-wrong warehouse address with no signal anything went wrong.
+// This divergence has never been exercised — the one real sample has a
+// valid address — so it is undocumented in any golden fixture.
 //
 // cancelDate is always exactly entryDate (xulydonhang.py:8148,
 // `cancel_date = entry_date` — a direct assignment, no reformatting, no
@@ -132,7 +150,7 @@ func ParseOrderInfo(text string) (poNumber, entryDate, cancelDate, deliveryAddre
 	return poNumber, entryDate, cancelDate, deliveryAddress, true
 }
 
-// tableStartPattern mirrors JMart's call to the shared
+// tableStartMarker mirrors JMart's call to the shared
 // cat_giua_theo_dong helper (xulydonhang.py:8155,
 // dau_line="Mã vật tư"): a line STARTING WITH "Mã vật tư" (not
 // necessarily an exact match — cat_giua_theo_dong uses .startswith,
@@ -142,7 +160,7 @@ func ParseOrderInfo(text string) (poNumber, entryDate, cancelDate, deliveryAddre
 const tableStartMarker = "Mã vật tư"
 const tableEndMarker = "Tổng:"
 
-// productLinePattern mirrors laydanhsachsanpham_kingfood-style barcode
+// barcodePattern mirrors laydanhsachsanpham_kingfood-style barcode
 // anchoring: a line that is EXACTLY 13 digits is a product's barcode
 // (xulydonhang.py:6952, `re.fullmatch(r'\d{13}', line)`).
 var barcodePattern = regexp.MustCompile(`^\d{13}$`)

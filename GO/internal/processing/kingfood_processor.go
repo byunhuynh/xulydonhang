@@ -233,6 +233,10 @@ func (p *RealProcessor) processKingfoodSegment(filePath, text, pageLabel string)
 	// from the correct KINGFOOD sheet instead, per this project's policy
 	// of not preserving old Python bugs. Currently latent: no real
 	// "Hóa Đơn" promo rows exist in either sheet's captured data.
+	//
+	// jmart_processor.go's processJMartSegment has a near-duplicate of
+	// this whole block (same real Python function, same divergence) —
+	// keep any future fix to one in sync with the other.
 	if invoicePromo := priceIndex.FindInvoicePromotion(entryDate); invoicePromo != "" {
 		invoicePromo = strings.ReplaceAll(invoicePromo, "\r", "\n")
 		invoiceSkus := p.Store.FindSkusMentioned(invoicePromo)

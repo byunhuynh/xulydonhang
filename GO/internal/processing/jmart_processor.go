@@ -48,6 +48,21 @@ func (p *RealProcessor) processJMartSegment(filePath, text, pageLabel string) (O
 	if len(products) == 0 {
 		return OrderRow{}, fmt.Errorf("không trích xuất được sản phẩm nào")
 	}
+	// An empty OUQty or TotalPrice means the backward-scan anchor (see
+	// qcAnchorValue/pricePattern in jmart/extract.go) never found its
+	// target for this product. parseNumericField("") silently returns 0
+	// with no error, which would otherwise write a normal-looking
+	// "Hoàn thành" row with a wrong (zero) quantity or price — the one
+	// failure mode this single-sample vendor's algorithm cannot rule
+	// out, given it's confirmed correct for exactly one real PDF. Fail
+	// the page loudly instead, mirroring Python's own real behavior here
+	// (xulydonhang.py:3924's `float(None)` raises TypeError on a missing
+	// value rather than silently proceeding with a wrong number).
+	for _, rawProduct := range products {
+		if rawProduct.OUQty == "" || rawProduct.TotalPrice == "" {
+			return OrderRow{}, fmt.Errorf("không trích xuất được số lượng/đơn giá cho barcode %s", rawProduct.Barcode)
+		}
+	}
 
 	priceIndex, err := p.Pricing.FetchIndex("JMART")
 	if err != nil {
@@ -164,6 +179,20 @@ func (p *RealProcessor) processJMartSegment(filePath, text, pageLabel string) (O
 	// Invoice-level ("Hóa Đơn") promo bonus row. Does NOT reuse the
 	// shared buildInvoiceBonusRow — Q gets only the first matched SKU
 	// (kiemtra[0]), not a joined list, matching Kingfood's exact shape.
+	//
+	// KNOWN PYTHON DIVERGENCE (documented, not fixed) — same one already
+	// noted in processKingfoodSegment (kingfood_processor.go), since
+	// both go through the literal same Python line: real Python's
+	// xulydonhang.py:4131 calls find_all_promotions_by_sku_and_time("Hóa
+	// Đơn", entry_date) WITHOUT a vendor argument, defaulting to the
+	// COOP sheet rather than JMART's own. priceIndex here was fetched
+	// via p.Pricing.FetchIndex("JMART"), so this port deliberately reads
+	// the correct JMART sheet instead. Currently latent: no real "Hóa
+	// Đơn" promo rows exist in the one available real sample.
+	//
+	// This block and processKingfoodSegment's equivalent block are
+	// near-duplicates (JMart and Kingfood share one real Python
+	// function) — keep any future fix to one in sync with the other.
 	if invoicePromo := priceIndex.FindInvoicePromotion(entryDate); invoicePromo != "" {
 		invoicePromo = strings.ReplaceAll(invoicePromo, "\r", "\n")
 		invoiceSkus := p.Store.FindSkusMentioned(invoicePromo)

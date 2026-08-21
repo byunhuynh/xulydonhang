@@ -228,14 +228,17 @@ JMart:
 - `vendor` (uppercase trong order number `ĐĐH{VENDOR}-{po}`) = `"JMART"`.
 - `makhachhang` = hằng số cứng `"MN_MT_JM0001"`.
 - `delivery` = trích từ PDF thật (khác Kingfood's hằng số cứng) — dùng
-  `deliveryAddress` trích được, KHÔNG có giá trị mặc định fallback nào
-  trong Python (`delivery_address = m.group(1).strip() if m else None` —
-  nếu `None`, Python ghi `None` trực tiếp vào ô Excel qua
-  `f"{current_row}"] = delivery` — hành vi kỳ lạ nhưng đây là Python
-  thật; Go port: nếu marker địa chỉ không khớp, coi là `ok=false` luôn
-  (nhất quán với chính sách "không port hành vi lỗi ngầm", và vì đằng
-  nào `po_number`/`entry_date` cũng phải khớp trước đó theo cùng khối
-  regex không try/except).
+  `deliveryAddress` trích được. **ĐÍNH CHÍNH sau khi review whole-branch
+  cuối cùng:** dòng regex có guard mềm `m.group(1).strip() if m else
+  None`, NHƯNG Python thật KHÔNG ghi `None` trực tiếp vào Excel —
+  `write_to_dondathang_kingfood` (hàm dùng chung giữa Kingfood và JMart)
+  áp dụng `delivery = delivery or "KHO SEEDLOG"` (`xulydonhang.py:3865`)
+  trước khi ghi ShipTo, nên khi marker không khớp, Python thật vẫn xử lý
+  đơn hàng bình thường với ShipTo="KHO SEEDLOG". Go port cố ý lệch khỏi
+  hành vi này: coi marker địa chỉ không khớp là `ok=false` (fail cả
+  trang) thay vì tái tạo fallback "KHO SEEDLOG", vì ghi ngầm một địa chỉ
+  kho có thể sai không có tín hiệu báo lỗi nào. Lệch này chưa từng được
+  golden fixture kiểm chứng — mẫu thật duy nhất có địa chỉ hợp lệ.
 - `Total Price` (Đơn giá) = giá ĐƠN VỊ trực tiếp (không nhân/chia gì) —
   giống hệt Kingfood's cách dùng `giahoadon = dongia =
   float(product["Total Price"])` không chia cho số lượng.
@@ -310,9 +313,12 @@ GO/internal/processing/jmart/testdata/
   định qua nhiều đơn hàng — nếu có thêm PDF JMart thật trong tương lai,
   cần chạy lại Task 0 smoke test và đối chiếu golden fixture trước khi
   tin tưởng thiết kế này hoàn toàn đúng cho mọi trường hợp.
-- **`delivery_address = None` khi không khớp marker** — Python's hành vi
-  thật ghi `None` vào Excel nếu marker không tìm thấy; Go port chọn
-  `ok=false` sạch thay vì tái tạo hành vi này, cần ghi vào
-  `knownDivergences_JMart` nếu golden fixture cho thấy khác biệt cụ thể.
+- **`delivery_address = None` khi không khớp marker** — ĐÍNH CHÍNH: Python
+  thật KHÔNG ghi `None` vào Excel; `write_to_dondathang_kingfood` có
+  fallback `delivery = delivery or "KHO SEEDLOG"` (`xulydonhang.py:3865`)
+  nên đơn hàng vẫn xử lý bình thường với ShipTo="KHO SEEDLOG". Go port
+  cố ý lệch: chọn `ok=false` (fail cả trang) thay vì tái tạo fallback
+  "KHO SEEDLOG" này — cần ghi vào `knownDivergences_JMart` nếu tương lai
+  có PDF thật khác kích hoạt được đường này.
 - **Quyết định commit PDF thật vào git** cần hỏi lại chủ dự án riêng cho
   JMart, không tự động áp dụng quyết định đã có cho các vendor trước.
