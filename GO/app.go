@@ -13,6 +13,7 @@ import (
 	"order-processor/internal/config"
 	"order-processor/internal/fileset"
 	"order-processor/internal/processing"
+	"order-processor/internal/processing/excelwriter"
 	"order-processor/internal/processing/pricing"
 	"order-processor/internal/processing/productdata"
 )
@@ -41,6 +42,7 @@ type App struct {
 	processor  processing.Processor
 	emitter    Emitter
 	orderDir   string
+	excelPath  string
 	processing atomic.Bool
 }
 
@@ -94,14 +96,17 @@ func NewApp() (*App, error) {
 		return nil, fmt.Errorf("app: load data.xlsx: %w", err)
 	}
 
+	excelPath := resolveRepoFile("dondathang_test.xlsx")
+
 	return &App{
 		cfg: config.NewStore(configFileName),
 		processor: &processing.RealProcessor{
 			Store:     store,
 			Pricing:   pricing.NewHTTPSource(resolveRepoFile("settings.ini")),
-			ExcelPath: resolveRepoFile("dondathang_test.xlsx"),
+			ExcelPath: excelPath,
 		},
-		orderDir: orderFolderName,
+		orderDir:  orderFolderName,
+		excelPath: excelPath,
 	}, nil
 }
 
@@ -127,6 +132,14 @@ func (a *App) GetSTT() (int, error) {
 // SetSTT ghi lại số thứ tự đơn hàng bắt đầu.
 func (a *App) SetSTT(v int) error {
 	return a.cfg.SetSTT(v)
+}
+
+// ConfirmPrice ghi đè giá (cột Y) của một dòng sản phẩm đã bị đánh dấu
+// sai giá, theo lựa chọn của người dùng — giữ giá trên PO hoặc dùng giá
+// hệ thống. Yêu cầu dòng đó ĐANG ở trạng thái chờ xác nhận (còn comment
+// cảnh báo); nếu không sẽ trả lỗi thay vì âm thầm ghi đè.
+func (a *App) ConfirmPrice(row int, price float64) error {
+	return excelwriter.ConfirmPrice(a.excelPath, row, price)
 }
 
 // ScanOrderFolder quét thư mục "đơn hàng/MM-YYYY" hiện tại (tự tạo nếu

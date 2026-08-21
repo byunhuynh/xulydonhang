@@ -8,8 +8,11 @@ import (
 	"reflect"
 	"testing"
 
+	"github.com/xuri/excelize/v2"
+
 	"order-processor/internal/config"
 	"order-processor/internal/processing"
+	"order-processor/internal/processing/excelwriter"
 )
 
 type fakeEmitter struct {
@@ -191,5 +194,39 @@ func TestResolveRepoFile_FallsBackToBareNameBeyondSearchDepth(t *testing.T) {
 	got := resolveRepoFile(markerName)
 	if got != markerName {
 		t.Fatalf("resolveRepoFile(%q) = %q, want bare filename %q (not found within search depth)", markerName, got, markerName)
+	}
+}
+
+func TestApp_ConfirmPrice_DelegatesToExcelwriter(t *testing.T) {
+	src := "internal/processing/excelwriter/testdata/dondathang.xlsx"
+	data, err := os.ReadFile(src)
+	if err != nil {
+		t.Fatalf("failed reading test fixture: %v", err)
+	}
+	path := filepath.Join(t.TempDir(), "dondathang.xlsx")
+	if err := os.WriteFile(path, data, 0o644); err != nil {
+		t.Fatalf("failed writing temp workbook: %v", err)
+	}
+
+	rows := []excelwriter.Row{
+		{SKU: "3564270-4", Qty: 24, UnitPrice: 33000, InvoicePrice: 33726, PriceMismatch: true, UseZFormula: true},
+	}
+	if _, err := excelwriter.WriteOrderRows(path, rows, ""); err != nil {
+		t.Fatalf("WriteOrderRows returned error: %v", err)
+	}
+
+	a := &App{excelPath: path}
+	if err := a.ConfirmPrice(9, 33726); err != nil {
+		t.Fatalf("App.ConfirmPrice returned error: %v", err)
+	}
+
+	f, err := excelize.OpenFile(path)
+	if err != nil {
+		t.Fatalf("failed reopening workbook: %v", err)
+	}
+	defer f.Close()
+	val, _ := f.GetCellValue("Don dat hang", "Y9")
+	if val != "33726" {
+		t.Fatalf("Y9 = %q, want %q", val, "33726")
 	}
 }
