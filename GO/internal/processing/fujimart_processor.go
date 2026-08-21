@@ -81,6 +81,7 @@ func (p *RealProcessor) processFujimartSegment(filePath, text, pageLabel string)
 	totalWeight := 0.0
 	totalValue := 0.0
 	var skuLog []string
+	var mismatchDetails []PriceMismatchDetail
 
 	for _, rawProduct := range products {
 		barcode := p.Store.ResolveSku(rawProduct.Barcode)
@@ -105,6 +106,7 @@ func (p *RealProcessor) processFujimartSegment(filePath, text, pageLabel string)
 
 		promos := priceIndex.FindPromotions(barcode, entryDate)
 		khuyenmai := ""
+		khuyenmaiColumn := ""
 		matched := false
 		finalPrice := realPrice
 
@@ -128,6 +130,7 @@ func (p *RealProcessor) processFujimartSegment(filePath, text, pageLabel string)
 				continue
 			}
 			khuyenmai = value
+			khuyenmaiColumn = promo.Column
 			candidatePrice := realPrice
 			if discount := coop.ExtractDiscount(value); discount != 0 {
 				candidatePrice = realPrice - (realPrice * discount / 100)
@@ -141,7 +144,7 @@ func (p *RealProcessor) processFujimartSegment(filePath, text, pageLabel string)
 		if len(promos) == 0 && closeEnough(invoicePrice, realPrice) {
 			matched = true
 		}
-		skuLog = append(skuLog, formatSkuLogLine(barcode, productInfo.Name, matched, invoicePrice, finalPrice, khuyenmai))
+		skuLog = append(skuLog, formatSkuLogLine(barcode, productInfo.Name, matched, invoicePrice, finalPrice, khuyenmai, khuyenmaiColumn))
 
 		productRow := excelwriter.Row{
 			EntryDate: entryDate, DebtDays: coopDebtDays, OrderNumber: orderNum,
@@ -151,13 +154,17 @@ func (p *RealProcessor) processFujimartSegment(filePath, text, pageLabel string)
 			ProductName: productInfo.Name, CaseCount: caseCount, LineWeightKg: lineWeight, UseZFormula: true,
 			PromoContent: khuyenmai,
 		}
+		productRowIndex := len(rows)
 		if !matched {
 			productRow.PriceMismatch = true
 			productRow.InvoicePrice = invoicePrice
 			saigia++
+			mismatchDetails = append(mismatchDetails, PriceMismatchDetail{
+				SKU: barcode, ProductName: productInfo.Name,
+				InvoicePrice: invoicePrice, SystemPrice: finalPrice,
+				ExcelRow: productRowIndex,
+			})
 		}
-
-		productRowIndex := len(rows)
 		rows = append(rows, productRow)
 		totalValue += finalPrice * ouQty
 
@@ -239,8 +246,12 @@ func (p *RealProcessor) processFujimartSegment(filePath, text, pageLabel string)
 	}
 
 	headerDescription := fmt.Sprintf("%s (Tổng trọng lượng: %s)", description, coop.FormatWeightKg(totalWeight))
-	if err := excelwriter.WriteOrderRows(p.ExcelPath, rows, headerDescription); err != nil {
+	startRow, err := excelwriter.WriteOrderRows(p.ExcelPath, rows, headerDescription)
+	if err != nil {
 		return OrderRow{}, err
+	}
+	for i := range mismatchDetails {
+		mismatchDetails[i].ExcelRow += startRow
 	}
 
 	statusKind := StatusKindDone
@@ -253,6 +264,6 @@ func (p *RealProcessor) processFujimartSegment(filePath, text, pageLabel string)
 	return OrderRow{
 		FileName: filepath.Base(filePath), Page: pageLabel, System: "FujiMart", MaKhachHang: fujimartCustomerCode,
 		PO: poNumber, DonGia: fmt.Sprintf("%.0f", totalValue), Status: statusText, StatusKind: statusKind,
-		SkuLog: skuLog,
+		SkuLog: skuLog, PriceMismatchCount: saigia, PriceMismatchDetails: mismatchDetails,
 	}, nil
 }

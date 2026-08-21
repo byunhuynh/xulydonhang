@@ -124,6 +124,7 @@ func (p *RealProcessor) processEmartSegment(filePath, text, pageLabel string) (O
 	totalWeight := 0.0
 	totalValue := 0.0
 	var skuLog []string
+	var mismatchDetails []PriceMismatchDetail
 
 	for _, rawProduct := range products {
 		barcode := p.Store.ResolveSku(rawProduct.Barcode)
@@ -147,6 +148,7 @@ func (p *RealProcessor) processEmartSegment(filePath, text, pageLabel string) (O
 
 		promos := priceIndex.FindPromotions(barcode, entryDate)
 		lastExaminedPromo := ""
+		lastExaminedPromoColumn := ""
 		matched := false
 		finalPrice := realPrice
 
@@ -167,6 +169,7 @@ func (p *RealProcessor) processEmartSegment(filePath, text, pageLabel string) (O
 				continue
 			}
 			lastExaminedPromo = value
+			lastExaminedPromoColumn = promo.Column
 			candidatePrice := realPrice
 			if discount := coop.ExtractDiscount(value); discount != 0 {
 				candidatePrice = realPrice - (realPrice * discount / 100)
@@ -180,7 +183,7 @@ func (p *RealProcessor) processEmartSegment(filePath, text, pageLabel string) (O
 		if len(promos) == 0 && closeEnough(invoicePrice, realPrice) {
 			matched = true
 		}
-		skuLog = append(skuLog, formatSkuLogLine(barcode, productInfo.Name, matched, invoicePrice, finalPrice, lastExaminedPromo))
+		skuLog = append(skuLog, formatSkuLogLine(barcode, productInfo.Name, matched, invoicePrice, finalPrice, lastExaminedPromo, lastExaminedPromoColumn))
 
 		productRow := excelwriter.Row{
 			EntryDate: entryDate, DebtDays: coopDebtDays, OrderNumber: orderNum,
@@ -190,13 +193,17 @@ func (p *RealProcessor) processEmartSegment(filePath, text, pageLabel string) (O
 			ProductName: productInfo.Name, CaseCount: caseCount, LineWeightKg: lineWeight, UseZFormula: true,
 			PromoContent: lastExaminedPromo, NoCaseCount: true,
 		}
+		productRowIndex := len(rows)
 		if !matched {
 			productRow.PriceMismatch = true
 			productRow.InvoicePrice = invoicePrice
 			saigia++
+			mismatchDetails = append(mismatchDetails, PriceMismatchDetail{
+				SKU: barcode, ProductName: productInfo.Name,
+				InvoicePrice: invoicePrice, SystemPrice: finalPrice,
+				ExcelRow: productRowIndex,
+			})
 		}
-
-		productRowIndex := len(rows)
 		rows = append(rows, productRow)
 		totalValue += finalPrice * qty
 
@@ -292,8 +299,12 @@ func (p *RealProcessor) processEmartSegment(filePath, text, pageLabel string) (O
 	}
 
 	headerDescription := fmt.Sprintf("%s (Tổng trọng lượng: %s)", description, coop.FormatWeightKg(totalWeight))
-	if err := excelwriter.WriteOrderRows(p.ExcelPath, rows, headerDescription); err != nil {
+	startRow, err := excelwriter.WriteOrderRows(p.ExcelPath, rows, headerDescription)
+	if err != nil {
 		return OrderRow{}, err
+	}
+	for i := range mismatchDetails {
+		mismatchDetails[i].ExcelRow += startRow
 	}
 
 	statusKind := StatusKindDone
@@ -309,6 +320,6 @@ func (p *RealProcessor) processEmartSegment(filePath, text, pageLabel string) (O
 	return OrderRow{
 		FileName: filepath.Base(filePath), Page: pageLabel, System: "Emart", MaKhachHang: emartCustomerCode,
 		PO: poNumber, DonGia: fmt.Sprintf("%.0f", totalValue), Status: statusText, StatusKind: statusKind,
-		SkuLog: skuLog,
+		SkuLog: skuLog, PriceMismatchCount: saigia, PriceMismatchDetails: mismatchDetails,
 	}, nil
 }

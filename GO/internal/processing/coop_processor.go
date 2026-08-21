@@ -270,6 +270,7 @@ func (p *RealProcessor) processSegment(filePath, text, pageLabel string) (OrderR
 	totalWeight := 0.0
 	totalValue := 0.0
 	var skuLog []string
+	var mismatchDetails []PriceMismatchDetail
 
 	for _, product := range products {
 		productInfo, _ := p.Store.GetProductInfo(product.Barcode)
@@ -286,6 +287,7 @@ func (p *RealProcessor) processSegment(filePath, text, pageLabel string) (OrderR
 
 		promos := priceIndex.FindPromotions(product.Barcode, entryDate)
 		lastExaminedPromo := ""
+		lastExaminedPromoColumn := ""
 		matched := false
 		finalPrice := realPrice
 
@@ -305,6 +307,7 @@ func (p *RealProcessor) processSegment(filePath, text, pageLabel string) (OrderR
 		for _, promo := range promos {
 			value := coop.SplitPromoText(promo.Value, system)
 			lastExaminedPromo = value
+			lastExaminedPromoColumn = promo.Column
 			if value == "" {
 				continue
 			}
@@ -329,7 +332,7 @@ func (p *RealProcessor) processSegment(filePath, text, pageLabel string) (OrderR
 		if len(promos) == 0 && closeEnough(invoicePrice, realPrice) {
 			matched = true
 		}
-		skuLog = append(skuLog, formatSkuLogLine(product.Barcode, productInfo.Name, matched, invoicePrice, finalPrice, lastExaminedPromo))
+		skuLog = append(skuLog, formatSkuLogLine(product.Barcode, productInfo.Name, matched, invoicePrice, finalPrice, lastExaminedPromo, lastExaminedPromoColumn))
 
 		productRow := excelwriter.Row{
 			EntryDate: entryDate, DebtDays: coopDebtDays, OrderNumber: orderNumber(info.PONumber),
@@ -349,13 +352,17 @@ func (p *RealProcessor) processSegment(filePath, text, pageLabel string) (OrderR
 			// Y_has_comment=false).
 			PromoContent: lastExaminedPromo,
 		}
+		productRowIndex := len(rows)
 		if !matched {
 			productRow.PriceMismatch = true
 			productRow.InvoicePrice = invoicePrice
 			saigia++
+			mismatchDetails = append(mismatchDetails, PriceMismatchDetail{
+				SKU: product.Barcode, ProductName: productInfo.Name,
+				InvoicePrice: invoicePrice, SystemPrice: finalPrice,
+				ExcelRow: productRowIndex,
+			})
 		}
-
-		productRowIndex := len(rows)
 		rows = append(rows, productRow)
 		totalValue += finalPrice * product.Qty
 
@@ -403,8 +410,12 @@ func (p *RealProcessor) processSegment(filePath, text, pageLabel string) (OrderR
 	}
 
 	headerDescription := fmt.Sprintf("%s (Tổng trọng lượng: %s)", description, coop.FormatWeightKg(totalWeight))
-	if err := excelwriter.WriteOrderRows(p.ExcelPath, rows, headerDescription); err != nil {
+	startRow, err := excelwriter.WriteOrderRows(p.ExcelPath, rows, headerDescription)
+	if err != nil {
 		return OrderRow{}, err
+	}
+	for i := range mismatchDetails {
+		mismatchDetails[i].ExcelRow += startRow
 	}
 
 	statusKind := StatusKindDone
@@ -417,7 +428,7 @@ func (p *RealProcessor) processSegment(filePath, text, pageLabel string) (OrderR
 	return OrderRow{
 		FileName: filepath.Base(filePath), Page: pageLabel, System: system, MaKhachHang: customerCode,
 		PO: info.PONumber, DonGia: fmt.Sprintf("%.0f", totalValue), Status: statusText, StatusKind: statusKind,
-		SkuLog: skuLog,
+		SkuLog: skuLog, PriceMismatchCount: saigia, PriceMismatchDetails: mismatchDetails,
 	}, nil
 }
 

@@ -148,6 +148,7 @@ func (p *RealProcessor) processSatraSegment(filePath, text, pageLabel string) (O
 	totalWeight := 0.0
 	totalValue := 0.0
 	var skuLog []string
+	var mismatchDetails []PriceMismatchDetail
 
 	for _, rawProduct := range products {
 		barcode := p.Store.ResolveSku(rawProduct.Barcode)
@@ -166,12 +167,14 @@ func (p *RealProcessor) processSatraSegment(filePath, text, pageLabel string) (O
 
 		promos := priceIndex.FindPromotions(barcode, entryDate)
 		lastExaminedPromo := ""
+		lastExaminedPromoColumn := ""
 		matched := false
 		finalPrice := realPrice
 
 		for _, promo := range promos {
 			value := promo.Value
 			lastExaminedPromo = value
+			lastExaminedPromoColumn = promo.Column
 			if value == "" {
 				continue
 			}
@@ -207,7 +210,7 @@ func (p *RealProcessor) processSatraSegment(filePath, text, pageLabel string) (O
 		if matched {
 			unitPrice = invoicePrice
 		}
-		skuLog = append(skuLog, formatSkuLogLine(barcode, productInfo.Name, matched, invoicePrice, finalPrice, lastExaminedPromo))
+		skuLog = append(skuLog, formatSkuLogLine(barcode, productInfo.Name, matched, invoicePrice, finalPrice, lastExaminedPromo, lastExaminedPromoColumn))
 
 		productRow := excelwriter.Row{
 			EntryDate: entryDate, DebtDays: coopDebtDays, OrderNumber: satraOrderNumber(poNumber),
@@ -217,13 +220,17 @@ func (p *RealProcessor) processSatraSegment(filePath, text, pageLabel string) (O
 			ProductName: productInfo.Name, CaseCount: caseCount, LineWeightKg: lineWeight, UseZFormula: true,
 			PromoContent: lastExaminedPromo,
 		}
+		productRowIndex := len(rows)
 		if !matched {
 			productRow.PriceMismatch = true
 			productRow.InvoicePrice = invoicePrice
 			saigia++
+			mismatchDetails = append(mismatchDetails, PriceMismatchDetail{
+				SKU: barcode, ProductName: productInfo.Name,
+				InvoicePrice: invoicePrice, SystemPrice: finalPrice,
+				ExcelRow: productRowIndex,
+			})
 		}
-
-		productRowIndex := len(rows)
 		rows = append(rows, productRow)
 		totalValue += finalPrice * qty
 
@@ -264,8 +271,12 @@ func (p *RealProcessor) processSatraSegment(filePath, text, pageLabel string) (O
 	}
 
 	headerDescription := fmt.Sprintf("%s (Tổng trọng lượng: %s)", noteText, coop.FormatWeightKg(totalWeight))
-	if err := excelwriter.WriteOrderRows(p.ExcelPath, rows, headerDescription); err != nil {
+	startRow, err := excelwriter.WriteOrderRows(p.ExcelPath, rows, headerDescription)
+	if err != nil {
 		return OrderRow{}, err
+	}
+	for i := range mismatchDetails {
+		mismatchDetails[i].ExcelRow += startRow
 	}
 
 	statusKind := StatusKindDone
@@ -278,6 +289,6 @@ func (p *RealProcessor) processSatraSegment(filePath, text, pageLabel string) (O
 	return OrderRow{
 		FileName: filepath.Base(filePath), Page: pageLabel, System: "Satra", MaKhachHang: customerCode,
 		PO: poNumber, DonGia: fmt.Sprintf("%.0f", totalValue), Status: statusText, StatusKind: statusKind,
-		SkuLog: skuLog,
+		SkuLog: skuLog, PriceMismatchCount: saigia, PriceMismatchDetails: mismatchDetails,
 	}, nil
 }

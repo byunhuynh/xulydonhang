@@ -60,12 +60,13 @@ func bigcOrderNumber(poNumber string) string {
 // Constraints section commits to (a store page's failure never aborts
 // other store pages, unlike Python's real, unguarded behavior).
 type storePageResult struct {
-	rows     []excelwriter.Row
-	weightKg float64
-	saigia   int
-	tongtien float64
-	skuLog   []string
-	err      error
+	rows            []excelwriter.Row
+	weightKg        float64
+	saigia          int
+	tongtien        float64
+	skuLog          []string
+	mismatchDetails []PriceMismatchDetail
+	err             error
 }
 
 // processBigcDocument mirrors process_file's BigC branch
@@ -123,6 +124,18 @@ func (p *RealProcessor) processBigcDocument(filePath string, pageTexts []string)
 		if !headerWritten {
 			headerWritten = true
 		}
+
+		// Adjust each detail's ExcelRow from "index within THIS store's
+		// own local rows" to "index within the combined allRows slice"
+		// by adding how many rows every earlier successful store already
+		// contributed — snapshotted as len(allRows) BEFORE this store's
+		// own rows are appended below. The final absolute Excel row
+		// (adding startRow, common to every store in this one combined
+		// write) is applied once, after WriteOrderRows returns, below.
+		for i := range result.mismatchDetails {
+			result.mismatchDetails[i].ExcelRow += len(allRows)
+		}
+
 		allRows = append(allRows, result.rows...)
 		totalWeight += result.weightKg
 
@@ -135,14 +148,20 @@ func (p *RealProcessor) processBigcDocument(filePath string, pageTexts []string)
 		orderRows = append(orderRows, OrderRow{
 			FileName: filepath.Base(filePath), Page: pageLabel, System: "BigC", MaKhachHang: customerCode,
 			PO: poNumber, DonGia: fmt.Sprintf("%.0f", result.tongtien), Status: statusText, StatusKind: statusKind,
-			SkuLog: result.skuLog,
+			SkuLog: result.skuLog, PriceMismatchCount: result.saigia, PriceMismatchDetails: result.mismatchDetails,
 		})
 	}
 
 	if len(allRows) > 0 {
 		headerDescription := fmt.Sprintf("%s (Tổng trọng lượng: %s)", description, coop.FormatWeightKg(totalWeight))
-		if err := excelwriter.WriteOrderRows(p.ExcelPath, allRows, headerDescription); err != nil {
+		startRow, err := excelwriter.WriteOrderRows(p.ExcelPath, allRows, headerDescription)
+		if err != nil {
 			return nil, err
+		}
+		for i := range orderRows {
+			for j := range orderRows[i].PriceMismatchDetails {
+				orderRows[i].PriceMismatchDetails[j].ExcelRow += startRow
+			}
 		}
 	}
 
@@ -213,6 +232,7 @@ func (p *RealProcessor) processBigcStorePage(storePageText string, priceList []b
 	var weightKg, tongtien float64
 	saigia := 0
 	var skuLog []string
+	var mismatchDetails []PriceMismatchDetail
 
 	for _, item := range items {
 		barcode := p.Store.ResolveSku(item.Barcode)
@@ -245,12 +265,14 @@ func (p *RealProcessor) processBigcStorePage(storePageText string, priceList []b
 
 		promos := priceIndex.FindPromotions(barcode, entryDate)
 		khuyenmai := ""
+		khuyenmaiColumn := ""
 		matched := false
 
 		for _, promo := range promos {
 			if promo.Value == "" {
 				continue
 			}
+			khuyenmaiColumn = promo.Column
 			// Normalize literal CR to LF here, matching Python's actual
 			// EFFECTIVE output for this column rather than its raw fetch.
 			// Root cause (confirmed by hand-tracing the xlsx XML): openpyxl
@@ -291,7 +313,7 @@ func (p *RealProcessor) processBigcStorePage(storePageText string, priceList []b
 		if len(promos) == 0 && closeEnough(invoicePrice, finalPrice) {
 			matched = true
 		}
-		skuLog = append(skuLog, formatSkuLogLine(barcode, productInfo.Name, matched, invoicePrice, finalPrice, khuyenmai))
+		skuLog = append(skuLog, formatSkuLogLine(barcode, productInfo.Name, matched, invoicePrice, finalPrice, khuyenmai, khuyenmaiColumn))
 
 		// Promo bonus-row check (xulydonhang.py:4754-4808). BigC has NO
 		// khuyenmai.split('|') loop (confirmed structurally different
@@ -363,10 +385,16 @@ func (p *RealProcessor) processBigcStorePage(storePageText string, priceList []b
 			ProductName: productInfo.Name, LineWeightKg: lineWeight, UseZFormula: true, PromoContent: khuyenmai,
 			PromoNote: promoNote, PromoBundleSku: promoBundleSku, NoCaseCount: true,
 		}
+		productRowIndex := len(rows)
 		if !matched {
 			productRow.PriceMismatch = true
 			productRow.InvoicePrice = invoicePrice
 			saigia++
+			mismatchDetails = append(mismatchDetails, PriceMismatchDetail{
+				SKU: barcode, ProductName: productInfo.Name,
+				InvoicePrice: invoicePrice, SystemPrice: finalPrice,
+				ExcelRow: productRowIndex,
+			})
 		}
 		rows = append(rows, productRow)
 		tongtien += finalPrice * qtyOrdPcs // xulydonhang.py:4749 — uses qtyOrdPcs BEFORE any promo-bonus division below
@@ -447,7 +475,7 @@ func (p *RealProcessor) processBigcStorePage(storePageText string, priceList []b
 		}
 	}
 
-	return storePageResult{rows: rows, weightKg: weightKg, saigia: saigia, tongtien: tongtien, skuLog: skuLog}
+	return storePageResult{rows: rows, weightKg: weightKg, saigia: saigia, tongtien: tongtien, skuLog: skuLog, mismatchDetails: mismatchDetails}
 }
 
 // parseNumericField mirrors the repeated "strip commas, coerce to

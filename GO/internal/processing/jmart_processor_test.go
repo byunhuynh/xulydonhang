@@ -2,6 +2,7 @@ package processing
 
 import (
 	"context"
+	"fmt"
 	"strings"
 	"testing"
 
@@ -58,6 +59,63 @@ func TestRealProcessor_ProcessesRealSampleJMartFile(t *testing.T) {
 	}
 	if !strings.Contains(rows[0].SkuLog[0], "8936156730886") {
 		t.Errorf("SkuLog[0] = %q, want it to contain the real first product's barcode %q", rows[0].SkuLog[0], "8936156730886")
+	}
+	// PriceMismatchCount: same "saigia" count already reflected in
+	// Status's text, now also exposed as its own typed field. All 3 real
+	// products mismatch here (same reasoning as the SkuLog check above),
+	// so StatusKind must be "warning" (not "done") and the count must be
+	// exactly 3.
+	if rows[0].StatusKind != StatusKindWarning {
+		t.Errorf("StatusKind = %q, want %q (all 3 real products mismatch with this test's empty pricing data)", rows[0].StatusKind, StatusKindWarning)
+	}
+	if rows[0].PriceMismatchCount != 3 {
+		t.Errorf("PriceMismatchCount = %d, want 3", rows[0].PriceMismatchCount)
+	}
+
+	// PriceMismatchDetails: same 3 real mismatches, now as structured
+	// per-SKU detail — verify not just the computed values but that
+	// ExcelRow genuinely points at the real cell excelwriter flagged
+	// (comment + non-default style), by reopening the written workbook
+	// directly rather than trusting the arithmetic alone.
+	if len(rows[0].PriceMismatchDetails) != 3 {
+		t.Fatalf("len(PriceMismatchDetails) = %d, want 3", len(rows[0].PriceMismatchDetails))
+	}
+	firstDetail := rows[0].PriceMismatchDetails[0]
+	if firstDetail.SKU != "8936156730886" {
+		t.Errorf("PriceMismatchDetails[0].SKU = %q, want %q", firstDetail.SKU, "8936156730886")
+	}
+	if firstDetail.SystemPrice != 0 {
+		t.Errorf("PriceMismatchDetails[0].SystemPrice = %v, want 0 (this test's pricingSource has no real price data)", firstDetail.SystemPrice)
+	}
+	if firstDetail.InvoicePrice <= 0 {
+		t.Errorf("PriceMismatchDetails[0].InvoicePrice = %v, want a real positive extracted price", firstDetail.InvoicePrice)
+	}
+
+	fVerify, err := excelize.OpenFile(excelPath)
+	if err != nil {
+		t.Fatalf("failed reopening workbook for ExcelRow verification: %v", err)
+	}
+	defer fVerify.Close()
+	verifyCell := fmt.Sprintf("Y%d", firstDetail.ExcelRow)
+	styleID, err := fVerify.GetCellStyle("Don dat hang", verifyCell)
+	if err != nil {
+		t.Fatalf("GetCellStyle(%s): %v", verifyCell, err)
+	}
+	if styleID == 0 {
+		t.Errorf("ExcelRow=%d (cell %s) has default style, want the red-fill mismatch style — ExcelRow doesn't point at the real flagged cell", firstDetail.ExcelRow, verifyCell)
+	}
+	comments, err := fVerify.GetComments("Don dat hang")
+	if err != nil {
+		t.Fatalf("GetComments: %v", err)
+	}
+	foundComment := false
+	for _, c := range comments {
+		if c.Cell == verifyCell {
+			foundComment = true
+		}
+	}
+	if !foundComment {
+		t.Errorf("no mismatch comment found at %s — ExcelRow=%d doesn't point at the real flagged cell", verifyCell, firstDetail.ExcelRow)
 	}
 
 	f, err := excelize.OpenFile(excelPath)
