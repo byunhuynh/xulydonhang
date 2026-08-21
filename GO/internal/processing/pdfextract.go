@@ -66,6 +66,56 @@ func extractPageTexts(path string) ([]string, []int, error) {
 // reconstructLinesFromContent for the fallback.
 const minPlausibleLines = 5
 
+// lineCountDivergenceTolerance bounds how far GetPlainText's own newline
+// count may drift from trueVisualLineCount's independent, position-based
+// line estimate before GetPlainText's text is distrusted outright (see
+// the nl >= minPlausibleLines branch in extractPageText). Real,
+// correctly-extracted pages measured a diff of -1 in 87/98 sampled
+// passing Coop fixtures (a small, consistent, harmless undercount — one
+// fewer newline than visual row, most likely a missing trailing blank
+// line); the smallest genuinely-broken divergence measured, across both
+// of this generator's failure shapes, was +30 (missing line breaks
+// entirely — GetPlainText glues two real lines together with no
+// separator) and -145 (spurious mid-token line breaks — GetPlainText
+// splits a single number like "103226908-00" across 4 separate lines).
+// 15 sits with real margin on both sides of that gap.
+const lineCountDivergenceTolerance = 15
+
+// trueVisualLineCount estimates the real number of visual text rows on
+// a page directly from each text run's own Y position — the same
+// Y-bucketing reconstructLinesFromContent uses to rebuild line
+// structure, but here only the row COUNT is needed, not the rebuilt
+// text itself. Independent of GetPlainText's own (for some generators,
+// unreliable — see lineCountDivergenceTolerance) newline count, so
+// comparing the two catches cases GetPlainText's newline count alone
+// can't: both too FEW newlines (real lines glued together) and too MANY
+// (a real line's content spuriously split across several "lines").
+func trueVisualLineCount(page pdf.Page) int {
+	content := page.Content()
+	if len(content.Text) == 0 {
+		return 0
+	}
+	rows := make(map[int64]bool, 64)
+	for _, t := range content.Text {
+		rows[int64(t.Y)] = true
+	}
+	return len(rows)
+}
+
+// isCoopGeneratedPage reports whether text was produced by Coop's own
+// "JDA Software Version 7.7.0 (PDN_DC)" report generator — the same
+// signature already used to identify this generator family elsewhere in
+// this file's doc comments. Strips ALL whitespace (not just runs of it)
+// before matching so a spurious mid-token newline landing inside the
+// signature string itself still can't hide it — the same resilience the
+// line-count-divergence check needs from its own gate (see the call
+// site's doc comment for why vendor.Identify alone isn't robust enough
+// here).
+func isCoopGeneratedPage(text string) bool {
+	stripped := strings.Join(strings.Fields(text), "")
+	return strings.Contains(stripped, "JDASoftwareVersion")
+}
+
 // extractPageText mirrors process_coop_invoice's page.get_text("text")
 // call, with a fallback for the small subset of archived PDFs where
 // this Go PDF library's naive BT/T*-based line detection produces a
@@ -77,6 +127,23 @@ const minPlausibleLines = 5
 // mis-parse (SKU-anchor blocks merge together) even though nothing in
 // the ported business logic itself is wrong.
 func extractPageText(page pdf.Page) (string, error) {
+	text, err := extractPageTextRaw(page)
+	if err != nil {
+		return "", err
+	}
+	// A real subset of archived Coop PDFs (confirmed: PO numbers around
+	// 103256391/103340115) render their field labels' spacing using
+	// U+00A0 (NBSP) instead of a normal U+0020 space — invisible to the
+	// eye, but Go's RE2 \s is ASCII-only and does not match it, so any
+	// downstream regex expecting ordinary whitespace between a label and
+	// its value silently fails to match on these specific pages. NBSP
+	// carries no meaningful distinction from a normal space for this
+	// project's plain-text field extraction, so normalizing it here is
+	// safe for every vendor, not just Coop.
+	return strings.ReplaceAll(text, "\u00a0", " "), nil
+}
+
+func extractPageTextRaw(page pdf.Page) (string, error) {
 	text, err := page.GetPlainText(nil)
 	if err != nil {
 		return "", err
@@ -106,8 +173,51 @@ func extractPageText(page pdf.Page) (string, error) {
 			return corrected, nil
 		}
 	}
-	if strings.Count(text, "\n") >= minPlausibleLines {
-		return text, nil
+	nl := strings.Count(text, "\n")
+	if nl >= minPlausibleLines {
+		// The line-count-divergence check below is scoped to pages from
+		// Coop's own "JDA Software" report generator only. Tried applying
+		// it to every vendor's pages; a real archived JMart PDF
+		// (testdata/sample_jmart_order.pdf) has real diff=-54 (86 raw
+		// newlines, 32 true visual rows — this generator wraps a single
+		// field's value across several GetPlainText lines, not a bug),
+		// and reconstructLinesFromContent's Y/X-based reading order does
+		// NOT reproduce this specific generator's true reading order
+		// (same known failure class already documented below for
+		// 103231203-00) — switching to reconstruction for it turned a
+		// working extraction into zero products found. Scoping to this
+		// generator keeps every other vendor's extraction byte-for-byte
+		// unchanged from before this check existed.
+		//
+		// Deliberately NOT gated via vendor.Identify(text): this exact
+		// generator's own spurious-newline bug (see the "\n" skip inside
+		// reconstructLinesFromContent) can land mid-token in the Vendor-ID
+		// digits vendor.Identify's own coopPattern requires contiguous
+		// (confirmed: 103226984-00's raw text fails vendor.Identify
+		// entirely because of this, even though it's a genuine Coop page)
+		// — the exact unreliability this whole check exists to route
+		// around would then make the check whether to APPLY the check
+		// unreliable too. isCoopGeneratedPage strips ALL whitespace
+		// (spaces and any newline, spurious or real) before matching, so
+		// a spurious mid-token break can't hide the signature either.
+		if !isCoopGeneratedPage(text) {
+			return text, nil
+		}
+		trueLines := trueVisualLineCount(page)
+		diff := trueLines - nl
+		if diff < 0 {
+			diff = -diff
+		}
+		if trueLines == 0 || diff <= lineCountDivergenceTolerance {
+			return text, nil
+		}
+		// nl clears the old bare line-count floor but still doesn't look
+		// plausible against the position-based estimate — same "GetPlainText's
+		// newline count can't be trusted for this page" situation
+		// minPlausibleLines exists to catch, just the opposite shape (too
+		// many/too few relative to trueLines rather than too few in
+		// absolute terms). Fall through to the same reconstruction attempt
+		// and safety net used below.
 	}
 	reconstructed, ok := reconstructLinesFromContent(page)
 	if !ok {
@@ -194,6 +304,20 @@ func reconstructLinesFromContent(page pdf.Page) (string, bool) {
 		sort.SliceStable(items, func(i, j int) bool { return items[i].X < items[j].X })
 		lastX, lastW := -1.0, 0.0
 		for _, it := range items {
+			// Some real archived PDFs from this same generator family embed
+			// a literal U+000A (newline) as its own zero-width glyph run —
+			// confirmed present mid-token, e.g. between the "1" and "0" of
+			// a P/O number's digit run in 103226908-00 — apparently an
+			// artifact of whatever internal text-substitution process
+			// generated the report, not a real drawn character. Trusting
+			// it (as both GetPlainText and an earlier version of this
+			// function did) splits a single token across output lines; it
+			// carries no visual position of its own worth preserving, so
+			// skip it entirely rather than writing it into the row or
+			// letting it perturb the next glyph's gap calculation.
+			if it.S == "\n" {
+				continue
+			}
 			if lastX >= 0 && it.X-(lastX+lastW) > gapThreshold {
 				b.WriteString(" ")
 			}
