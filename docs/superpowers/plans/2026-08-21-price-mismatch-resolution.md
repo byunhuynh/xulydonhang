@@ -38,7 +38,7 @@
 - Consumes: nothing new (uses `excelize.File` methods directly: `OpenFile`, `GetComments`, `DeleteComment`, `SetCellStyle`, `SetCellValue`, `Save`).
 - Produces: `func ConfirmPrice(path string, row int, price float64) error` — used by Task 2's `App.ConfirmPrice`.
 
-This task does NOT touch `WriteOrderRows`'s signature — it is purely additive, so the whole repo keeps compiling and every existing test keeps passing throughout this task.
+This task DOES change `WriteOrderRows`'s signature (Step 3 below) — it is additive in the sense that it adds a new function and a new return value, not in the sense of leaving every existing call site untouched. This task's OWN 3 call sites (all in `dondathang_test.go`, fixed in Step 4) keep the `excelwriter` package itself compiling and its own tests passing throughout this task — but the 9 vendor `*_processor.go` files elsewhere in the repo still call the OLD single-return form until Task 3, so `go build ./...` for the WHOLE repo stays red until Task 3 lands (see Step 7 below and this plan's Global Constraints).
 
 - [ ] **Step 1: Write the failing tests**
 
