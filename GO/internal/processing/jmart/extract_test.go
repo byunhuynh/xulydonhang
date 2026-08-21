@@ -84,3 +84,97 @@ func TestParseOrderInfo_MissingDeliveryAddressMarkerFailsCleanly(t *testing.T) {
 		t.Fatal("ParseOrderInfo returned ok=true for text with no delivery-address markers, want false")
 	}
 }
+
+func TestExtractProducts_ParsesRealSampleThreeProducts(t *testing.T) {
+	// Exact shape of this repo's OWN extractPageTexts output for the
+	// product-table region of the real (and only available) sample
+	// JMart PDF, confirmed during planning by running the actual Go PDF
+	// pipeline. Cross-checked against real Python's own captured output
+	// for the SAME file (ran xulydonhang.py's real cat_giua_theo_dong +
+	// tachsanpham_JMart directly): Python produced exactly
+	// [{Barcode:8936156730886 OUQty:8 TotalPrice:133806.000}
+	//  {Barcode:8936156732668 OUQty:12 TotalPrice:26836.000}
+	//  {Barcode:8936156732675 OUQty:12 TotalPrice:26836.260}]
+	// — the expected values below match this real captured ground
+	// truth exactly, re-derived against Go's own (differently-shaped,
+	// unsplit) text using the corrected "1.000" anchor (see
+	// ExtractProducts's own doc comment for the full explanation of why
+	// Python's literal "1.00" anchor cannot be ported as-is).
+	text := "Ghi chú:\n" +
+		"Thành tiền(Chưa vat)\n" +
+		"Chiết khấu\n" +
+		"Đơn giá\n" +
+		"Số lượng\n" +
+		"QC\n" +
+		"ĐVT\n" +
+		"Tồn kho\n" +
+		"Tên đầy đủ\n" +
+		"Barcode\n" +
+		"Mã vật tư\n" +
+		"STT\n" +
+		"1,070,448\n" +
+		"0\n" +
+		"133,806.000\n" +
+		"8.000\n" +
+		"1.000\n" +
+		"Gói\n" +
+		"0.000\n" +
+		"NƯỚC GIẶT XẢ BLUE ĐẬMĐẶC H. NƯỚC HOA 3.6 L\n" +
+		"8936156730886\n" +
+		"03021269\n" +
+		"1\n" +
+		"322,032\n" +
+		"0\n" +
+		"26,836.000\n" +
+		"12.000\n" +
+		"1.000\n" +
+		"Chai\n" +
+		"3.000\n" +
+		"NƯỚC LAU BẾP BLUECHANH 560ML\n" +
+		"8936156732668\n" +
+		"03021252\n" +
+		"2\n" +
+		"322,035\n" +
+		"0\n" +
+		"26,836.260\n" +
+		"12.000\n" +
+		"1.000\n" +
+		"Chai\n" +
+		"2.000\n" +
+		"NƯỚC LAU BẾP BLUEBẠCH TRÀ Ô LIU  560ML\n" +
+		"8936156732675\n" +
+		"03021257\n" +
+		"3\n" +
+		"1,714,515\n" +
+		"Tổng:\n" +
+		"1,714,515\n"
+
+	products := ExtractProducts(text)
+	if len(products) != 3 {
+		t.Fatalf("len(products) = %d, want 3", len(products))
+	}
+	want := []Product{
+		{Barcode: "8936156730886", OUQty: "8", TotalPrice: "133806.000"},
+		{Barcode: "8936156732668", OUQty: "12", TotalPrice: "26836.000"},
+		{Barcode: "8936156732675", OUQty: "12", TotalPrice: "26836.260"},
+	}
+	for i, w := range want {
+		if products[i] != w {
+			t.Errorf("products[%d] = %+v, want %+v", i, products[i], w)
+		}
+	}
+}
+
+func TestExtractProducts_NoStartMarkerReturnsEmpty(t *testing.T) {
+	products := ExtractProducts("no start marker anywhere\nTổng:\n")
+	if products != nil {
+		t.Errorf("ExtractProducts = %v, want nil", products)
+	}
+}
+
+func TestExtractProducts_NoEndMarkerReturnsEmpty(t *testing.T) {
+	products := ExtractProducts("Mã vật tư\nSTT\n8936156730886\nno end marker here\n")
+	if products != nil {
+		t.Errorf("ExtractProducts = %v, want nil", products)
+	}
+}
