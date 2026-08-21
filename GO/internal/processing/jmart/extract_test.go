@@ -146,6 +146,11 @@ func TestExtractProducts_ParsesRealSampleThreeProducts(t *testing.T) {
 		"03021257\n" +
 		"3\n" +
 		"1,714,515\n" +
+		"\n" +
+		"\n" +
+		"\n" +
+		"\n" +
+		"5.000\n" +
 		"Tổng:\n" +
 		"1,714,515\n"
 
