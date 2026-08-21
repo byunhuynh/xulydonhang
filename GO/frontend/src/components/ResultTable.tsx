@@ -1,10 +1,18 @@
-import { useState } from 'react'
-import { FaCircle, FaCheck, FaCircleCheck, FaTriangleExclamation } from 'react-icons/fa6'
+import { Fragment, useState } from 'react'
+import {
+  FaCircle,
+  FaCheck,
+  FaCircleCheck,
+  FaTriangleExclamation,
+  FaChevronDown,
+  FaChevronRight,
+} from 'react-icons/fa6'
 import { useAppStore } from '../store/appStore'
-import type { OrderRow } from '../types'
+import type { OrderRow, PriceMismatchDetail } from '../types'
 import { SectionHeader } from './SectionHeader'
+import { ConfirmPrice } from '../../wailsjs/go/main/App'
 
-const columns: { key: keyof OrderRow; label: string }[] = [
+const columns: { key: Exclude<keyof OrderRow, 'priceMismatchDetails'>; label: string }[] = [
   { key: 'fileName', label: 'Tên file' },
   { key: 'page', label: 'Trang' },
   { key: 'system', label: 'Hệ thống' },
@@ -57,11 +65,25 @@ function formatMoney(value: string): string {
 export function ResultTable() {
   const rows = useAppStore((s) => s.rows)
   const [copiedKey, setCopiedKey] = useState<string | null>(null)
+  const [expandedRow, setExpandedRow] = useState<number | null>(null)
+  const [resolvedChoice, setResolvedChoice] = useState<Record<string, 'po' | 'system'>>({})
+  const appendLog = useAppStore((s) => s.appendLog)
 
   function handleCopy(key: string, value: string) {
     navigator.clipboard.writeText(value).catch(() => {})
     setCopiedKey(key)
     setTimeout(() => setCopiedKey((cur) => (cur === key ? null : cur)), 1000)
+  }
+
+  async function handleApplyPrice(rowIndex: number, detail: PriceMismatchDetail, useInvoicePrice: boolean) {
+    const price = useInvoicePrice ? detail.invoicePrice : detail.systemPrice
+    const key = `${rowIndex}-${detail.excelRow}`
+    try {
+      await ConfirmPrice(detail.excelRow, price)
+      setResolvedChoice((prev) => ({ ...prev, [key]: useInvoicePrice ? 'po' : 'system' }))
+    } catch (err) {
+      appendLog(`❌ Lỗi áp dụng giá cho ${detail.sku}: ${String(err)}`)
+    }
   }
 
   return (
@@ -93,53 +115,123 @@ export function ResultTable() {
               const meta = statusMeta(row)
               const price = priceMeta(row)
               return (
-                <tr key={i} className="transition-colors hover:bg-white/[0.03]">
-                  {columns.map((c) => {
-                    const cellKey = `${i}-${c.key}`
-                    const copyValue =
-                      c.key === 'status'
-                        ? meta.label
-                        : c.key === 'priceMismatchCount'
-                          ? price.label
-                          : String(row[c.key] ?? '')
-                    const isCopied = copiedKey === cellKey
-                    return (
-                      <td
-                        key={c.key}
-                        onClick={() => handleCopy(cellKey, copyValue)}
-                        title="Nhấp để copy"
-                        className={`relative cursor-pointer border-b border-border px-3 py-2 text-ink transition-colors ${
-                          isCopied ? 'bg-accent/20' : 'hover:bg-accent/[0.08]'
-                        }`}
-                      >
-                        {isCopied ? (
-                          <span className="inline-flex items-center gap-1.5 font-sans font-semibold text-accent">
-                            <FaCheck size={10} /> Đã copy
-                          </span>
-                        ) : c.key === 'status' ? (
-                          <span
-                            className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 font-sans font-semibold ${meta.classes}`}
-                          >
-                            <FaCircle size={5} />
-                            {meta.label}
-                          </span>
-                        ) : c.key === 'priceMismatchCount' ? (
-                          <span
-                            className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 font-sans font-semibold ${price.classes}`}
-                          >
-                            {price.icon === 'ok' && <FaCircleCheck size={11} />}
-                            {price.icon === 'warn' && <FaTriangleExclamation size={11} />}
-                            {price.label}
-                          </span>
-                        ) : c.key === 'donGia' ? (
-                          <span className="font-semibold text-accent">{formatMoney(row[c.key])}</span>
-                        ) : (
-                          row[c.key]
-                        )}
+                <Fragment key={i}>
+                  <tr className="transition-colors hover:bg-white/[0.03]">
+                    {columns.map((c) => {
+                      const cellKey = `${i}-${c.key}`
+                      const copyValue =
+                        c.key === 'status'
+                          ? meta.label
+                          : c.key === 'priceMismatchCount'
+                            ? price.label
+                            : String(row[c.key] ?? '')
+                      const isCopied = copiedKey === cellKey
+                      return (
+                        <td
+                          key={c.key}
+                          onClick={() => handleCopy(cellKey, copyValue)}
+                          title="Nhấp để copy"
+                          className={`relative cursor-pointer border-b border-border px-3 py-2 text-ink transition-colors ${
+                            isCopied ? 'bg-accent/20' : 'hover:bg-accent/[0.08]'
+                          }`}
+                        >
+                          {isCopied ? (
+                            <span className="inline-flex items-center gap-1.5 font-sans font-semibold text-accent">
+                              <FaCheck size={10} /> Đã copy
+                            </span>
+                          ) : c.key === 'status' ? (
+                            <span
+                              className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 font-sans font-semibold ${meta.classes}`}
+                            >
+                              <FaCircle size={5} />
+                              {meta.label}
+                            </span>
+                          ) : c.key === 'priceMismatchCount' ? (
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                if (row.priceMismatchCount > 0) {
+                                  setExpandedRow((cur) => (cur === i ? null : i))
+                                }
+                              }}
+                              className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 font-sans font-semibold ${price.classes} ${
+                                row.priceMismatchCount > 0 ? 'cursor-pointer' : 'cursor-default'
+                              }`}
+                            >
+                              {price.icon === 'ok' && <FaCircleCheck size={11} />}
+                              {price.icon === 'warn' && <FaTriangleExclamation size={11} />}
+                              {price.label}
+                              {row.priceMismatchCount > 0 &&
+                                (expandedRow === i ? <FaChevronDown size={9} /> : <FaChevronRight size={9} />)}
+                            </button>
+                          ) : c.key === 'donGia' ? (
+                            <span className="font-semibold text-accent">{formatMoney(row[c.key])}</span>
+                          ) : (
+                            row[c.key]
+                          )}
+                        </td>
+                      )
+                    })}
+                  </tr>
+                  {expandedRow === i && row.priceMismatchDetails.length > 0 && (
+                    <tr key={`${i}-detail`} className="bg-bg/60">
+                      <td colSpan={columns.length} className="p-0">
+                        <table className="w-full border-collapse font-mono text-[11px]">
+                          <thead>
+                            <tr className="border-b border-border">
+                              <th className="px-3 py-1.5 text-left font-sans font-semibold text-muted">Mã</th>
+                              <th className="px-3 py-1.5 text-left font-sans font-semibold text-muted">Tên SP</th>
+                              <th className="px-3 py-1.5 text-left font-sans font-semibold text-muted">Giá PO</th>
+                              <th className="px-3 py-1.5 text-left font-sans font-semibold text-muted">Giá hệ thống</th>
+                              <th className="px-3 py-1.5 text-left font-sans font-semibold text-muted">Áp dụng</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {row.priceMismatchDetails.map((detail) => {
+                              const key = `${i}-${detail.excelRow}`
+                              const choice = resolvedChoice[key]
+                              return (
+                                <tr key={key} className="border-b border-border last:border-0">
+                                  <td className="px-3 py-1.5 text-ink">{detail.sku}</td>
+                                  <td className="px-3 py-1.5 text-ink">{detail.productName}</td>
+                                  <td className="px-3 py-1.5 text-accent">{detail.invoicePrice.toLocaleString('vi-VN')}</td>
+                                  <td className="px-3 py-1.5 text-accent">{detail.systemPrice.toLocaleString('vi-VN')}</td>
+                                  <td className="px-3 py-1.5">
+                                    <div className="flex gap-1.5">
+                                      <button
+                                        type="button"
+                                        onClick={() => handleApplyPrice(i, detail, true)}
+                                        className={`rounded px-2 py-1 font-sans text-[10px] font-semibold transition-colors ${
+                                          choice === 'po'
+                                            ? 'bg-accent text-[#0a1620]'
+                                            : 'border border-border text-muted hover:border-accent hover:text-accent'
+                                        }`}
+                                      >
+                                        Dùng giá PO
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onClick={() => handleApplyPrice(i, detail, false)}
+                                        className={`rounded px-2 py-1 font-sans text-[10px] font-semibold transition-colors ${
+                                          choice === 'system'
+                                            ? 'bg-accent text-[#0a1620]'
+                                            : 'border border-border text-muted hover:border-accent hover:text-accent'
+                                        }`}
+                                      >
+                                        Dùng giá hệ thống
+                                      </button>
+                                    </div>
+                                  </td>
+                                </tr>
+                              )
+                            })}
+                          </tbody>
+                        </table>
                       </td>
-                    )
-                  })}
-                </tr>
+                    </tr>
+                  )}
+                </Fragment>
               )
             })}
           </tbody>

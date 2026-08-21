@@ -1,3 +1,11 @@
+export interface PriceMismatchDetail {
+  sku: string
+  productName: string
+  invoicePrice: number
+  systemPrice: number
+  excelRow: number
+}
+
 export interface OrderRow {
   fileName: string
   page: string
@@ -8,6 +16,7 @@ export interface OrderRow {
   status: string
   statusKind: string
   priceMismatchCount: number
+  priceMismatchDetails: PriceMismatchDetail[]
 }
 
 export interface LogEntry {
