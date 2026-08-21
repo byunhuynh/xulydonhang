@@ -256,3 +256,40 @@ func TestIdentify_FujiMartCheckedAfterWinmart(t *testing.T) {
 		t.Fatalf("Identify with FujiMart marker = %q, want %q", got, "FujiMart")
 	}
 }
+
+func TestIdentify_RecognizesJMartByUnitLine(t *testing.T) {
+	cases := []struct {
+		name string
+		text string
+		want string
+	}{
+		{"real marker", "Header\nĐơn vị : HỆ THỐNG SIÊU THỊ JMART\nfooter", "JMart"},
+		{"unrelated text", "Header\nĐơn vị : Some Other Store\nfooter", ""},
+		{"no marker at all", "nothing relevant here", ""},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			got := Identify(c.text)
+			if got != c.want {
+				t.Fatalf("Identify(%q) = %q, want %q", c.text, got, c.want)
+			}
+		})
+	}
+}
+
+func TestIdentify_JMartCheckedAfterFujiMart(t *testing.T) {
+	// Real xulydonhang.py order (xulydonhang.py:90-179): ...FujiMart(128)
+	// -> Tiktok(131) -> KOC(134,139) -> JMart(145) -> MR.DIY(149) -> ...
+	// Tiktok and KOC (the two vendors between FujiMart and JMart in
+	// Python) are both unported, so JMart's correct position among
+	// PORTED vendors is simply appended after FujiMart (the current last
+	// case) — no insertion needed. There's no genuine ordering conflict
+	// to construct here (JMart's marker doesn't overlap any other
+	// vendor's pattern), so this test documents the intent for a future
+	// reader, mirroring TestIdentify_KingfoodCheckedBetweenEmartAndWinmart's
+	// own rationale.
+	got := Identify("Đơn vị : HỆ THỐNG SIÊU THỊ JMART")
+	if got != "JMart" {
+		t.Fatalf("Identify with JMart marker = %q, want %q", got, "JMart")
+	}
+}

@@ -54,17 +54,22 @@ var (
 	// literal numeric substring (the vendor's own tax code), no
 	// alternation.
 	fujimartPattern = regexp.MustCompile(`251000000161`)
+	// JMart's identify pattern (xulydonhang.py:145-146): a single
+	// literal string substring, no alternation. Real Python order places
+	// JMart after Tiktok/KOC (both unported) and after FujiMart — see
+	// Identify's own doc comment for the full chain.
+	jmartPattern = regexp.MustCompile(`Đơn vị : HỆ THỐNG SIÊU THỊ JMART`)
 )
 
 // Identify tries to recognize which retail vendor produced this
 // page/PO text, mirroring xulydonhang.py's identify_vendor. Coop, BigC,
-// Lotte, Satra, Emart, Kingfood, Winmart, and FujiMart are implemented in
+// Lotte, Satra, Emart, Kingfood, Winmart, FujiMart, and JMart are implemented in
 // that order (order is load-bearing and mirrors Python's real
 // identify_vendor precedence). Python's real order still has CN-HCM between
-// Kingfood and Winmart, and SHOPEE-CHOICE between Winmart and FujiMart,
-// that aren't ported yet — a future implementer adding one of those must
+// Kingfood and Winmart, SHOPEE-CHOICE between Winmart and FujiMart, and Tiktok/KOC
+// between FujiMart and JMart, that aren't ported yet — a future implementer adding one of those must
 // insert it at the correct relative position, not simply append. Identify
-// returns "" for anything that isn't one of the eight implemented vendors.
+// returns "" for anything that isn't one of the nine implemented vendors.
 func Identify(text string) string {
 	cleaned := strings.TrimSpace(whitespacePattern.ReplaceAllString(text, " "))
 	if coopPattern.MatchString(cleaned) {
@@ -90,6 +95,9 @@ func Identify(text string) string {
 	}
 	if fujimartPattern.MatchString(cleaned) {
 		return "FujiMart"
+	}
+	if jmartPattern.MatchString(cleaned) {
+		return "JMart"
 	}
 	return ""
 }
