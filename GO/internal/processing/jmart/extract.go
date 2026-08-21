@@ -17,6 +17,56 @@ var poNumberPattern = regexp.MustCompile(`Số phiếu đặt\s*:\s*([A-Z0-9]+)`
 // other label/value extractions in this project).
 var deliveryAddressPattern = regexp.MustCompile(`(?s)Địa chỉ giao hàng\s*:\s*(.+?)\s*SĐT nhận hàng\s*:`)
 
+// addressLineWrapGapPattern repairs a real, confirmed PDF-text-extraction
+// gap found via Task 6's golden-fixture run against the one real sample,
+// DH01010844.pdf: real PyMuPDF's "text" mode reliably inserts a newline
+// at every physical PDF line-wrap, so Python's real
+// re.S-captured delivery_address (xulydonhang.py:8146-ish) keeps a
+// literal "\n" where the address wraps mid-field — confirmed directly in
+// the frozen golden fixture, whose ShipTo value contains an embedded
+// "\n" between "...Gold View, 346" and "Bến Vân Đồn...".
+//
+// This repo's own PDF library (github.com/ledongthuc/pdf, via
+// extractPageText/GetPlainText in pdfextract.go) only inserts "\n" on
+// the content stream's BT/T* operators (confirmed by reading that
+// library's own page.go Interpret callback). DH01010844.pdf renders the
+// address's second physical line using a raw Td (line-position)
+// operator instead of T*, so GetPlainText drops the separator ENTIRELY
+// at that one spot — not even a space survives, fusing two words
+// together. Confirmed directly: dumping this PDF's raw content-stream
+// text runs (page.Content()) shows "...Gold View, 346" and "Bến Vân
+// Đồn..." as two distinct physical text rows at different Y
+// coordinates, while extractPageText's GetPlainText output has them as
+// "...346Bến...", zero characters apart. (Whole-page position-based
+// reconstruction, i.e. reconstructLinesFromContent, was tried and
+// rejected as a general fix here: on this PDF it interleaves an
+// unrelated field, "Người in: kimngoc", between the address's two
+// physical lines, because that field happens to sit at an intervening Y
+// coordinate elsewhere on the page — this repo's own existing caution
+// about that function's reading-order assumptions, see
+// reconstructLinesFromContent's doc comment in pdfextract.go.)
+//
+// This pattern targets exactly the confirmed failure signature: a digit
+// immediately followed by an uppercase letter that itself starts a real
+// (2+-letter) word. Deliberately narrower than "any digit followed by
+// any uppercase letter" — this same address also contains "02B" (a
+// legitimate room/floor code: digit run + ONE trailing capital letter +
+// word boundary, not a fused word) which must NOT be touched.
+// Requiring the uppercase letter to be followed by a further lowercase
+// letter (\p{Lu}\p{Ll}, the start of a real word) distinguishes "346" +
+// "Bến..." (real match: "B" followed by "ế", a letter) from "02" + "B"
+// followed by a space (no match: "B" is followed by whitespace, not a
+// letter).
+//
+// Scope: applied ONLY to the already-captured delivery-address
+// substring below, never to the wider page text, so this cannot affect
+// product-table parsing (ExtractProducts) or any other field.
+// Single-sample coverage — see knownDivergences_JMart's own doc comment
+// in jmart_golden_test.go: this heuristic is verified correct for
+// exactly this one real address and not proven to generalize to a
+// differently-shaped line-wrap in a future JMart PDF.
+var addressLineWrapGapPattern = regexp.MustCompile(`(\d)(\p{Lu}\p{Ll})`)
+
 // ParseOrderInfo mirrors the JMart branch of process_file
 // (xulydonhang.py:8146-8153). Python has NO try/except around
 // entry_date's or po_number's regex match — a missing marker crashes
@@ -32,11 +82,13 @@ var deliveryAddressPattern = regexp.MustCompile(`(?s)Địa chỉ giao hàng\s*:
 // `cancel_date = entry_date` — a direct assignment, no reformatting, no
 // fallback logic, unlike FujiMart/Winmart/Emart's cross-validation).
 //
-// Confirmed during planning: this specific region of the PDF (header/
-// PO/date/address) shows NO Go-vs-PyMuPDF layout divergence — both
-// pipelines keep every marker and its value on directly matchable
-// lines. The divergence in this PDF template is confined entirely to
-// the product table (see ExtractProducts's own doc comment).
+// Confirmed during planning that the header/PO/date/address region
+// keeps every MARKER and its value on directly matchable lines (no
+// Go-vs-PyMuPDF divergence in whether "Địa chỉ giao hàng:" itself is
+// found). What planning did NOT catch: the VALUE captured after that
+// marker can itself lose an internal line-wrap separator — see
+// addressLineWrapGapPattern's own doc comment, confirmed only during
+// Task 6's real golden-fixture run, not during planning.
 func ParseOrderInfo(text string) (poNumber, entryDate, cancelDate, deliveryAddress string, ok bool) {
 	entryMatch := entryDatePattern.FindStringSubmatch(text)
 	poMatch := poNumberPattern.FindStringSubmatch(text)
@@ -50,6 +102,7 @@ func ParseOrderInfo(text string) (poNumber, entryDate, cancelDate, deliveryAddre
 	poNumber = poMatch[1]
 	cancelDate = entryDate
 	deliveryAddress = strings.TrimSpace(addrMatch[1])
+	deliveryAddress = addressLineWrapGapPattern.ReplaceAllString(deliveryAddress, "$1\n$2")
 
 	return poNumber, entryDate, cancelDate, deliveryAddress, true
 }

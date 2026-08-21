@@ -7,12 +7,18 @@ func TestParseOrderInfo_ExtractsRealSampleFields(t *testing.T) {
 	// the real (and only available) sample JMart PDF
 	// (đơn hàng/mẫu đơn hàng/13-07-2026/13-07-2026_[JMart][05-07-2026]
 	// [MN_MT_JM0001][05-07-2026][DH01010844].pdf), confirmed during
-	// planning by running the actual Go PDF pipeline directly. Unlike
-	// most other vendors in this project, this specific region of the
-	// PDF (header/PO/date/address) shows NO layout divergence between
-	// Go's extraction and PyMuPDF's — both keep every marker and its
-	// value on adjacent, unsplit lines here (the divergence in this PDF
-	// template is confined to the product table, see Task 3).
+	// planning by running the actual Go PDF pipeline directly. Every
+	// MARKER and its value sit on adjacent, matchable lines here (the
+	// product-table divergence is a separate matter, see Task 3) — but
+	// Task 6's real golden-fixture run found that the VALUE captured
+	// after "Địa chỉ giao hàng:" itself has a real internal defect: line
+	// 31 below is verbatim what this repo's own PDF library actually
+	// produces for this real sample, "...346Bến..." with ZERO separator
+	// at the physical line-wrap point (see addressLineWrapGapPattern's
+	// doc comment in extract.go for the full root-cause explanation and
+	// citation). ParseOrderInfo repairs it before returning, so
+	// wantAddress below is the CORRECTED value, not a literal echo of
+	// line 31.
 	text := "\n" +
 		"ĐC : L1 – 01, L1 – 02B Tầng 1, Tòa nhà Gold View, 346 Bến Vân Đồn,Phường Vĩnh Hội, TP.Hồ Chí Minh\n" +
 		"Đơn vị : HỆ THỐNG SIÊU THỊ JMART\n" +
@@ -47,7 +53,7 @@ func TestParseOrderInfo_ExtractsRealSampleFields(t *testing.T) {
 	if cancelDate != entryDate {
 		t.Errorf("cancelDate = %q, want it to equal entryDate %q (xulydonhang.py:8148, a direct assignment)", cancelDate, entryDate)
 	}
-	wantAddress := "L1 – 01, L1 – 02B Tầng 1, Tòa nhà Gold View, 346Bến Vân Đồn, Phường Vĩnh Hội, TP.Hồ Chí Minh"
+	wantAddress := "L1 – 01, L1 – 02B Tầng 1, Tòa nhà Gold View, 346\nBến Vân Đồn, Phường Vĩnh Hội, TP.Hồ Chí Minh"
 	if deliveryAddress != wantAddress {
 		t.Errorf("deliveryAddress = %q, want %q", deliveryAddress, wantAddress)
 	}
