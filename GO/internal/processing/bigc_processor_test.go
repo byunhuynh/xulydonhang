@@ -2,6 +2,7 @@ package processing
 
 import (
 	"context"
+	"fmt"
 	"testing"
 
 	"github.com/xuri/excelize/v2"
@@ -399,5 +400,175 @@ func TestRealProcessor_BigcSkipsItemWithUnknownProduct(t *testing.T) {
 	wantWeight := 2.5 * 6 // only the known item's contribution
 	if result.weightKg != wantWeight {
 		t.Errorf("weightKg = %v, want %v (unknown item's weight must not be counted)", result.weightKg, wantWeight)
+	}
+}
+
+// TestRealProcessor_ProcessesBigcDocument_PriceMismatchDetailsAcrossStores
+// exercises the ONE genuinely different piece of PriceMismatchDetail math
+// in the whole price-mismatch-resolution plan: BigC's 3-stage ExcelRow
+// offset (store-local index -> cross-store combined-write offset,
+// snapshotted BEFORE that store's own rows are appended -> final absolute
+// row, added once after WriteOrderRows returns). A prior review traced
+// this by hand on paper; this test proves it against a REAL written
+// workbook, and specifically includes a FAILED store BETWEEN two
+// successful ones (mirroring TestRealProcessor_ProcessesBigcDocument_
+// IsolatesPerPageErrors' page shapes) to prove a failed store's zero-row
+// contribution doesn't corrupt the offset accumulation for stores after it.
+func TestRealProcessor_ProcessesBigcDocument_PriceMismatchDetailsAcrossStores(t *testing.T) {
+	store, err := productdata.Load("productdata/testdata/data.xlsx")
+	if err != nil {
+		t.Fatalf("Load productdata failed: %v", err)
+	}
+	excelPath := copyTestWorkbookForProcessor(t)
+	// Empty price index -> FindPrice returns "" -> realPrice=0 for every
+	// barcode, guaranteeing BOTH real product items below mismatch against
+	// their nonzero page-0 invoice prices, with no need to hand-tune a
+	// near-miss price.
+	pricingSource := &fixturePricingSource{index: pricing.ParseIndex(nil)}
+	rp := &RealProcessor{Store: store, Pricing: pricingSource, ExcelPath: excelPath}
+
+	existingRowCount := func() int {
+		f, err := excelize.OpenFile(excelPath)
+		if err != nil {
+			t.Fatalf("OpenFile failed: %v", err)
+		}
+		defer f.Close()
+		rows, err := f.GetRows("Don dat hang")
+		if err != nil {
+			t.Fatalf("GetRows failed: %v", err)
+		}
+		return len(rows)
+	}()
+
+	// Page 0: price-list entries for BOTH real test barcodes (see this
+	// file's own doc comment on TestRealProcessor_BigcInvoiceLevelPromoBonusRow
+	// for where these two fixture barcodes come from), each with a real
+	// nonzero invoice price.
+	page0 := "2631099999999 15/08/26\n" +
+		"Total Net Purchase Price\n" +
+		"20/08/26\n" +
+		"Article\n" +
+		"8934563112223 Product One Master Pack 1 6 1 1 15000 PCS 15000\n" +
+		"8934563112230 Product Two Master Pack 1 6 1 1 20000 PCS 20000\n"
+
+	// Store 1 (page 1, FIRST success): header/note row + 1 mismatched
+	// item -> local rows [note(0), item(1)], mismatch at local index 1.
+	page1 := "FM LOGISTIC VSIP 2 (806)\n" +
+		"Some Address Line\n" +
+		"Vietnam\n" +
+		"Store One\n" +
+		"8934563112223\n" +
+		"Product One Description\n" +
+		"Pack\n" +
+		"1\n" +
+		"6\n" +
+		"1\n"
+
+	// Store 2 (page 2, FAILED — no store-name markers at all, same shape
+	// as TestRealProcessor_ProcessesBigcDocument_IsolatesPerPageErrors'
+	// malformed page): contributes ZERO rows, must not shift store 3's
+	// offset by anything other than store 1's real row count.
+	page2 := "This page has no store markers at all.\n" +
+		"Just some unrelated filler text.\n"
+
+	// Store 3 (page 3, SECOND success, after a failure in between): no
+	// note row (isFirstSuccessful=false, store 1 already got it) -> local
+	// rows [item(0)] only, mismatch at local index 0.
+	page3 := "FM LOGISTIC VSIP 2 (806)\n" +
+		"Some Address Line\n" +
+		"Vietnam\n" +
+		"Store Three\n" +
+		"8934563112230\n" +
+		"Product Three Description\n" +
+		"Pack\n" +
+		"1\n" +
+		"6\n" +
+		"1\n"
+
+	rows, err := rp.processBigcDocument("synthetic_bigc_mismatch_offsets.pdf", []string{page0, page1, page2, page3})
+	if err != nil {
+		t.Fatalf("processBigcDocument returned error: %v", err)
+	}
+	if len(rows) != 3 {
+		t.Fatalf("processBigcDocument returned %d rows, want 3 (store1 success, store2 failed, store3 success): %+v", len(rows), rows)
+	}
+	if rows[1].StatusKind != StatusKindFailed {
+		t.Fatalf("rows[1] (store 2) StatusKind = %v, want Failed", rows[1].StatusKind)
+	}
+
+	// Store 1: exactly 1 mismatch, at combined-slice index 1 (right after
+	// its own note row at index 0) -> absolute ExcelRow = existingRowCount+2
+	// (existingRowCount existing rows, 1-indexed rows start at
+	// existingRowCount+1, so index 1 within the write is
+	// existingRowCount+1+1).
+	if len(rows[0].PriceMismatchDetails) != 1 {
+		t.Fatalf("store 1: len(PriceMismatchDetails) = %d, want 1: %+v", len(rows[0].PriceMismatchDetails), rows[0].PriceMismatchDetails)
+	}
+	store1Detail := rows[0].PriceMismatchDetails[0]
+	if store1Detail.SKU != "8934563112223" {
+		t.Errorf("store 1 mismatch SKU = %q, want %q", store1Detail.SKU, "8934563112223")
+	}
+	wantStore1Row := existingRowCount + 2
+	if store1Detail.ExcelRow != wantStore1Row {
+		t.Errorf("store 1 mismatch ExcelRow = %d, want %d (existingRowCount=%d + local index 1 + 1-indexing)", store1Detail.ExcelRow, wantStore1Row, existingRowCount)
+	}
+
+	// Store 3 (rows[2], since rows[1] is the failed store 2): exactly 1
+	// mismatch, at combined-slice index 2 (store 1 contributed 2 rows:
+	// note+item; the failed store contributed 0; store 3's own item is
+	// the 3rd row overall, index 2) -> absolute ExcelRow =
+	// existingRowCount+3.
+	if len(rows[2].PriceMismatchDetails) != 1 {
+		t.Fatalf("store 3: len(PriceMismatchDetails) = %d, want 1: %+v", len(rows[2].PriceMismatchDetails), rows[2].PriceMismatchDetails)
+	}
+	store3Detail := rows[2].PriceMismatchDetails[0]
+	if store3Detail.SKU != "8934563112230" {
+		t.Errorf("store 3 mismatch SKU = %q, want %q", store3Detail.SKU, "8934563112230")
+	}
+	wantStore3Row := existingRowCount + 3
+	if store3Detail.ExcelRow != wantStore3Row {
+		t.Errorf("store 3 mismatch ExcelRow = %d, want %d — if this is existingRowCount+2 instead, the failed store's zero-row contribution was incorrectly skipped in the offset math; if it's some other value, the cross-store snapshot-before-append ordering is wrong", store3Detail.ExcelRow, wantStore3Row)
+	}
+
+	// Reopen the actual written workbook and confirm BOTH ExcelRow values
+	// point at REAL flagged cells (comment + non-default style) — not
+	// just plausible numbers — and that column Q at each row holds the
+	// SKU that mismatch detail claims, proving no cross-store row got
+	// attributed to the wrong store.
+	f, err := excelize.OpenFile(excelPath)
+	if err != nil {
+		t.Fatalf("failed reopening workbook: %v", err)
+	}
+	defer f.Close()
+	comments, err := f.GetComments("Don dat hang")
+	if err != nil {
+		t.Fatalf("GetComments: %v", err)
+	}
+	hasComment := func(cell string) bool {
+		for _, c := range comments {
+			if c.Cell == cell {
+				return true
+			}
+		}
+		return false
+	}
+
+	for _, d := range []PriceMismatchDetail{store1Detail, store3Detail} {
+		cell := fmt.Sprintf("Y%d", d.ExcelRow)
+		styleID, err := f.GetCellStyle("Don dat hang", cell)
+		if err != nil {
+			t.Fatalf("GetCellStyle(%s): %v", cell, err)
+		}
+		if styleID == 0 {
+			t.Errorf("%s has default style, want the red-fill mismatch style — ExcelRow=%d for SKU %s doesn't point at a real flagged cell", cell, d.ExcelRow, d.SKU)
+		}
+		if !hasComment(cell) {
+			t.Errorf("no mismatch comment at %s — ExcelRow=%d for SKU %s doesn't point at a real flagged cell", cell, d.ExcelRow, d.SKU)
+		}
+		skuCell := fmt.Sprintf("Q%d", d.ExcelRow)
+		gotSKU, _ := f.GetCellValue("Don dat hang", skuCell)
+		if gotSKU != d.SKU {
+			t.Errorf("%s (SKU column at the row this detail claims) = %q, want %q — this row belongs to a DIFFERENT product than the detail claims", skuCell, gotSKU, d.SKU)
+		}
 	}
 }

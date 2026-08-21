@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -37,13 +38,15 @@ const configFileName = "config.txt"
 
 // App struct
 type App struct {
-	ctx        context.Context
-	cfg        *config.Store
-	processor  processing.Processor
-	emitter    Emitter
-	orderDir   string
-	excelPath  string
-	processing atomic.Bool
+	ctx          context.Context
+	cfg          *config.Store
+	processor    processing.Processor
+	emitter      Emitter
+	orderDir     string
+	excelPath    string
+	resolvedRows map[int]bool
+	resolvedMu   sync.Mutex
+	processing   atomic.Bool
 }
 
 // resolveRepoFile looks for filename starting in the current working
@@ -136,10 +139,38 @@ func (a *App) SetSTT(v int) error {
 
 // ConfirmPrice ghi đè giá (cột Y) của một dòng sản phẩm đã bị đánh dấu
 // sai giá, theo lựa chọn của người dùng — giữ giá trên PO hoặc dùng giá
-// hệ thống. Yêu cầu dòng đó ĐANG ở trạng thái chờ xác nhận (còn comment
-// cảnh báo); nếu không sẽ trả lỗi thay vì âm thầm ghi đè.
+// hệ thống. Từ chối khi đang có một batch xử lý chạy (ProcessFiles ghi
+// vào CÙNG file Excel — cho 2 lần mở/lưu chạy đồng thời có thể khiến
+// bên lưu sau âm thầm ghi đè mất các dòng bên kia vừa thêm, không có
+// lỗi báo). Lần đầu gọi cho một dòng, yêu cầu dòng đó ĐANG ở trạng thái
+// chờ xác nhận (còn comment cảnh báo sai giá — xem
+// excelwriter.ConfirmPrice); các lần gọi SAU cho CÙNG dòng đó (người
+// dùng đổi ý giữa giá PO và giá hệ thống) bỏ qua kiểm tra đó, vì comment
+// đã bị xóa ngay từ lần xác nhận đầu tiên — xem excelwriter.SetPrice.
 func (a *App) ConfirmPrice(row int, price float64) error {
-	return excelwriter.ConfirmPrice(a.excelPath, row, price)
+	if a.processing.Load() {
+		return fmt.Errorf("đang xử lý đơn hàng, vui lòng đợi hoàn tất trước khi áp dụng giá")
+	}
+
+	a.resolvedMu.Lock()
+	alreadyResolved := a.resolvedRows[row]
+	a.resolvedMu.Unlock()
+
+	if alreadyResolved {
+		return excelwriter.SetPrice(a.excelPath, row, price)
+	}
+
+	if err := excelwriter.ConfirmPrice(a.excelPath, row, price); err != nil {
+		return err
+	}
+
+	a.resolvedMu.Lock()
+	if a.resolvedRows == nil {
+		a.resolvedRows = make(map[int]bool)
+	}
+	a.resolvedRows[row] = true
+	a.resolvedMu.Unlock()
+	return nil
 }
 
 // ScanOrderFolder quét thư mục "đơn hàng/MM-YYYY" hiện tại (tự tạo nếu

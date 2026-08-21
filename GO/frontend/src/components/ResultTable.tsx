@@ -1,4 +1,4 @@
-import { Fragment, useState } from 'react'
+import { Fragment, useEffect, useState } from 'react'
 import {
   FaCircle,
   FaCheck,
@@ -64,10 +64,23 @@ function formatMoney(value: string): string {
 
 export function ResultTable() {
   const rows = useAppStore((s) => s.rows)
+  const isProcessing = useAppStore((s) => s.isProcessing)
   const [copiedKey, setCopiedKey] = useState<string | null>(null)
   const [expandedRow, setExpandedRow] = useState<number | null>(null)
   const [resolvedChoice, setResolvedChoice] = useState<Record<string, 'po' | 'system'>>({})
   const appendLog = useAppStore((s) => s.appendLog)
+
+  // A new batch calls resetRows() (see ControlPanel), which empties this
+  // array before new rows stream in — that's the right moment to clear
+  // any expand/resolved-choice state from the PREVIOUS batch's results,
+  // since row index i in the new batch has no relationship to whatever
+  // order used to be at that same index.
+  useEffect(() => {
+    if (rows.length === 0) {
+      setExpandedRow(null)
+      setResolvedChoice({})
+    }
+  }, [rows.length])
 
   function handleCopy(key: string, value: string) {
     navigator.clipboard.writeText(value).catch(() => {})
@@ -147,24 +160,27 @@ export function ResultTable() {
                               {meta.label}
                             </span>
                           ) : c.key === 'priceMismatchCount' ? (
-                            <button
-                              type="button"
-                              onClick={(e) => {
-                                e.stopPropagation()
-                                if (row.priceMismatchCount > 0) {
+                            row.priceMismatchCount > 0 ? (
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation()
                                   setExpandedRow((cur) => (cur === i ? null : i))
-                                }
-                              }}
-                              className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 font-sans font-semibold ${price.classes} ${
-                                row.priceMismatchCount > 0 ? 'cursor-pointer' : 'cursor-default'
-                              }`}
-                            >
-                              {price.icon === 'ok' && <FaCircleCheck size={11} />}
-                              {price.icon === 'warn' && <FaTriangleExclamation size={11} />}
-                              {price.label}
-                              {row.priceMismatchCount > 0 &&
-                                (expandedRow === i ? <FaChevronDown size={9} /> : <FaChevronRight size={9} />)}
-                            </button>
+                                }}
+                                className={`inline-flex cursor-pointer items-center gap-1.5 rounded-full px-2.5 py-0.5 font-sans font-semibold ${price.classes}`}
+                              >
+                                <FaTriangleExclamation size={11} />
+                                {price.label}
+                                {expandedRow === i ? <FaChevronDown size={9} /> : <FaChevronRight size={9} />}
+                              </button>
+                            ) : (
+                              <span
+                                className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 font-sans font-semibold ${price.classes}`}
+                              >
+                                {price.icon === 'ok' && <FaCircleCheck size={11} />}
+                                {price.label}
+                              </span>
+                            )
                           ) : c.key === 'donGia' ? (
                             <span className="font-semibold text-accent">{formatMoney(row[c.key])}</span>
                           ) : (
@@ -201,8 +217,10 @@ export function ResultTable() {
                                     <div className="flex gap-1.5">
                                       <button
                                         type="button"
+                                        disabled={isProcessing}
+                                        title={isProcessing ? 'Đang xử lý đơn hàng, vui lòng đợi' : undefined}
                                         onClick={() => handleApplyPrice(i, detail, true)}
-                                        className={`rounded px-2 py-1 font-sans text-[10px] font-semibold transition-colors ${
+                                        className={`rounded px-2 py-1 font-sans text-[10px] font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-40 ${
                                           choice === 'po'
                                             ? 'bg-accent text-[#0a1620]'
                                             : 'border border-border text-muted hover:border-accent hover:text-accent'
@@ -212,8 +230,10 @@ export function ResultTable() {
                                       </button>
                                       <button
                                         type="button"
+                                        disabled={isProcessing}
+                                        title={isProcessing ? 'Đang xử lý đơn hàng, vui lòng đợi' : undefined}
                                         onClick={() => handleApplyPrice(i, detail, false)}
-                                        className={`rounded px-2 py-1 font-sans text-[10px] font-semibold transition-colors ${
+                                        className={`rounded px-2 py-1 font-sans text-[10px] font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-40 ${
                                           choice === 'system'
                                             ? 'bg-accent text-[#0a1620]'
                                             : 'border border-border text-muted hover:border-accent hover:text-accent'

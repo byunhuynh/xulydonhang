@@ -230,3 +230,88 @@ func TestApp_ConfirmPrice_DelegatesToExcelwriter(t *testing.T) {
 		t.Fatalf("Y9 = %q, want %q", val, "33726")
 	}
 }
+
+func TestApp_ConfirmPrice_RejectsWhileProcessingBatch(t *testing.T) {
+	src := "internal/processing/excelwriter/testdata/dondathang.xlsx"
+	data, err := os.ReadFile(src)
+	if err != nil {
+		t.Fatalf("failed reading test fixture: %v", err)
+	}
+	path := filepath.Join(t.TempDir(), "dondathang.xlsx")
+	if err := os.WriteFile(path, data, 0o644); err != nil {
+		t.Fatalf("failed writing temp workbook: %v", err)
+	}
+
+	rows := []excelwriter.Row{
+		{SKU: "3564270-4", Qty: 24, UnitPrice: 33000, InvoicePrice: 33726, PriceMismatch: true, UseZFormula: true},
+	}
+	if _, err := excelwriter.WriteOrderRows(path, rows, ""); err != nil {
+		t.Fatalf("WriteOrderRows returned error: %v", err)
+	}
+
+	a := &App{excelPath: path}
+	a.processing.Store(true)
+
+	err = a.ConfirmPrice(9, 33726)
+	if err == nil {
+		t.Fatal("ConfirmPrice returned nil error while a.processing was true, want a rejection")
+	}
+
+	// Confirm nothing was written — the row must be untouched.
+	f, ferr := excelize.OpenFile(path)
+	if ferr != nil {
+		t.Fatalf("failed reopening workbook: %v", ferr)
+	}
+	defer f.Close()
+	val, _ := f.GetCellValue("Don dat hang", "Y9")
+	if val == "33726" {
+		t.Fatal("Y9 was written despite a.processing being true — the guard did not actually block the write")
+	}
+}
+
+func TestApp_ConfirmPrice_SecondCallForSameRowUsesSetPriceNotConfirmPrice(t *testing.T) {
+	src := "internal/processing/excelwriter/testdata/dondathang.xlsx"
+	data, err := os.ReadFile(src)
+	if err != nil {
+		t.Fatalf("failed reading test fixture: %v", err)
+	}
+	path := filepath.Join(t.TempDir(), "dondathang.xlsx")
+	if err := os.WriteFile(path, data, 0o644); err != nil {
+		t.Fatalf("failed writing temp workbook: %v", err)
+	}
+
+	rows := []excelwriter.Row{
+		{SKU: "3564270-4", Qty: 24, UnitPrice: 33000, InvoicePrice: 33726, PriceMismatch: true, UseZFormula: true},
+	}
+	if _, err := excelwriter.WriteOrderRows(path, rows, ""); err != nil {
+		t.Fatalf("WriteOrderRows returned error: %v", err)
+	}
+
+	a := &App{excelPath: path}
+
+	// First call: row 9 genuinely has a mismatch comment, so this goes
+	// through excelwriter.ConfirmPrice's normal path and succeeds.
+	if err := a.ConfirmPrice(9, 33726); err != nil {
+		t.Fatalf("first ConfirmPrice call returned error: %v", err)
+	}
+
+	// Second call for the SAME row, a different price (simulating the
+	// user changing their mind): the comment excelwriter.ConfirmPrice
+	// deleted on the first call is gone, so a naive second call to
+	// excelwriter.ConfirmPrice would now be rejected — proving this must
+	// route through the resolvedRows bypass (excelwriter.SetPrice)
+	// instead.
+	if err := a.ConfirmPrice(9, 30000); err != nil {
+		t.Fatalf("second ConfirmPrice call (change of mind) returned error: %v — re-toggle is broken", err)
+	}
+
+	f, ferr := excelize.OpenFile(path)
+	if ferr != nil {
+		t.Fatalf("failed reopening workbook: %v", ferr)
+	}
+	defer f.Close()
+	val, _ := f.GetCellValue("Don dat hang", "Y9")
+	if val != "30000" {
+		t.Fatalf("Y9 = %q after the second (change-of-mind) call, want %q", val, "30000")
+	}
+}

@@ -203,3 +203,29 @@ func TestConfirmPrice_RejectsRowOutsideSheetBounds(t *testing.T) {
 		t.Fatal("ConfirmPrice returned nil error for a row far outside the real sheet, want a rejection")
 	}
 }
+
+func TestSetPrice_OverwritesValueWithNoCommentCheck(t *testing.T) {
+	path := copyTestWorkbook(t)
+	rows := []Row{
+		{SKU: "3564270-4", Qty: 24, UnitPrice: 33726, ProductName: "Chai tay toilet", UseZFormula: true},
+	}
+	// This row has NO mismatch comment at all — SetPrice must still
+	// succeed, unlike ConfirmPrice.
+	if _, err := WriteOrderRows(path, rows, ""); err != nil {
+		t.Fatalf("WriteOrderRows returned error: %v", err)
+	}
+
+	if err := SetPrice(path, 9, 30000); err != nil {
+		t.Fatalf("SetPrice returned error: %v", err)
+	}
+
+	f, err := excelize.OpenFile(path)
+	if err != nil {
+		t.Fatalf("failed reopening workbook: %v", err)
+	}
+	defer f.Close()
+	val, _ := f.GetCellValue("Don dat hang", "Y9")
+	if val != "30000" {
+		t.Fatalf("Y9 = %q, want %q", val, "30000")
+	}
+}

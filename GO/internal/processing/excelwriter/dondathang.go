@@ -151,10 +151,47 @@ func ConfirmPrice(path string, row int, price float64) error {
 	if err := f.DeleteComment(sheetName, cell); err != nil {
 		return fmt.Errorf("excelwriter: delete comment at %s: %w", cell, err)
 	}
+	// NOTE: style ID 0 is confirmed the CORRECT "no special formatting"
+	// reset for excelwriter's own TEST template (testdata/dondathang.xlsx
+	// has no column-level Y style, so 0 genuinely is its original state).
+	// The real production workbook has a column-level Y number-format
+	// style (currency grouping) that this call would also clear — but
+	// writeRow's own red-fill style (applied when the mismatch was first
+	// flagged) already clears that same formatting, so this isn't a NEW
+	// loss ConfirmPrice introduces, only a pre-existing one it doesn't
+	// restore. Not fixed here — flagged for whoever eventually wires this
+	// app to the real production file, not this plan's concern.
 	if err := f.SetCellStyle(sheetName, cell, cell, 0); err != nil {
 		return fmt.Errorf("excelwriter: reset style at %s: %w", cell, err)
 	}
 
+	if err := f.Save(); err != nil {
+		return fmt.Errorf("excelwriter: save %s: %w", path, err)
+	}
+	return nil
+}
+
+// SetPrice overwrites Y{row}'s value directly, with NONE of ConfirmPrice's
+// mismatch-comment safety check — used ONLY for a row ConfirmPrice has
+// ALREADY successfully resolved earlier in the same app session (see
+// App.ConfirmPrice's resolvedRows tracking), so the user can change their
+// mind between "giá PO" and "giá hệ thống" after the original mismatch
+// comment/red-fill were already cleared by that first ConfirmPrice call —
+// there is no comment left to check by the time a re-toggle happens.
+// Never call this for a row that hasn't already gone through a successful
+// ConfirmPrice once; it has none of that function's protections against a
+// stale or out-of-range row.
+func SetPrice(path string, row int, price float64) error {
+	f, err := excelize.OpenFile(path)
+	if err != nil {
+		return fmt.Errorf("excelwriter: open %s: %w", path, err)
+	}
+	defer f.Close()
+
+	cell := fmt.Sprintf("Y%d", row)
+	if err := f.SetCellValue(sheetName, cell, price); err != nil {
+		return fmt.Errorf("excelwriter: set %s: %w", cell, err)
+	}
 	if err := f.Save(); err != nil {
 		return fmt.Errorf("excelwriter: save %s: %w", path, err)
 	}
