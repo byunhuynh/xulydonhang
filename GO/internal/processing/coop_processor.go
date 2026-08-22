@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"math"
+	"net/http"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -30,9 +31,11 @@ type PricingSource interface {
 // OrderRow explaining why, rather than being silently skipped — support
 // for additional vendors is added by extending this same dispatch.
 type RealProcessor struct {
-	Store     *productdata.Store
-	Pricing   PricingSource
-	ExcelPath string
+	Store       *productdata.Store
+	Pricing     PricingSource
+	ExcelPath   string
+	DriveClient *http.Client // driveupload.NewHTTPClient() in production
+	LogFunc     func(string) // optional (nil-safe) - routes background upload results to "process:log"
 }
 
 func (p *RealProcessor) Process(ctx context.Context, filePath string, stt int) ([]OrderRow, error) {

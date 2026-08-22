@@ -14,6 +14,7 @@ import (
 	"order-processor/internal/applock"
 	"order-processor/internal/appsettings"
 	"order-processor/internal/config"
+	"order-processor/internal/driveupload"
 	"order-processor/internal/fileset"
 	"order-processor/internal/processing"
 	"order-processor/internal/processing/excelwriter"
@@ -143,17 +144,28 @@ func NewApp() (*App, error) {
 	// file list would show nothing even though real order files exist.
 	orderDir := filepath.Join(resolveRepoDir("settings.ini"), orderFolderName)
 
-	return &App{
+	processor := &processing.RealProcessor{
+		Store:       store,
+		Pricing:     pricing.NewHTTPSource(settings.Gid),
+		ExcelPath:   excelPath,
+		DriveClient: driveupload.NewHTTPClient(),
+	}
+
+	app := &App{
 		cfg:              config.NewStore(configFileName),
 		appSettingsStore: appSettingsStore,
-		processor: &processing.RealProcessor{
-			Store:     store,
-			Pricing:   pricing.NewHTTPSource(settings.Gid),
-			ExcelPath: excelPath,
-		},
-		orderDir:  orderDir,
-		excelPath: excelPath,
-	}, nil
+		processor:        processor,
+		orderDir:         orderDir,
+		excelPath:        excelPath,
+	}
+
+	processor.LogFunc = func(msg string) {
+		if app.emitter != nil {
+			app.emitter.Emit("process:log", msg)
+		}
+	}
+
+	return app, nil
 }
 
 // startup is called when the app starts. The context is saved

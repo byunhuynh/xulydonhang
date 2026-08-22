@@ -27,6 +27,14 @@ type OrderRow struct {
 	Status      string `json:"status"`
 	StatusKind  string `json:"statusKind"`
 
+	// DriveURL is the constructed "view" link from driveupload.Upload -
+	// populated the moment a row is built (fire-and-forget: the real
+	// upload may still be in progress or even fail in the background,
+	// this URL is a best-effort placeholder from the start). Empty
+	// string if the row's file was never uploaded (e.g. a Failed row
+	// with no successfully-written Excel data to link to).
+	DriveURL string `json:"driveUrl"`
+
 	// PriceMismatchCount is the same "saigia" count already embedded in
 	// Status's text ("... - Có N mã sai giá") — surfaced as its own typed
 	// field so the frontend can render a dedicated price-reconciliation
