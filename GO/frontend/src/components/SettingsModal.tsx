@@ -1,0 +1,133 @@
+// GO/frontend/src/components/SettingsModal.tsx
+import { useEffect, useState } from 'react'
+import { FaXmark } from 'react-icons/fa6'
+import { GetAppSettings, SaveAppSettings } from '../../wailsjs/go/main/App'
+import { useAppStore } from '../store/appStore'
+import type { AppSettings } from '../types'
+import { KeyValueEditor } from './KeyValueEditor'
+
+type SettingsTab = 'gid' | 'zalo' | 'reminder'
+
+interface SettingsModalProps {
+  onClose: () => void
+}
+
+export function SettingsModal({ onClose }: SettingsModalProps) {
+  const [tab, setTab] = useState<SettingsTab>('gid')
+  const [settings, setSettings] = useState<AppSettings | null>(null)
+  const [saved, setSaved] = useState(false)
+  const appendLog = useAppStore((s) => s.appendLog)
+
+  useEffect(() => {
+    GetAppSettings()
+      .then((s) => setSettings(s))
+      .catch((err) => appendLog(`❌ Lỗi tải cấu hình: ${String(err)}`))
+  }, [appendLog])
+
+  if (!settings) {
+    return (
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
+        <div className="rounded-xl border border-border bg-panel p-6 text-sm text-muted">Đang tải...</div>
+      </div>
+    )
+  }
+
+  const allKeys = [
+    ...Object.keys(settings.gid),
+    ...Object.keys(settings.zalo),
+    ...Object.keys(settings.reminder),
+  ]
+  const hasDuplicates =
+    new Set(allKeys.filter((k) => k.trim() !== '')).size !==
+    allKeys.filter((k) => k.trim() !== '').length
+
+  async function handleSave() {
+    if (!settings) return
+    try {
+      await SaveAppSettings(settings)
+      setSaved(true)
+    } catch (err) {
+      appendLog(`❌ Lỗi lưu cấu hình: ${String(err)}`)
+    }
+  }
+
+  const tabs: { key: SettingsTab; label: string }[] = [
+    { key: 'gid', label: 'Google Sheets (GID)' },
+    { key: 'zalo', label: 'Zalo' },
+    { key: 'reminder', label: 'Nhắc nhở' },
+  ]
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60" onClick={onClose}>
+      <div
+        className="flex max-h-[80vh] w-[560px] flex-col rounded-xl border border-border bg-panel p-4"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="mb-3 flex items-center justify-between">
+          <h2 className="font-sans text-sm font-bold text-ink">Cấu hình app</h2>
+          <button type="button" onClick={onClose} className="text-muted hover:text-ink">
+            <FaXmark size={16} />
+          </button>
+        </div>
+        <div className="mb-3 flex gap-1 border-b border-border">
+          {tabs.map((t) => (
+            <button
+              key={t.key}
+              type="button"
+              onClick={() => setTab(t.key)}
+              className={`px-3 py-2 font-sans text-xs font-semibold transition-colors ${
+                tab === t.key ? 'border-b-2 border-accent text-accent' : 'text-muted hover:text-ink'
+              }`}
+            >
+              {t.label}
+            </button>
+          ))}
+        </div>
+        <div className="flex-1 overflow-y-auto">
+          {tab === 'gid' && (
+            <KeyValueEditor
+              entries={settings.gid}
+              onChange={(gid) => setSettings({ ...settings, gid })}
+              keyLabel="Hệ thống"
+              valueLabel="Gid"
+              valueType="number"
+            />
+          )}
+          {tab === 'zalo' && (
+            <KeyValueEditor
+              entries={settings.zalo}
+              onChange={(zalo) => setSettings({ ...settings, zalo })}
+              keyLabel="Nhóm"
+              valueLabel="Tên hiển thị"
+              valueType="text"
+            />
+          )}
+          {tab === 'reminder' && (
+            <KeyValueEditor
+              entries={settings.reminder}
+              onChange={(reminder) => setSettings({ ...settings, reminder })}
+              keyLabel="Nhóm"
+              valueLabel="Bật"
+              valueType="toggle"
+            />
+          )}
+        </div>
+        <div className="mt-3 flex items-center justify-between border-t border-border pt-3">
+          {saved ? (
+            <span className="font-sans text-xs text-success">Đã lưu. Khởi động lại app để áp dụng thay đổi.</span>
+          ) : (
+            <span />
+          )}
+          <button
+            type="button"
+            onClick={handleSave}
+            disabled={hasDuplicates}
+            className="rounded-lg bg-accent px-4 py-2 font-sans text-xs font-bold text-[#0a1620] transition-opacity disabled:cursor-not-allowed disabled:opacity-40"
+          >
+            Lưu
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}

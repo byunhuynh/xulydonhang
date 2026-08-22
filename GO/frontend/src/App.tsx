@@ -1,7 +1,8 @@
 import { useState } from 'react'
-import { FaGears, FaCircleInfo } from 'react-icons/fa6'
+import { FaGears, FaCircleInfo, FaGear } from 'react-icons/fa6'
 import { ProcessTab } from './components/ProcessTab'
 import { InfoTab } from './components/InfoTab'
+import { SettingsModal } from './components/SettingsModal'
 import { useWailsEvents } from './hooks/useWailsEvents'
 import { useAppStore } from './store/appStore'
 
@@ -11,6 +12,7 @@ function App() {
   useWailsEvents()
   const [tab, setTab] = useState<TabKey>('process')
   const isProcessing = useAppStore((s) => s.isProcessing)
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false)
 
   return (
     <div className="flex h-screen flex-col">
@@ -33,6 +35,14 @@ function App() {
         <TabButton active={tab === 'info'} onClick={() => setTab('info')}>
           <FaCircleInfo /> Thông tin
         </TabButton>
+        <button
+          type="button"
+          onClick={() => setIsSettingsOpen(true)}
+          className="mb-3.5 ml-2 rounded-lg border border-border p-2 text-muted transition-colors hover:border-accent hover:text-accent"
+          title="Cấu hình"
+        >
+          <FaGear size={14} />
+        </button>
         <div className="ml-auto mb-3.5 flex items-center gap-2 rounded-full border border-border px-3 py-1.5 font-mono text-[11px] text-muted">
           <span
             className={`h-1.5 w-1.5 rounded-full ${
@@ -48,6 +58,7 @@ function App() {
       <footer className="border-t border-border px-4 py-2 text-center text-xs text-muted">
         © 2026 HUỲNH ĐẠT THÀNH. All rights reserved
       </footer>
+      {isSettingsOpen && <SettingsModal onClose={() => setIsSettingsOpen(false)} />}
     </div>
   )
 }
