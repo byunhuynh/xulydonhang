@@ -24,6 +24,21 @@ func collapseWhitespace(s string) string {
 	return whitespaceRunPattern.ReplaceAllString(s, " ")
 }
 
+// stripAllWhitespace removes every whitespace character entirely (not
+// just collapsing runs — see collapseWhitespace), for a documented
+// divergence where whitespace appears at DIFFERENT character positions
+// on each side, not merely a different RUN WIDTH at the same position.
+// Confirmed real case (see knownDivergences_Coop's own doc comment):
+// Python/PyMuPDF's real output for 4 archived Coop PDFs has a genuine
+// mid-word-splitting bug on this exact font ("Co. opMar t Cai Lay"),
+// where collapseWhitespace alone ("Co. opMar t Cai Lay", unchanged —
+// every run is already width 1) can never equal Go's correct output
+// ("Co.opMart Cai Lay") no matter how it's collapsed; only removing
+// whitespace ENTIRELY makes both sides identical ("Co.opMartCaiLay").
+func stripAllWhitespace(s string) string {
+	return whitespaceRunPattern.ReplaceAllString(s, "")
+}
+
 // fixturePricingSource is a PricingSource that always returns the same
 // frozen *pricing.Index — used by both the "real sample file" processor
 // tests (with a small inline index) and the golden-fixture tests (with
@@ -140,20 +155,29 @@ func compareRowsAgainstFixture(t *testing.T, excelPath string, fixture fixtureDa
 			expected := stringify(expectedRow[col])
 			got := cell(col)
 			if isAllowed(i, col) {
-				// Column E's allowlist entries (currently FujiMart-only —
-				// see knownDivergences_Fujimart's own comment) document a
-				// specific, evidenced whitespace-run-width divergence, not
-				// a license to ignore the cell outright: collapse runs of
-				// whitespace to a single space on both sides and still
-				// compare, so a genuine content bug (wrong branch name,
-				// wrong store code, an undecoded mojibake character) hiding
-				// behind the same allowlist entry still fails this test.
-				// Every other column keeps the original blanket-skip
-				// behavior, unchanged for the other 5 vendors' golden
-				// tests that also share this helper.
+				// Column E's allowlist entries document a specific,
+				// evidenced whitespace-only divergence, not a license to
+				// ignore the cell outright: still compare after
+				// normalizing whitespace, so a genuine content bug (wrong
+				// branch name, wrong store code, an undecoded mojibake
+				// character) hiding behind the same allowlist entry still
+				// fails this test. Two different whitespace-only
+				// divergence SHAPES are known, tried in order: (1)
+				// FujiMart's own case is a different whitespace RUN WIDTH
+				// at the same position (collapseWhitespace: any run
+				// becomes a single space); (2) Coop's own case (see
+				// knownDivergences_Coop) is whitespace at genuinely
+				// DIFFERENT character positions — a real Python/PyMuPDF
+				// mid-word-splitting bug on that font — which
+				// collapseWhitespace alone can never equal, since every
+				// run there is already width 1; only removing whitespace
+				// ENTIRELY (stripAllWhitespace) makes both sides
+				// identical. Every other column keeps the original
+				// blanket-skip behavior, unchanged for the other vendors'
+				// golden tests that also share this helper.
 				if col == "E" {
-					if collapseWhitespace(expected) != collapseWhitespace(got) {
-						*mismatches = append(*mismatches, fmt.Sprintf("%s row %d col %s: got %q, want %q (mismatch even after whitespace-run normalization)", fixture.SourcePDF, i, col, got, expected))
+					if collapseWhitespace(expected) != collapseWhitespace(got) && stripAllWhitespace(expected) != stripAllWhitespace(got) {
+						*mismatches = append(*mismatches, fmt.Sprintf("%s row %d col %s: got %q, want %q (mismatch even after whitespace normalization)", fixture.SourcePDF, i, col, got, expected))
 					}
 				}
 				continue
