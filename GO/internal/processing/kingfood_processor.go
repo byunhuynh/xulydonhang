@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"order-processor/internal/driveupload"
+	"order-processor/internal/pdfpage"
 	"order-processor/internal/processing/coop"
 	"order-processor/internal/processing/excelwriter"
 	"order-processor/internal/processing/kingfood"
@@ -286,7 +287,15 @@ func (p *RealProcessor) processKingfoodSegment(filePath string, realPageNum int,
 		mismatchDetails[i].ExcelRow += startRow
 	}
 
-	driveURL, uploadErr := driveupload.Upload(p.DriveClient, filePath, driveupload.Metadata{
+	uploadPath := filePath
+	if extractedPath, cleanup, extractErr := pdfpage.ExtractPage(filePath, realPageNum); extractErr == nil {
+		uploadPath = extractedPath
+		defer cleanup()
+	} else if p.LogFunc != nil {
+		p.LogFunc(fmt.Sprintf("⚠️ Không cắt được trang PDF để upload Drive (dùng nguyên file thay thế): %v", extractErr))
+	}
+
+	driveURL, uploadErr := driveupload.Upload(p.DriveClient, uploadPath, driveupload.Metadata{
 		Vendor:       "KINGFOOD",
 		EntryDate:    entryDate,
 		CustomerCode: kingfoodCustomerCode,
