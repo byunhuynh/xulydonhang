@@ -1,6 +1,10 @@
 package processing
 
-import "testing"
+import (
+	"testing"
+
+	"order-processor/internal/processing/vendor"
+)
 
 // TestIsCoopGeneratedPage_DetectsSignatureAcrossSpuriousNewline covers the
 // exact reason isCoopGeneratedPage strips ALL whitespace (not just
@@ -162,5 +166,115 @@ func TestExtractPageText_NBSPNormalizedToRegularSpace(t *testing.T) {
 		if ch == nbsp {
 			t.Fatalf("extracted text still contains NBSP (U+00A0) at byte offset %d — want it normalized to a regular space", i)
 		}
+	}
+}
+
+// TestPageRotation_ReadsInheritedRotateEntry covers pageRotation against
+// two real fixtures: 103145712-00 (a real archived Coop PDF confirmed via
+// direct inspection of its raw /Rotate entry to declare 90) and
+// 103226908-00 (a real Coop PDF with no rotation, used elsewhere in this
+// file — the overwhelmingly common case). Locks in that pageRotation
+// reads the real value rather than defaulting to 0 unconditionally.
+func TestPageRotation_ReadsInheritedRotateEntry(t *testing.T) {
+	cases := []struct {
+		file string
+		want int
+	}{
+		{"coop/testdata/realpdfs/103145712-00.pdf", 90},
+		{"coop/testdata/realpdfs/103226908-00.pdf", 0},
+	}
+	for _, c := range cases {
+		t.Run(c.file, func(t *testing.T) {
+			file, r, err := pdfOpen(c.file)
+			if err != nil {
+				t.Skipf("fixture not available: %v", err)
+			}
+			defer file.Close()
+			if r.NumPage() < 1 {
+				t.Fatal("expected at least 1 page")
+			}
+			got := pageRotation(r.Page(1))
+			if got != c.want {
+				t.Errorf("pageRotation(%s) = %d, want %d", c.file, got, c.want)
+			}
+		})
+	}
+}
+
+// TestExtractPageText_RotatedCoopPage_ReadsInCorrectOrder is the core
+// regression test for the rotation-handling fix: 103145712-00.pdf has a
+// real /Rotate 90 entry, and before this fix, reconstructLinesFromContent
+// bucketed rows by raw (unrotated) Y — the WITHIN-row axis for this
+// page, not the row axis — scrambling every row into fragments
+// interleaved with fragments of every other row (confirmed: output like
+// "KU Discounts -\nS" for what should read "SKU Discounts -" on one
+// line). Asserts the PO number, a product description, and the totals
+// label all appear as intact, correctly-ordered substrings.
+func TestExtractPageText_RotatedCoopPage_ReadsInCorrectOrder(t *testing.T) {
+	file, r, err := pdfOpen("coop/testdata/realpdfs/103145712-00.pdf")
+	if err != nil {
+		t.Skipf("fixture not available: %v", err)
+	}
+	defer file.Close()
+	if r.NumPage() < 1 {
+		t.Fatal("expected at least 1 page")
+	}
+	page := r.Page(1)
+	if rot := pageRotation(page); rot != 90 {
+		t.Fatalf("fixture's own rotation = %d, want 90 (fixture assumption changed?)", rot)
+	}
+	text, err := extractPageText(page)
+	if err != nil {
+		t.Fatalf("extractPageText returned error: %v", err)
+	}
+	for _, want := range []string{
+		"P/O Number:", "103145712-00",
+		"3547985-0", "NG BLUE huong nuoc hoa 3kg",
+		"Sub Total -",
+	} {
+		if !containsSubstring(text, want) {
+			t.Errorf("extracted text missing intact substring %q — got: %.500s", want, text)
+		}
+	}
+}
+
+// TestExtractPageText_RotatedCoopPage_MirrorFallbackStillIdentifiable
+// covers the OTHER real /Rotate 90 shape found in this Coop generator's
+// corpus: 103269932-00.pdf's reading order runs the OPPOSITE direction
+// along the same axis as 103145712-00 (confirmed: "POM343"'s own raw Y
+// values DEcrease in reading order here, vs increase there — the same
+// /Rotate 90 value does not by itself predict this sign). Without trying
+// the mirrored candidate, reconstructLinesFromContent's primary attempt
+// produces reversed text ("- stnuocsiD UKS" for "SKU Discounts -") that
+// vendor.Identify correctly rejects, falling back to the original
+// glued-together GetPlainText text. This test locks in that the mirrored
+// candidate — not the reversed primary one — is what gets selected;
+// this specific fixture's OWN golden-fixture test is still red for an
+// unrelated reason (this generator additionally inserts a spurious
+// space between every character on some of its pages, a distinct, not
+// yet fixed bug — see the digits appearing space-separated below), so
+// this test only locks in "reading order is right", not "exact match".
+func TestExtractPageText_RotatedCoopPage_MirrorFallbackStillIdentifiable(t *testing.T) {
+	file, r, err := pdfOpen("coop/testdata/realpdfs/103269932-00.pdf")
+	if err != nil {
+		t.Skipf("fixture not available: %v", err)
+	}
+	defer file.Close()
+	if r.NumPage() < 1 {
+		t.Fatal("expected at least 1 page")
+	}
+	page := r.Page(1)
+	if rot := pageRotation(page); rot != 90 {
+		t.Fatalf("fixture's own rotation = %d, want 90 (fixture assumption changed?)", rot)
+	}
+	recon, ok := reconstructLinesFromContent(page)
+	if !ok {
+		t.Fatal("reconstructLinesFromContent returned ok=false")
+	}
+	if got := vendor.Identify(recon); got != "Coop" {
+		t.Fatalf("vendor.Identify(reconstructed) = %q, want %q — mirror candidate was not selected (the unmirrored primary candidate reverses every character, e.g. \"SKU Discounts -\" becomes \"- stnuocsiD UKS\", which vendor.Identify's own coopPattern never matches)", got, "Coop")
+	}
+	if containsSubstring(recon, "00-239692301") {
+		t.Error("reconstructed text contains the REVERSED PO number — primary (non-mirrored) candidate was used")
 	}
 }

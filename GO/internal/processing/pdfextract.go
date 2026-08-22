@@ -95,11 +95,7 @@ func trueVisualLineCount(page pdf.Page) int {
 	if len(content.Text) == 0 {
 		return 0
 	}
-	rows := make(map[int64]bool, 64)
-	for _, t := range content.Text {
-		rows[int64(t.Y)] = true
-	}
-	return len(rows)
+	return len(clusterRowsByY(rotateForReading(content.Text, pageRotation(page), false)))
 }
 
 // isCoopGeneratedPage reports whether text was produced by Coop's own
@@ -247,6 +243,123 @@ func extractPageTextRaw(page pdf.Page) (string, error) {
 	return reconstructed, nil
 }
 
+// rowYJitterTolerance: points. Two text runs belong to the same visual
+// row if their Y positions are within this distance of the row's own
+// reference Y (its first, topmost run). Confirmed necessary on a real
+// archived Coop PDF (103145712-00): individual glyphs of the SAME word
+// ("SKU", "S"/"K"/"U") reported Y values only ~0.05-0.15pt apart, but
+// straddling different sides of an integer boundary (608.966/609.015/
+// 609.065) — hard int64-truncated bucketing (the original approach)
+// split them into 2 different "rows", scrambling reading order once
+// those fragments got sorted alongside every other row on the page. Real
+// row-to-row spacing on this same PDF measured ~6.8pt (591.24 -> 584.4),
+// nearly 50x this tolerance, so genuinely distinct rows are never at
+// risk of merging.
+const rowYJitterTolerance = 1.5
+
+// clusterRowsByY groups text runs into visual rows by Y proximity (see
+// rowYJitterTolerance), ordered top-to-bottom (PDF Y increases upward).
+// Shared by reconstructLinesFromContent (which also needs each row's own
+// members, in original run order) and trueVisualLineCount (which only
+// needs the row count) so both agree on what counts as one visual row.
+func clusterRowsByY(texts []pdf.Text) [][]pdf.Text {
+	sorted := make([]pdf.Text, len(texts))
+	copy(sorted, texts)
+	sort.SliceStable(sorted, func(i, j int) bool { return sorted[i].Y > sorted[j].Y })
+
+	var rows [][]pdf.Text
+	var rowRefY float64
+	for _, t := range sorted {
+		if len(rows) == 0 || rowRefY-t.Y > rowYJitterTolerance {
+			rows = append(rows, nil)
+			rowRefY = t.Y
+		}
+		last := len(rows) - 1
+		rows[last] = append(rows[last], t)
+	}
+	return rows
+}
+
+// pageRotation reads a page's inherited /Rotate entry (PDF spec: MAY be
+// inherited from an ancestor Pages node, not always present directly on
+// the page dict), normalized to one of 0/90/180/270. Returns 0 (no
+// rotation) if absent anywhere in the chain — the overwhelmingly common
+// case, and the correct default per spec.
+func pageRotation(page pdf.Page) int {
+	for v := page.V; !v.IsNull(); v = v.Key("Parent") {
+		r := v.Key("Rotate")
+		if r.IsNull() {
+			continue
+		}
+		n := int(r.Int64()) % 360
+		if n < 0 {
+			n += 360
+		}
+		return n
+	}
+	return 0
+}
+
+// rotateForReading returns texts with X/Y replaced by reading-order
+// coordinates (increasing X = rightward in the DISPLAYED page, and — to
+// reuse clusterRowsByY's existing "sort Y descending, cluster by
+// proximity" logic unchanged — increasing Y = further UP the displayed
+// page, matching Rotate 0's own already-correct convention) — bypassing
+// the CONTENT STREAM's raw, unrotated coordinate system a page's
+// /Rotate entry asks a viewer to rotate for display. Only the relative
+// ordering and point-scale distances matter here (this feeds sorting
+// and a small absolute gap threshold, never absolute page positions),
+// so a simple axis swap + negation is enough — no page width/height
+// needed, unlike a full display-coordinate transform.
+//
+// Confirmed empirically against a real archived Coop PDF with /Rotate
+// 90 (103145712-00): "POM343"'s own 6 characters, read in that exact
+// order, had CONSTANT raw X and raw Y increasing by the font's own
+// per-glyph advance — i.e. in raw content-stream space, moving right in
+// reading order is moving along raw Y, not raw X, and successive
+// visual ROWS (confirmed via distinct field labels appearing later in
+// the content stream) had raw X increasing by roughly one line height
+// per row. Before this transform, clusterRowsByY bucketed by raw Y
+// directly, treating what is actually the WITHIN-row axis for a rotated
+// page as if it were the ROW axis — every row split into fragments
+// interleaved with fragments of every OTHER row once naively sorted,
+// scrambling reading order (confirmed: output like "KU Discounts -\nS"
+// for what should read "SKU Discounts -" on one line).
+//
+// mirror flips the within-row (reading-order-X) axis only, NOT the row
+// axis. Needed because a second real archived Coop PDF with the SAME
+// /Rotate 90 (103269932-00) had "POM343"'s own characters read in order
+// with raw Y DEcreasing — the opposite sign from 103145712-00 — while
+// its row axis (raw X, increasing for later rows) matched exactly. Two
+// PDFs sharing one /Rotate value but disagreeing on reading-order sign
+// for one axis only is not something /Rotate alone predicts; the caller
+// tries both and keeps whichever one the vendor-identification check
+// (see reconstructLinesFromContent) accepts, rather than this function
+// guessing a single "correct" sign that would silently mis-handle
+// whichever of the two page shapes it guessed wrong for.
+func rotateForReading(texts []pdf.Text, rotation int, mirror bool) []pdf.Text {
+	if rotation == 0 {
+		return texts
+	}
+	sign := 1.0
+	if mirror {
+		sign = -1.0
+	}
+	out := make([]pdf.Text, len(texts))
+	copy(out, texts)
+	for i, t := range out {
+		switch rotation {
+		case 90:
+			out[i].X, out[i].Y = sign*t.Y, -t.X
+		case 180:
+			out[i].X, out[i].Y = sign*-t.X, -t.Y
+		case 270:
+			out[i].X, out[i].Y = sign*-t.Y, t.X
+		}
+	}
+	return out
+}
+
 // reconstructLinesFromContent rebuilds a line-structured page text
 // directly from each text run's own (X, Y) position — bypassing
 // GetPlainText's/GetTextByRow's content-stream-operator-based line
@@ -256,51 +369,73 @@ func extractPageTextRaw(page pdf.Page) (string, error) {
 // positioning operators, even though Page.Content()'s lower-level walk
 // does compute distinct per-run Y coordinates correctly — confirmed by
 // inspecting both against the same real archived PDF). Runs are
-// bucketed by truncated Y (rows), rows ordered top-to-bottom (PDF Y
-// increases upward), and within a row, runs ordered left-to-right by X
-// with a space inserted wherever there's a visible horizontal gap
-// (mirrors normal word spacing; a small negative/zero gap between two
-// runs already means they're touching, e.g. mid-word kerning splits).
+// clustered into rows by Y proximity (see rowYJitterTolerance), rows
+// ordered top-to-bottom (PDF Y increases upward), and within a row, runs
+// ordered left-to-right by X with a space inserted wherever there's a
+// visible horizontal gap (mirrors normal word spacing; a small
+// negative/zero gap between two runs already means they're touching,
+// e.g. mid-word kerning splits).
 func reconstructLinesFromContent(page pdf.Page) (string, bool) {
 	content := page.Content()
 	if len(content.Text) == 0 {
 		return "", false
 	}
 
-	rowsByY := make(map[int64][]pdf.Text)
-	for _, t := range content.Text {
-		y := int64(t.Y)
-		rowsByY[y] = append(rowsByY[y], t)
+	rotation := pageRotation(page)
+	primary := buildTextFromRows(clusterRowsByY(rotateForReading(content.Text, rotation, false)))
+	if rotation != 90 && rotation != 270 {
+		return primary, true
 	}
-	ys := make([]int64, 0, len(rowsByY))
-	for y := range rowsByY {
-		ys = append(ys, y)
+	// Try the within-row-mirrored candidate too (see rotateForReading's
+	// doc comment for why: two real /Rotate 90 Coop PDFs disagreed on
+	// which sign reproduces true reading order for this axis) and keep
+	// whichever one is actually identifiable as a real vendor page —
+	// vendor.Identify is a coarse check, but a mirrored reconstruction
+	// of real text reads as reversed word fragments that essentially
+	// never happen to match any vendor's real signature phrase, while a
+	// correctly-oriented one does. Prefer primary on a tie or when
+	// neither identifies (matches this function's existing contract:
+	// callers apply their own, stronger safety net against whatever
+	// this returns).
+	if vendor.Identify(primary) != "" {
+		return primary, true
 	}
-	sort.Slice(ys, func(i, j int) bool { return ys[i] > ys[j] })
+	mirrored := buildTextFromRows(clusterRowsByY(rotateForReading(content.Text, rotation, true)))
+	if vendor.Identify(mirrored) != "" {
+		return mirrored, true
+	}
+	return primary, true
+}
 
-	// gapThreshold: points; separates real word gaps from touching/kerned
-	// runs within the same word. Calibrated against two real archived
-	// PDFs with different font-width behavior: one (103157888-00) where
-	// this library reports W=0 for every glyph (word gaps then come only
-	// from literal " " glyphs, so this threshold is moot there), and one
-	// (103311304-00) where real per-glyph widths ARE reported and
-	// same-word adjacent-glyph gaps measured up to ~2.0pt while the
-	// smallest real word-to-word gap measured ~9.7pt.
-	//
-	// Note: some archived PDFs render certain field LABELS (seen: "P/O
-	// Number", "Sub Total", "Total") with deliberately wide letter
-	// tracking baked into the glyph positions themselves — no threshold
-	// distinguishes that from a real word gap, since the gap magnitude
-	// is genuinely the same either way for those specific labels. Tried
-	// raising this to 4.0 to chase that case; it neither fixed nor broke
-	// anything across all 155 golden fixtures (verified empirically), so
-	// left at the value with the clearer direct justification above.
-	// coop.CountPOsOnPage tolerates the result via spacedPattern (see
-	// dispatch.go) rather than this threshold trying to fully solve it.
-	const gapThreshold = 2.0
+// gapThreshold: points; separates real word gaps from touching/kerned
+// runs within the same word. Calibrated against two real archived
+// PDFs with different font-width behavior: one (103157888-00) where
+// this library reports W=0 for every glyph (word gaps then come only
+// from literal " " glyphs, so this threshold is moot there), and one
+// (103311304-00) where real per-glyph widths ARE reported and
+// same-word adjacent-glyph gaps measured up to ~2.0pt while the
+// smallest real word-to-word gap measured ~9.7pt.
+//
+// Note: some archived PDFs render certain field LABELS (seen: "P/O
+// Number", "Sub Total", "Total") with deliberately wide letter
+// tracking baked into the glyph positions themselves — no threshold
+// distinguishes that from a real word gap, since the gap magnitude
+// is genuinely the same either way for those specific labels. Tried
+// raising this to 4.0 to chase that case; it neither fixed nor broke
+// anything across all 155 golden fixtures (verified empirically), so
+// left at the value with the clearer direct justification above.
+// coop.CountPOsOnPage tolerates the result via spacedPattern (see
+// dispatch.go) rather than this threshold trying to fully solve it.
+const gapThreshold = 2.0
+
+// buildTextFromRows concatenates each row's runs left-to-right by X,
+// inserting a space at visible horizontal gaps (see gapThreshold),
+// joining rows with a newline. Shared by reconstructLinesFromContent's
+// primary and rotation-mirrored candidates so both go through identical
+// gap/skip logic.
+func buildTextFromRows(rows [][]pdf.Text) string {
 	var b strings.Builder
-	for _, y := range ys {
-		items := rowsByY[y]
+	for _, items := range rows {
 		sort.SliceStable(items, func(i, j int) bool { return items[i].X < items[j].X })
 		lastX, lastW := -1.0, 0.0
 		for _, it := range items {
@@ -326,5 +461,5 @@ func reconstructLinesFromContent(page pdf.Page) (string, bool) {
 		}
 		b.WriteString("\n")
 	}
-	return b.String(), true
+	return b.String()
 }
