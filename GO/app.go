@@ -11,6 +11,7 @@ import (
 
 	"github.com/wailsapp/wails/v2/pkg/runtime"
 
+	"order-processor/internal/applock"
 	"order-processor/internal/appsettings"
 	"order-processor/internal/config"
 	"order-processor/internal/fileset"
@@ -156,6 +157,46 @@ func (a *App) startup(ctx context.Context) {
 			a.emitter.Emit("files:dropped", valid)
 		}
 	})
+
+	go a.runLockChecker(ctx)
+}
+
+// runLockChecker periodically re-checks applock.Check and emits its
+// result as an "applock:status" event ("locked" | "unlocked" |
+// "checking") for the frontend to react to live, without requiring an
+// app restart for a revoked/renewed license to take effect. Checks
+// immediately on startup, then every lockCheckInterval while healthy;
+// any error (network unreachable, row not found, bad date) is reported
+// as "checking" rather than "locked" - status genuinely undetermined,
+// not a confirmed expiry - and retried sooner, at lockRetryInterval,
+// until a determinate result comes back. Runs until ctx is cancelled
+// (app shutdown).
+func (a *App) runLockChecker(ctx context.Context) {
+	const lockCheckInterval = 30 * time.Minute
+	const lockRetryInterval = 1 * time.Minute
+
+	client := applock.NewHTTPClient()
+	wait := time.Duration(0) // fire immediately on the first iteration
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-time.After(wait):
+		}
+
+		status, err := applock.Check(client, time.Now())
+		switch {
+		case err != nil:
+			a.emitter.Emit("applock:status", "checking")
+			wait = lockRetryInterval
+		case status.Locked:
+			a.emitter.Emit("applock:status", "locked")
+			wait = lockCheckInterval
+		default:
+			a.emitter.Emit("applock:status", "unlocked")
+			wait = lockCheckInterval
+		}
+	}
 }
 
 // GetSTT trả về số thứ tự đơn hàng bắt đầu hiện tại.

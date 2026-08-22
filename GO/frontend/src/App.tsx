@@ -3,6 +3,8 @@ import { FaGears, FaCircleInfo, FaGear } from 'react-icons/fa6'
 import { ProcessTab } from './components/ProcessTab'
 import { InfoTab } from './components/InfoTab'
 import { SettingsModal } from './components/SettingsModal'
+import { TitleBar } from './components/TitleBar'
+import { LockOverlay } from './components/LockOverlay'
 import { useWailsEvents } from './hooks/useWailsEvents'
 import { useAppStore } from './store/appStore'
 
@@ -12,10 +14,12 @@ function App() {
   useWailsEvents()
   const [tab, setTab] = useState<TabKey>('process')
   const isProcessing = useAppStore((s) => s.isProcessing)
+  const lockStatus = useAppStore((s) => s.lockStatus)
   const [isSettingsOpen, setIsSettingsOpen] = useState(false)
 
   return (
     <div className="flex h-screen flex-col">
+      <TitleBar />
       <header className="flex items-center gap-1 border-b border-border bg-panel/60 px-4 pt-3">
         <div className="mr-4 flex items-center gap-2.5 pb-3.5">
           <img
@@ -59,6 +63,7 @@ function App() {
         © 2026 HUỲNH ĐẠT THÀNH. All rights reserved
       </footer>
       {isSettingsOpen && <SettingsModal onClose={() => setIsSettingsOpen(false)} />}
+      {lockStatus !== 'unlocked' && <LockOverlay status={lockStatus} />}
     </div>
   )
 }

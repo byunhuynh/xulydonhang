@@ -65,3 +65,11 @@ img, .no-drag {
   -webkit-user-drag: none;
   user-drag: none;
 }
+
+.wails-drag {
+  --wails-draggable: drag;
+}
+
+.wails-no-drag {
+  --wails-draggable: no-drag;
+}

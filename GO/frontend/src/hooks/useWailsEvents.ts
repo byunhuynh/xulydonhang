@@ -1,6 +1,6 @@
 import { useEffect } from 'react'
 import { EventsOn, OnFileDrop, OnFileDropOff } from '../../wailsjs/runtime/runtime'
-import { useAppStore } from '../store/appStore'
+import { useAppStore, type LockStatus } from '../store/appStore'
 import type { OrderRow } from '../types'
 
 export function useWailsEvents() {
@@ -9,6 +9,7 @@ export function useWailsEvents() {
   const setProcessing = useAppStore((s) => s.setProcessing)
   const setStt = useAppStore((s) => s.setStt)
   const addFiles = useAppStore((s) => s.addFiles)
+  const setLockStatus = useAppStore((s) => s.setLockStatus)
 
   useEffect(() => {
     const offLog = EventsOn('process:log', (line: string) => appendLog(line))
@@ -18,6 +19,7 @@ export function useWailsEvents() {
       setStt(finalStt)
     })
     const offDrop = EventsOn('files:dropped', (paths: string[]) => addFiles(paths))
+    const offLock = EventsOn('applock:status', (status: LockStatus) => setLockStatus(status))
     // Attaches the actual dragover/dragleave/drop DOM listeners on window;
     // without this call the Go-side runtime.OnFileDrop callback never fires
     // and WebView2 falls back to navigating the window to the dropped file.
@@ -29,7 +31,8 @@ export function useWailsEvents() {
       offRow()
       offDone()
       offDrop()
+      offLock()
       OnFileDropOff()
     }
-  }, [appendLog, appendRow, setProcessing, setStt, addFiles])
+  }, [appendLog, appendRow, setProcessing, setStt, addFiles, setLockStatus])
 }
