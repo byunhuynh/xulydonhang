@@ -32,14 +32,11 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
     )
   }
 
-  const allKeys = [
-    ...Object.keys(settings.gid),
-    ...Object.keys(settings.zalo),
-    ...Object.keys(settings.reminder),
-  ]
-  const hasDuplicates =
-    new Set(allKeys.filter((k) => k.trim() !== '')).size !==
-    allKeys.filter((k) => k.trim() !== '').length
+  function hasDupInMap(m: Record<string, string>): boolean {
+    const keys = Object.keys(m).filter((k) => k.trim() !== '')
+    return new Set(keys).size !== keys.length
+  }
+  const hasDuplicates = hasDupInMap(settings.gid) || hasDupInMap(settings.zalo) || hasDupInMap(settings.reminder)
 
   async function handleSave() {
     if (!settings) return
