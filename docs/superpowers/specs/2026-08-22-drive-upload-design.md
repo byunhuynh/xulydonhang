@@ -105,6 +105,15 @@ var dateInputLayouts = []string{
 	"02-01-06",
 	"2006-01-02",
 	"2006/01/02",
+	// JMart's own entry/cancel date regex allows 1-2 digit day/month
+	// with no zero-padding (internal/processing/jmart/extract.go:8,
+	// `\d{1,2}/\d{1,2}/\d{4}`) — verified during spec writeup, not
+	// assumed. "02/01/2006" alone would fail to parse a real
+	// single-digit day or month (e.g. "5/3/2026"); Go's non-padded
+	// day/month layout tokens ("2"/"1") cover both 1- and 2-digit
+	// input, so this one extra layout is enough — no vendor-specific
+	// function needed.
+	"2/1/2006",
 }
 
 // formatDate mirrors Python's _format_date: try each layout in turn,
@@ -381,12 +390,60 @@ Thêm import `"order-processor/internal/driveupload"` vào `coop_processor.go`.
 
 ### 6. Áp dụng cho 8 vendor còn lại
 
-Cùng pattern chính xác như Coop ở trên, mỗi vendor tự có:
-- Hàm xử lý riêng (`processLotteSegment`, `processSatraSegment`, `processEmartSegment`, `processKingfoodSegment`, `processWinmartSegment`, `processFujimartSegment`, `processJMartSegment`, `processBigcDocument`/`processBigcStorePage`) trong file `<vendor>_processor.go` tương ứng.
-- Điểm chèn: NGAY SAU `excelwriter.WriteOrderRows` (hoặc hàm ghi Excel tương đương của vendor đó) thành công, TRƯỚC khi build `OrderRow` trả về — giống hệt vị trí ở Coop.
-- `Metadata.Vendor`: dùng đúng tên vendor viết hoa như code hiện có truyền cho `System`/log (vd `"COOP"`, `"BIGC"`, `"SATRA"`...) — không tự đặt tên mới.
-- `Metadata.CustomerCode`/`EntryDate`/`CancelDate`/`OutputName`: map đúng biến cục bộ tương ứng đã có sẵn trong từng hàm (customerCode/entryDate/cancelDate/PO number) — TÊN BIẾN CỤ THỂ khác nhau giữa các vendor, phải đọc code thật của từng file để xác định đúng biến, không suy đoán.
-- BigC (`processBigcDocument`) xử lý CẢ FILE cùng lúc (không phải per-segment như Coop) — có thể tạo nhiều `OrderRow` từ 1 lần gọi `Upload` (dùng chung 1 `driveURL` cho các dòng cùng file, hoặc gọi `Upload` riêng cho mỗi customer/store page nếu file được ghi Excel riêng từng phần - đọc kỹ code hiện tại của `processBigcDocument`/`processBigcStorePage` để quyết định đúng, đây có thể cần xử lý khác 1 chút so với pattern Coop).
+Cùng pattern chính xác như Coop ở trên: gọi `driveupload.Upload` NGAY SAU `excelwriter.WriteOrderRows` thành công, TRƯỚC khi build `OrderRow` trả về, log kết quả nền qua `p.LogFunc` giống hệt khối code ở mục 5, chỉ khác `Metadata` map vào đúng biến cục bộ của từng vendor. Đã đọc trực tiếp code thật của cả 8 file để xác định chính xác — bảng dưới đây là kết quả xác nhận (không suy đoán), dùng làm căn cứ literal cho plan:
+
+| Vendor | File | Hàm | EntryDate (biến) | CancelDate (biến) | CustomerCode (biến) | OutputName (biến) | Metadata.Vendor | Định dạng ngày thật đã verify |
+|---|---|---|---|---|---|---|---|---|
+| Lotte | `lotte_processor.go` | `processLotteSegment` | `info.EntryDate` | `cancelDate` | `customerCode` | `info.PONumber` | `"LOTTE"` | dd/mm/yyyy (`lotte/extract.go:61`). **Lưu ý**: `cancelDate` (`lotte.ExtractCancelDate`) có thể là chuỗi NHIỀU DÒNG nối bằng "\n" (khi nhiều dòng khớp pattern ngày) — `formatDate` sẽ không parse được trường hợp này và trả "NA", đây là hành vi CHẤP NHẬN ĐƯỢC (khớp thiết kế fallback-to-NA), không phải lỗi cần sửa. |
+| Satra | `satra_processor.go` | `processSatraSegment` | `entryDate` | `cancelDate` | `customerCode` | `poNumber` | `"SATRA"` | dd/mm/yyyy, đã zero-pad (`satra/extract.go:107`, `formatMDYtoDMYChecked`) |
+| Emart | `emart_processor.go` | `processEmartSegment` | `entryDate` | `cancelDate` | `emartCustomerCode` (hằng số package, KHÔNG phải biến cục bộ) | `poNumber` | `"EMART"` | dấu "." được thay bằng "/" (`emart/extract.go:114`), thứ tự day/month CHƯA xác nhận 100% từ nguồn PDF thật — đã có sẵn 2 layout (`"02/01/2006"` và `"2006/01/02"`) trong `dateInputLayouts` để phủ cả 2 khả năng, không cần thêm |
+| Kingfood | `kingfood_processor.go` | `processKingfoodSegment` | `entryDate` | `cancelDate` | `kingfoodCustomerCode` (hằng số) | `poNumber` | `"KINGFOOD"` | dd/mm/yyyy, đã zero-pad (`kingfood/extract.go:84`) |
+| Winmart | `winmart_processor.go` | `processWinmartSegment` | `entryDate` | `cancelDate` | `customerCode` | `poNumber` | `"WINMART"` | dấu "." thay bằng "/" (`winmart/extract.go:34,44`), cùng tình huống như Emart — 2 layout hiện có đã đủ phủ |
+| FujiMart | `fujimart_processor.go` | `processFujimartSegment` | `entryDate` | `cancelDate` | `fujimartCustomerCode` (hằng số) | `poNumber` | `"FUJIMART"` | dd/mm/yyyy, đã zero-pad (`fujimart/extract.go:108`, dùng trực tiếp layout `"02/01/2006"`) |
+| JMart | `jmart_processor.go` | `processJMartSegment` | `entryDate` | `cancelDate` | `jmartCustomerCode` (hằng số) | `poNumber` | `"JMART"` | **d/m/yyyy KHÔNG zero-pad** (`jmart/extract.go:8`, regex `\d{1,2}/\d{1,2}/\d{4}`) — đây là lý do `dateInputLayouts` (mục 1) đã có thêm layout `"2/1/2006"`, bắt buộc phải có layout này thì JMart mới parse được ngày 1 chữ số |
+| BigC | `bigc_processor.go` | `processBigcDocument` | `entryDate` | `cancelDate` | `customerCode` | `poNumber` | `"BIGC"` | dd/mm/yyyy, đã zero-pad (`bigc/extract.go:98`, `convertEntryDate`) — **KIẾN TRÚC KHÁC HẲN, xem chi tiết ngay dưới** |
+
+**BigC — điểm khác biệt kiến trúc (đã xác định rõ, không còn là quyết định mở)**: `processBigcDocument` xử lý CẢ FILE 1 lần (nhiều store page), gom TẤT CẢ store page thành công vào 1 `allRows` rồi gọi `excelwriter.WriteOrderRows` DUY NHẤT 1 LẦN cho cả file (dòng ~155-166 hiện tại) — SAU khi từng `OrderRow` riêng của mỗi store page đã được append vào slice `orderRows` (dòng ~148-152, bên trong vòng lặp, TRƯỚC lần gọi `WriteOrderRows` đó). Vì file nguồn là DUY NHẤT (`filePath`, giống nhau cho mọi store page) và quyết định đã chốt là "upload nguyên file gốc" — chỉ gọi `driveupload.Upload` **ĐÚNG 1 LẦN**, ngay sau `WriteOrderRows` thành công, rồi gán CÙNG 1 `driveURL` ngược lại cho MỌI phần tử trong `orderRows` (cùng cách mà code hiện tại đã backfill `ExcelRow` offset ngược lại cho `PriceMismatchDetails` ở đúng vị trí này). Code chính xác cần chèn vào `processBigcDocument`, thay thế khối `if len(allRows) > 0 { ... }` hiện tại:
+
+```go
+	if len(allRows) > 0 {
+		headerDescription := fmt.Sprintf("%s (Tổng trọng lượng: %s)", description, coop.FormatWeightKg(totalWeight))
+		startRow, err := excelwriter.WriteOrderRows(p.ExcelPath, allRows, headerDescription)
+		if err != nil {
+			return nil, err
+		}
+		for i := range orderRows {
+			for j := range orderRows[i].PriceMismatchDetails {
+				orderRows[i].PriceMismatchDetails[j].ExcelRow += startRow
+			}
+		}
+
+		driveURL, uploadErr := driveupload.Upload(p.DriveClient, filePath, driveupload.Metadata{
+			Vendor:       "BIGC",
+			EntryDate:    entryDate,
+			CustomerCode: customerCode,
+			CancelDate:   cancelDate,
+			OutputName:   poNumber,
+		}, func(ok bool, err error) {
+			if p.LogFunc == nil {
+				return
+			}
+			if ok {
+				p.LogFunc(fmt.Sprintf("✅ Đã upload file lên Drive: %s", filepath.Base(filePath)))
+			} else {
+				p.LogFunc(fmt.Sprintf("❌ Upload Drive thất bại (%s): %v", filepath.Base(filePath), err))
+			}
+		})
+		if uploadErr != nil && p.LogFunc != nil {
+			p.LogFunc(fmt.Sprintf("⚠️ Không đọc được file để upload Drive: %v", uploadErr))
+		}
+		for i := range orderRows {
+			orderRows[i].DriveURL = driveURL
+		}
+	}
+```
+
+Thêm import `"order-processor/internal/driveupload"` vào `bigc_processor.go`.
 
 ### 7. Frontend — `types.ts`
 
