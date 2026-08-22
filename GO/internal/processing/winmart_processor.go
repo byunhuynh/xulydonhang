@@ -112,7 +112,7 @@ func winmartZeroPriceSkip(rows []excelwriter.Row) bool {
 // comma-joined list of every matched SKU — the same divergence BigC's
 // invoice-level block had, confirmed independently for Winmart by direct
 // source comparison during planning.
-func (p *RealProcessor) processWinmartSegment(filePath, text, pageLabel string) (OrderRow, error) {
+func (p *RealProcessor) processWinmartSegment(filePath string, realPageNum int, text, pageLabel string) (OrderRow, error) {
 	poNumber, entryDate, cancelDate, note, ok := winmart.ParseOrderInfo(text)
 	if !ok {
 		return OrderRow{}, fmt.Errorf("không tách được số PO")

@@ -86,7 +86,7 @@ const noSaturdayDeliveryCustomerCode = "MN_MT_stph"
 // direct source comparison during planning — so this mirrors
 // processSegment's promo loop shape, not processLotteSegment's
 // single-call shape.
-func (p *RealProcessor) processSatraSegment(filePath, text, pageLabel string) (OrderRow, error) {
+func (p *RealProcessor) processSatraSegment(filePath string, realPageNum int, text, pageLabel string) (OrderRow, error) {
 	text = normalizeSatraText(text)
 
 	poNumber, ok := satra.ParsePONumber(text)

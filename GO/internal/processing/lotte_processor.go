@@ -34,7 +34,7 @@ func lotteOrderNumber(poNumber string) string {
 // Coop's cm/cf-bundling convention only, write_to_dondathang_lotte never
 // calls tachkhuyenmai_coop); (2) no ShipTo-address special-casing (no
 // COOPFOOD-equivalent concept for Lotte).
-func (p *RealProcessor) processLotteSegment(filePath, text, pageLabel string) (OrderRow, error) {
+func (p *RealProcessor) processLotteSegment(filePath string, realPageNum int, text, pageLabel string) (OrderRow, error) {
 	// Normalize before handing text to the lotte package: this repo's Go
 	// PDF library (github.com/ledongthuc/pdf, unlike the PyMuPDF the
 	// original Python used) inserts spurious blank lines into

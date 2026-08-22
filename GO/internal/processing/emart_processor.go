@@ -91,7 +91,7 @@ func emartStoreNames(storeName string) (shortCode, fullName string) {
 // other ported vendor. This mirrors xulydonhang.py's
 // `diachigiaohang = congtrinh` (:4987) where congtrinh IS tenstore, the
 // already-truncated ("Delivery to :"-line split on 3 spaces) label.
-func (p *RealProcessor) processEmartSegment(filePath, text, pageLabel string) (OrderRow, error) {
+func (p *RealProcessor) processEmartSegment(filePath string, realPageNum int, text, pageLabel string) (OrderRow, error) {
 	poNumber, entryDate, cancelDate, storeName, ok := emart.ParseOrderInfo(text)
 	if !ok {
 		return OrderRow{}, fmt.Errorf("không tách được số PO/ngày đặt hàng")

@@ -77,7 +77,7 @@ func (p *RealProcessor) Process(ctx context.Context, filePath string, stt int) (
 			}
 			for segIdx, segment := range segments {
 				segLabel := fmt.Sprintf("%d/%d", segIdx+1, len(segments))
-				row, err := p.processSegment(filePath, segment, segLabel)
+				row, err := p.processSegment(filePath, pageNumbers[pageIdx], segment, segLabel)
 				if err != nil {
 					rows = append(rows, OrderRow{
 						FileName: filepath.Base(filePath), Page: segLabel, System: "Coop",
@@ -89,7 +89,7 @@ func (p *RealProcessor) Process(ctx context.Context, filePath string, stt int) (
 			}
 
 		case "Lotte":
-			row, err := p.processLotteSegment(filePath, text, pageLabel)
+			row, err := p.processLotteSegment(filePath, pageNumbers[pageIdx], text, pageLabel)
 			if err != nil {
 				rows = append(rows, OrderRow{
 					FileName: filepath.Base(filePath), Page: pageLabel, System: "Lotte",
@@ -100,7 +100,7 @@ func (p *RealProcessor) Process(ctx context.Context, filePath string, stt int) (
 			rows = append(rows, row)
 
 		case "Satra":
-			row, err := p.processSatraSegment(filePath, text, pageLabel)
+			row, err := p.processSatraSegment(filePath, pageNumbers[pageIdx], text, pageLabel)
 			if err != nil {
 				rows = append(rows, OrderRow{
 					FileName: filepath.Base(filePath), Page: pageLabel, System: "Satra",
@@ -111,7 +111,7 @@ func (p *RealProcessor) Process(ctx context.Context, filePath string, stt int) (
 			rows = append(rows, row)
 
 		case "Emart":
-			row, err := p.processEmartSegment(filePath, text, pageLabel)
+			row, err := p.processEmartSegment(filePath, pageNumbers[pageIdx], text, pageLabel)
 			if err != nil {
 				rows = append(rows, OrderRow{
 					FileName: filepath.Base(filePath), Page: pageLabel, System: "Emart",
@@ -122,7 +122,7 @@ func (p *RealProcessor) Process(ctx context.Context, filePath string, stt int) (
 			rows = append(rows, row)
 
 		case "Kingfood":
-			row, err := p.processKingfoodSegment(filePath, text, pageLabel)
+			row, err := p.processKingfoodSegment(filePath, pageNumbers[pageIdx], text, pageLabel)
 			if err != nil {
 				rows = append(rows, OrderRow{
 					FileName: filepath.Base(filePath), Page: pageLabel, System: "Kingfood",
@@ -148,7 +148,7 @@ func (p *RealProcessor) Process(ctx context.Context, filePath string, stt int) (
 			if improved, wErr := extractWinmartPageTextFromFile(filePath, pageNumbers[pageIdx]-1); wErr == nil && improved != "" {
 				winmartText = improved
 			}
-			row, err := p.processWinmartSegment(filePath, winmartText, pageLabel)
+			row, err := p.processWinmartSegment(filePath, pageNumbers[pageIdx], winmartText, pageLabel)
 			if err != nil {
 				rows = append(rows, OrderRow{
 					FileName: filepath.Base(filePath), Page: pageLabel, System: "Winmart",
@@ -159,7 +159,7 @@ func (p *RealProcessor) Process(ctx context.Context, filePath string, stt int) (
 			rows = append(rows, row)
 
 		case "FujiMart":
-			row, err := p.processFujimartSegment(filePath, text, pageLabel)
+			row, err := p.processFujimartSegment(filePath, pageNumbers[pageIdx], text, pageLabel)
 			if err != nil {
 				rows = append(rows, OrderRow{
 					FileName: filepath.Base(filePath), Page: pageLabel, System: "FujiMart",
@@ -170,7 +170,7 @@ func (p *RealProcessor) Process(ctx context.Context, filePath string, stt int) (
 			rows = append(rows, row)
 
 		case "JMart":
-			row, err := p.processJMartSegment(filePath, text, pageLabel)
+			row, err := p.processJMartSegment(filePath, pageNumbers[pageIdx], text, pageLabel)
 			if err != nil {
 				rows = append(rows, OrderRow{
 					FileName: filepath.Base(filePath), Page: pageLabel, System: "JMart",
@@ -210,7 +210,7 @@ func splitPageIntoPOs(text string) ([]string, bool) {
 	return segments, true
 }
 
-func (p *RealProcessor) processSegment(filePath, text, pageLabel string) (OrderRow, error) {
+func (p *RealProcessor) processSegment(filePath string, realPageNum int, text, pageLabel string) (OrderRow, error) {
 	info := coop.ParseInvoiceInfo(text)
 	notes := coop.ExtractNotes(text)
 	shipTo := coop.ExtractShipTo(text)

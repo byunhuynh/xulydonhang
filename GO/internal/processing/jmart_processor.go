@@ -39,7 +39,7 @@ func jmartOrderNumber(poNumber string) string {
 // identify marker falls through to the shared per-page dispatch loop's
 // default case (coop_processor.go), which emits a Failed/"Thất bại"
 // OrderRow for that page.
-func (p *RealProcessor) processJMartSegment(filePath, text, pageLabel string) (OrderRow, error) {
+func (p *RealProcessor) processJMartSegment(filePath string, realPageNum int, text, pageLabel string) (OrderRow, error) {
 	poNumber, entryDate, cancelDate, deliveryAddress, ok := jmart.ParseOrderInfo(text)
 	if !ok {
 		return OrderRow{}, fmt.Errorf("không tách được số PO/ngày đặt hàng/địa chỉ giao hàng")
