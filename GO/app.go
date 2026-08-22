@@ -94,9 +94,20 @@ func resolveRepoDir(filename string) string {
 
 // NewApp creates a new App application struct
 func NewApp() (*App, error) {
-	store, err := productdata.Load(resolveRepoFile("data.xlsx"))
+	// Customer/product data now comes from a live Google Sheet, not the
+	// local data.xlsx file — a prior update to just this one machine's
+	// data.xlsx never reached any OTHER machine running this app, the
+	// exact class of staleness pricing/promotion data already avoids via
+	// its own live fetch (pricing.HTTPSource). No offline fallback to
+	// data.xlsx: a network failure here fails NewApp entirely, matching
+	// this app's already-full dependency on the same network for live
+	// pricing lookups mid-processing — a deliberate choice, not an
+	// oversight (see productdata.LoadFromSheets' own doc comment).
+	// data.xlsx itself is left on disk, untouched; nothing reads it
+	// anymore.
+	store, err := productdata.LoadFromSheets(resolveRepoFile("settings.ini"), productdata.NewHTTPClient())
 	if err != nil {
-		return nil, fmt.Errorf("app: load data.xlsx: %w", err)
+		return nil, fmt.Errorf("app: load customer/product data from Google Sheets: %w", err)
 	}
 
 	excelPath := resolveRepoFile("dondathang_test.xlsx")

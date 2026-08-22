@@ -29,6 +29,11 @@ type Store struct {
 	skuAlternation *regexp.Regexp
 }
 
+// Load builds a Store from data.xlsx's MaKH and SanPham sheets, read
+// directly off disk. See LoadFromSheets (sheets_source.go) for the
+// production Google-Sheets-backed equivalent — both share the same
+// row-processing logic (loadCustomerRows/loadProducts below), which only
+// cares about [][]string rows, not where they came from.
 func Load(path string) (*Store, error) {
 	f, err := excelize.OpenFile(path)
 	if err != nil {
@@ -36,28 +41,44 @@ func Load(path string) (*Store, error) {
 	}
 	defer f.Close()
 
-	customerRows, err := loadCustomerRows(f)
-	if err != nil {
-		return nil, err
-	}
-	products, skuMapping, err := loadProducts(f)
-	if err != nil {
-		return nil, err
-	}
-
-	return &Store{
-		customerRows:   customerRows,
-		products:       products,
-		skuMapping:     skuMapping,
-		skuAlternation: buildSkuAlternation(products),
-	}, nil
-}
-
-func loadCustomerRows(f *excelize.File) ([][4]string, error) {
-	rows, err := f.GetRows("MaKH")
+	customerSheetRows, err := f.GetRows("MaKH")
 	if err != nil {
 		return nil, fmt.Errorf("productdata: read MaKH sheet: %w", err)
 	}
+	// RawCellValue: true is required here — without it, GetRows returns
+	// the cell's *displayed* string, rounded to whatever number format
+	// is applied in the spreadsheet (e.g. weight 3.475 displays/rounds
+	// to "3.48" under a "0.00" format). Python's openpyxl reads the
+	// actual underlying float (3.475) with no such formatting applied,
+	// so the un-raw read here silently double-rounds every weight/pack
+	// size, compounding into wrong line-weight (AT) and total-weight (L)
+	// values downstream — confirmed against data.xlsx directly (SKU
+	// TP31630's true weight is 3.475 kg; GetRows without RawCellValue
+	// returned "3.48").
+	productSheetRows, err := f.GetRows("SanPham", excelize.Options{RawCellValue: true})
+	if err != nil {
+		return nil, fmt.Errorf("productdata: read SanPham sheet: %w", err)
+	}
+
+	return newStore(customerSheetRows, productSheetRows), nil
+}
+
+// newStore builds a Store directly from already-read row data — shared
+// by Load (local data.xlsx) and LoadFromSheets (live Google Sheets
+// fetch), which differ only in how they obtain customerRows/productRows,
+// not in how those rows get parsed.
+func newStore(customerRows, productRows [][]string) *Store {
+	customers := loadCustomerRows(customerRows)
+	products, skuMapping := loadProducts(productRows)
+	return &Store{
+		customerRows:   customers,
+		products:       products,
+		skuMapping:     skuMapping,
+		skuAlternation: buildSkuAlternation(products),
+	}
+}
+
+func loadCustomerRows(rows [][]string) [][4]string {
 	var out [][4]string
 	for i, row := range rows {
 		if i == 0 {
@@ -69,25 +90,10 @@ func loadCustomerRows(f *excelize.File) ([][4]string, error) {
 		}
 		out = append(out, r)
 	}
-	return out, nil
+	return out
 }
 
-func loadProducts(f *excelize.File) (map[string]ProductInfo, map[string]string, error) {
-	// RawCellValue: true is required here — without it, GetRows returns
-	// the cell's *displayed* string, rounded to whatever number format
-	// is applied in the spreadsheet (e.g. weight 3.475 displays/rounds
-	// to "3.48" under a "0.00" format). Python's openpyxl reads the
-	// actual underlying float (3.475) with no such formatting applied,
-	// so the un-raw read here silently double-rounds every weight/pack
-	// size, compounding into wrong line-weight (AT) and total-weight (L)
-	// values downstream — confirmed against data.xlsx directly (SKU
-	// TP31630's true weight is 3.475 kg; GetRows without RawCellValue
-	// returned "3.48").
-	rows, err := f.GetRows("SanPham", excelize.Options{RawCellValue: true})
-	if err != nil {
-		return nil, nil, fmt.Errorf("productdata: read SanPham sheet: %w", err)
-	}
-
+func loadProducts(rows [][]string) (map[string]ProductInfo, map[string]string) {
 	products := make(map[string]ProductInfo)
 	skuMapping := make(map[string]string)
 	ws := regexp.MustCompile(`\s+`)
@@ -143,11 +149,29 @@ func loadProducts(f *excelize.File) (map[string]ProductInfo, map[string]string, 
 		}
 	}
 
-	return products, skuMapping, nil
+	return products, skuMapping
 }
 
+// parseFloat handles both number conventions this Store's two row
+// sources actually produce: data.xlsx's raw excelize read (RawCellValue:
+// true) always renders these weight/pack-size cells with a dot decimal
+// separator (e.g. "3.475", confirmed — see loadProducts' own comment on
+// TP31630), while a live Google Sheets CSV export renders the SAME kind
+// of value in Vietnamese locale, comma decimal (e.g. "3,48" — confirmed
+// empirically against the real production sheet: TP31630's own row
+// there). Neither source has ever been observed using BOTH a comma AND
+// a dot for these two columns (no thousands-grouping on values this
+// small), so "comma present, dot absent" reliably identifies the
+// Sheets-CSV convention and gets normalized to a dot before parsing;
+// otherwise a comma is stripped as a thousands separator, unchanged from
+// this function's original (xlsx-only) behavior.
 func parseFloat(s string) float64 {
-	s = strings.TrimSpace(strings.ReplaceAll(s, ",", ""))
+	s = strings.TrimSpace(s)
+	if strings.Contains(s, ",") && !strings.Contains(s, ".") {
+		s = strings.ReplaceAll(s, ",", ".")
+	} else {
+		s = strings.ReplaceAll(s, ",", "")
+	}
 	v, err := strconv.ParseFloat(s, 64)
 	if err != nil {
 		return 0
