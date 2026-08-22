@@ -58,6 +58,74 @@ func TestWriteOrderRows_WritesColumnsAndFormula(t *testing.T) {
 	}
 }
 
+func TestClearOrderRows_DeletesDataRowsKeepsHeader(t *testing.T) {
+	path := copyTestWorkbook(t)
+
+	rows := []Row{
+		{EntryDate: "23/07/2026", OrderNumber: "ĐĐHCOOP-1", Status: "Chưa thực hiện", IsNoteRow: true, ProductName: "COOPMART PO1"},
+		{SKU: "1111111-1", Qty: 1, UnitPrice: 1000, ProductName: "Sản phẩm A"},
+		{SKU: "2222222-2", Qty: 2, UnitPrice: 2000, ProductName: "Sản phẩm B"},
+	}
+	if _, err := WriteOrderRows(path, rows, "COOPMART PO1"); err != nil {
+		t.Fatalf("WriteOrderRows returned error: %v", err)
+	}
+
+	headerBefore, err := excelize.OpenFile(path)
+	if err != nil {
+		t.Fatalf("failed reopening workbook: %v", err)
+	}
+	rowsBefore, _ := headerBefore.GetRows("Don dat hang")
+	headerBefore.Close()
+	if len(rowsBefore) != 11 {
+		t.Fatalf("rows before clear = %d, want 11 (8 header + 3 written)", len(rowsBefore))
+	}
+
+	if err := ClearOrderRows(path); err != nil {
+		t.Fatalf("ClearOrderRows returned error: %v", err)
+	}
+
+	f, err := excelize.OpenFile(path)
+	if err != nil {
+		t.Fatalf("failed reopening workbook after clear: %v", err)
+	}
+	defer f.Close()
+
+	rowsAfter, err := f.GetRows("Don dat hang")
+	if err != nil {
+		t.Fatalf("GetRows returned error: %v", err)
+	}
+	if len(rowsAfter) != 8 {
+		t.Fatalf("rows after clear = %d, want 8 (header only, all data rows removed)", len(rowsAfter))
+	}
+
+	header, _ := f.GetCellValue("Don dat hang", "A8")
+	if header != "STT" {
+		t.Fatalf("A8 (header row) = %q, want the header text to survive the clear untouched", header)
+	}
+}
+
+func TestClearOrderRows_NoOpWhenNoDataRows(t *testing.T) {
+	path := copyTestWorkbook(t)
+
+	if err := ClearOrderRows(path); err != nil {
+		t.Fatalf("ClearOrderRows on an already-empty template returned error: %v", err)
+	}
+
+	f, err := excelize.OpenFile(path)
+	if err != nil {
+		t.Fatalf("failed reopening workbook: %v", err)
+	}
+	defer f.Close()
+
+	rows, err := f.GetRows("Don dat hang")
+	if err != nil {
+		t.Fatalf("GetRows returned error: %v", err)
+	}
+	if len(rows) != 8 {
+		t.Fatalf("rows = %d, want 8 (unchanged, nothing to clear)", len(rows))
+	}
+}
+
 func TestWriteOrderRows_WritesStoreNameToColumnK(t *testing.T) {
 	path := copyTestWorkbook(t)
 

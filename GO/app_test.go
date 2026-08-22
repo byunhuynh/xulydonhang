@@ -39,9 +39,29 @@ func (s *stubProcessor) Process(ctx context.Context, filePath string, stt int) (
 	return []processing.OrderRow{{FileName: filePath, PO: "PO1", Status: processing.StatusDone}}, nil
 }
 
+// freshOrderWorkbook copies the empty (8-header-row, no data) test
+// template into a temp dir and returns its path - runBatch now calls
+// excelwriter.ClearOrderRows(a.excelPath) before anything else (see
+// app.go), which requires a real, valid xlsx file at that path; an
+// empty/zero-value excelPath (as these tests used before that change)
+// fails immediately with "not a valid zip file", aborting the batch
+// before the stub processor ever runs.
+func freshOrderWorkbook(t *testing.T) string {
+	t.Helper()
+	data, err := os.ReadFile("internal/processing/excelwriter/testdata/dondathang.xlsx")
+	if err != nil {
+		t.Fatalf("failed reading test fixture: %v", err)
+	}
+	path := filepath.Join(t.TempDir(), "dondathang.xlsx")
+	if err := os.WriteFile(path, data, 0o644); err != nil {
+		t.Fatalf("failed writing temp workbook: %v", err)
+	}
+	return path
+}
+
 func TestRunBatch_EmitsLogRowPerFileThenDone(t *testing.T) {
 	cfg := config.NewStore(filepath.Join(t.TempDir(), "config.txt"))
-	a := &App{cfg: cfg, processor: &stubProcessor{}}
+	a := &App{cfg: cfg, processor: &stubProcessor{}, excelPath: freshOrderWorkbook(t)}
 	emitter := &fakeEmitter{}
 
 	a.runBatch(emitter, []string{"a.pdf", "b.pdf"}, 10)
@@ -76,7 +96,7 @@ func TestRunBatch_EmitsLogRowPerFileThenDone(t *testing.T) {
 
 func TestRunBatch_FileErrorEmitsLogAndContinues(t *testing.T) {
 	cfg := config.NewStore(filepath.Join(t.TempDir(), "config.txt"))
-	a := &App{cfg: cfg, processor: &stubProcessor{failOn: "bad.pdf"}}
+	a := &App{cfg: cfg, processor: &stubProcessor{failOn: "bad.pdf"}, excelPath: freshOrderWorkbook(t)}
 	emitter := &fakeEmitter{}
 
 	a.runBatch(emitter, []string{"bad.pdf", "good.pdf"}, 1)

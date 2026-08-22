@@ -104,6 +104,46 @@ func WriteOrderRows(path string, rows []Row, headerDescription string) (startRow
 	return firstRow, nil
 }
 
+// ClearOrderRows deletes every data row (row 9 onward) from the "Don
+// dat hang" sheet, leaving rows 1-8 (the AMIS import template's header
+// block) untouched — mirrors xulydonhang.py's own
+// xoa_du_lieu_don_dat_hang exactly (delete_rows(9, max_row-8)), called
+// once at the start of every processing run so dondathang.xlsx only
+// ever holds the MOST RECENT batch's results, never accumulating rows
+// across multiple "Xử lý" clicks. A file with 8 or fewer rows (nothing
+// to clear yet) is a no-op, not an error.
+func ClearOrderRows(path string) error {
+	f, err := excelize.OpenFile(path)
+	if err != nil {
+		return fmt.Errorf("excelwriter: open %s: %w", path, err)
+	}
+	defer f.Close()
+
+	rows, err := f.GetRows(sheetName)
+	if err != nil {
+		return fmt.Errorf("excelwriter: read %s: %w", sheetName, err)
+	}
+	maxRow := len(rows)
+	if maxRow < 9 {
+		return nil
+	}
+
+	// excelize removes and shifts up one row at a time - repeatedly
+	// removing row 9 itself (not incrementing the target) correctly
+	// deletes every data row down to just the header, matching
+	// Python's single bulk delete_rows(9, count) call.
+	for i := 9; i <= maxRow; i++ {
+		if err := f.RemoveRow(sheetName, 9); err != nil {
+			return fmt.Errorf("excelwriter: remove row 9 of %s: %w", sheetName, err)
+		}
+	}
+
+	if err := f.Save(); err != nil {
+		return fmt.Errorf("excelwriter: save %s: %w", path, err)
+	}
+	return nil
+}
+
 // ConfirmPrice overwrites the price (column Y) of a row that
 // WriteOrderRows already wrote and flagged as a price mismatch —
 // clearing the red-fill style and the "Kiểm tra lại giá mã này!"

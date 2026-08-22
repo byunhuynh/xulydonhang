@@ -315,6 +315,22 @@ func (a *App) runBatch(emitter Emitter, files []string, stt int) {
 		emitter.Emit("process:done", current)
 	}()
 
+	// Mirrors xulydonhang.py's xu_ly_don_hang: clear every existing data
+	// row in dondathang.xlsx (via excelwriter.ClearOrderRows) BEFORE
+	// writing this batch's results, so the file only ever holds the
+	// most recent processing run's output rather than accumulating rows
+	// across every click - confirmed as the real, intended production
+	// behavior (App.py:545, xoa_du_lieu_don_dat_hang() called first
+	// thing inside the "Xác nhận" button handler). If this fails (most
+	// commonly: the file is currently open in Excel and locked), abort
+	// the whole batch without processing anything - writing new rows on
+	// top of stale ones that failed to clear would be worse than not
+	// starting at all.
+	if err := excelwriter.ClearOrderRows(a.excelPath); err != nil {
+		emitter.Emit("process:log", fmt.Sprintf("❌ Không xóa được dữ liệu cũ trong dondathang.xlsx (có thể file đang mở trong Excel, hãy đóng lại rồi thử lại): %v", err))
+		return
+	}
+
 	for _, f := range files {
 		emitter.Emit("process:log", fmt.Sprintf("Đang xử lý %s...", filepath.Base(f)))
 		rows, err := a.processOne(f, current)
