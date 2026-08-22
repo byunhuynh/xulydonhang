@@ -22,7 +22,13 @@ import (
 // once done with the file (typically immediately after
 // driveupload.Upload's synchronous file read completes, not deferred
 // to the end of a long-running function) to remove the temp directory
-// created for it.
+// created for it. A panic inside api.ExtractPagesFile (pdfcpu's own
+// fault.Catch only recovers its own internal Panic error type and
+// explicitly re-panics anything else, e.g. a real index-out-of-range or
+// nil-deref hit on a malformed PDF) is recovered here and converted into
+// an ordinary error instead, matching pdfopen.go's and
+// pdfcmapfallback.go's own precedent: a single malformed PDF file must
+// never be able to crash the whole process.
 func ExtractPage(sourcePath string, pageNumber int) (tempPath string, cleanup func(), err error) {
 	noop := func() {}
 
@@ -31,6 +37,15 @@ func ExtractPage(sourcePath string, pageNumber int) (tempPath string, cleanup fu
 		return "", noop, fmt.Errorf("pdfpage: create temp dir: %w", err)
 	}
 	cleanup = func() { os.RemoveAll(tempDir) }
+
+	defer func() {
+		if r := recover(); r != nil {
+			cleanup()
+			tempPath = ""
+			cleanup = noop
+			err = fmt.Errorf("pdfpage: panic extracting page %d from %s: %v", pageNumber, sourcePath, r)
+		}
+	}()
 
 	pageArg := fmt.Sprintf("%d", pageNumber)
 	if err := api.ExtractPagesFile(sourcePath, tempDir, []string{pageArg}, nil); err != nil {
