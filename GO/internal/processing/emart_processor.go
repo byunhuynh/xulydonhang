@@ -7,6 +7,7 @@ import (
 	"strconv"
 	"strings"
 
+	"order-processor/internal/driveupload"
 	"order-processor/internal/processing/coop"
 	"order-processor/internal/processing/emart"
 	"order-processor/internal/processing/excelwriter"
@@ -307,6 +308,26 @@ func (p *RealProcessor) processEmartSegment(filePath, text, pageLabel string) (O
 		mismatchDetails[i].ExcelRow += startRow
 	}
 
+	driveURL, uploadErr := driveupload.Upload(p.DriveClient, filePath, driveupload.Metadata{
+		Vendor:       "EMART",
+		EntryDate:    entryDate,
+		CustomerCode: emartCustomerCode,
+		CancelDate:   cancelDate,
+		OutputName:   poNumber,
+	}, func(ok bool, err error) {
+		if p.LogFunc == nil {
+			return
+		}
+		if ok {
+			p.LogFunc(fmt.Sprintf("✅ Đã upload file lên Drive: %s", filepath.Base(filePath)))
+		} else {
+			p.LogFunc(fmt.Sprintf("❌ Upload Drive thất bại (%s): %v", filepath.Base(filePath), err))
+		}
+	})
+	if uploadErr != nil && p.LogFunc != nil {
+		p.LogFunc(fmt.Sprintf("⚠️ Không đọc được file để upload Drive: %v", uploadErr))
+	}
+
 	statusKind := StatusKindDone
 	statusText := StatusDone
 	// Python's own status logic (xulydonhang.py:9367) flags a warning
@@ -320,6 +341,7 @@ func (p *RealProcessor) processEmartSegment(filePath, text, pageLabel string) (O
 	return OrderRow{
 		FileName: filepath.Base(filePath), Page: pageLabel, System: "Emart", MaKhachHang: emartCustomerCode,
 		PO: poNumber, DonGia: fmt.Sprintf("%.0f", totalValue), Status: statusText, StatusKind: statusKind,
+		DriveURL: driveURL,
 		SkuLog: skuLog, PriceMismatchCount: saigia, PriceMismatchDetails: mismatchDetails,
 	}, nil
 }
