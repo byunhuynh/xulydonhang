@@ -129,7 +129,7 @@ func NewApp() (*App, error) {
 		return nil, fmt.Errorf("app: load customer/product data from Google Sheets: %w", err)
 	}
 
-	excelPath := resolveRepoFile("dondathang_test.xlsx")
+	excelPath := resolveRepoFile("dondathang.xlsx")
 
 	return &App{
 		cfg:              config.NewStore(configFileName),
