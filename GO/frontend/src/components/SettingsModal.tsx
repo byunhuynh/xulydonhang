@@ -27,7 +27,7 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
 
   if (!settings) {
     return (
-      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60" onClick={onClose}>
         <div className="rounded-xl border border-border bg-panel p-6 text-sm text-muted">Đang tải...</div>
       </div>
     )

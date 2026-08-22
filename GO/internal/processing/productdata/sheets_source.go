@@ -57,7 +57,7 @@ func LoadFromSheets(gidMap map[string]string, client *http.Client) (*Store, erro
 func fetchSheetRows(client *http.Client, gidMap map[string]string, sheetKey string) ([][]string, error) {
 	gid, ok := gidMap[sheetKey]
 	if !ok {
-		return nil, fmt.Errorf("productdata: no %s gid in settings.ini's <gid> block", sheetKey)
+		return nil, fmt.Errorf("productdata: no %s gid configured", sheetKey)
 	}
 
 	url := fmt.Sprintf("https://docs.google.com/spreadsheets/d/%s/gviz/tq?tqx=out:csv&gid=%s", productDataSpreadsheetID, gid)

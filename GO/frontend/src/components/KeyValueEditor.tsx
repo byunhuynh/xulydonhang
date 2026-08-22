@@ -38,16 +38,16 @@ export function KeyValueEditor({ entries, onChange, keyLabel, valueLabel, valueT
 
   function commit(next: Row[]) {
     setRows(next)
+    const nonEmptyKeys = next.map((r) => r.key).filter((k) => k.trim() !== '')
+    const hasDup = new Set(nonEmptyKeys).size !== nonEmptyKeys.length
+    onDuplicateChange?.(hasDup)
+    if (hasDup) return
     const result: Record<string, string> = {}
     for (const row of next) {
       if (row.key.trim() === '' || row.value.trim() === '') continue
       result[row.key] = row.value
     }
     onChange(result)
-    if (onDuplicateChange) {
-      const nonEmptyKeys = next.map((r) => r.key).filter((k) => k.trim() !== '')
-      onDuplicateChange(new Set(nonEmptyKeys).size !== nonEmptyKeys.length)
-    }
   }
 
   function updateKey(id: number, key: string) {
