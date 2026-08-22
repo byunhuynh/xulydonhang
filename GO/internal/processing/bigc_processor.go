@@ -7,6 +7,7 @@ import (
 	"strconv"
 	"strings"
 
+	"order-processor/internal/driveupload"
 	"order-processor/internal/processing/bigc"
 	"order-processor/internal/processing/coop"
 	"order-processor/internal/processing/excelwriter"
@@ -162,6 +163,29 @@ func (p *RealProcessor) processBigcDocument(filePath string, pageTexts []string)
 			for j := range orderRows[i].PriceMismatchDetails {
 				orderRows[i].PriceMismatchDetails[j].ExcelRow += startRow
 			}
+		}
+
+		driveURL, uploadErr := driveupload.Upload(p.DriveClient, filePath, driveupload.Metadata{
+			Vendor:       "BIGC",
+			EntryDate:    entryDate,
+			CustomerCode: customerCode,
+			CancelDate:   cancelDate,
+			OutputName:   poNumber,
+		}, func(ok bool, err error) {
+			if p.LogFunc == nil {
+				return
+			}
+			if ok {
+				p.LogFunc(fmt.Sprintf("✅ Đã upload file lên Drive: %s", filepath.Base(filePath)))
+			} else {
+				p.LogFunc(fmt.Sprintf("❌ Upload Drive thất bại (%s): %v", filepath.Base(filePath), err))
+			}
+		})
+		if uploadErr != nil && p.LogFunc != nil {
+			p.LogFunc(fmt.Sprintf("⚠️ Không đọc được file để upload Drive: %v", uploadErr))
+		}
+		for i := range orderRows {
+			orderRows[i].DriveURL = driveURL
 		}
 	}
 
