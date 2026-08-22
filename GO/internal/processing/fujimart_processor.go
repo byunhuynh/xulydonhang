@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"order-processor/internal/driveupload"
 	"order-processor/internal/processing/coop"
 	"order-processor/internal/processing/excelwriter"
 	"order-processor/internal/processing/fujimart"
@@ -254,6 +255,26 @@ func (p *RealProcessor) processFujimartSegment(filePath, text, pageLabel string)
 		mismatchDetails[i].ExcelRow += startRow
 	}
 
+	driveURL, uploadErr := driveupload.Upload(p.DriveClient, filePath, driveupload.Metadata{
+		Vendor:       "FUJIMART",
+		EntryDate:    entryDate,
+		CustomerCode: fujimartCustomerCode,
+		CancelDate:   cancelDate,
+		OutputName:   poNumber,
+	}, func(ok bool, err error) {
+		if p.LogFunc == nil {
+			return
+		}
+		if ok {
+			p.LogFunc(fmt.Sprintf("✅ Đã upload file lên Drive: %s", filepath.Base(filePath)))
+		} else {
+			p.LogFunc(fmt.Sprintf("❌ Upload Drive thất bại (%s): %v", filepath.Base(filePath), err))
+		}
+	})
+	if uploadErr != nil && p.LogFunc != nil {
+		p.LogFunc(fmt.Sprintf("⚠️ Không đọc được file để upload Drive: %v", uploadErr))
+	}
+
 	statusKind := StatusKindDone
 	statusText := StatusDone
 	if saigia > 0 {
@@ -264,6 +285,7 @@ func (p *RealProcessor) processFujimartSegment(filePath, text, pageLabel string)
 	return OrderRow{
 		FileName: filepath.Base(filePath), Page: pageLabel, System: "FujiMart", MaKhachHang: fujimartCustomerCode,
 		PO: poNumber, DonGia: fmt.Sprintf("%.0f", totalValue), Status: statusText, StatusKind: statusKind,
+		DriveURL: driveURL,
 		SkuLog: skuLog, PriceMismatchCount: saigia, PriceMismatchDetails: mismatchDetails,
 	}, nil
 }
