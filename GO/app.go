@@ -132,6 +132,17 @@ func NewApp() (*App, error) {
 
 	excelPath := resolveRepoFile("dondathang.xlsx")
 
+	// orderDir must be resolved the same way excelPath/appSettingsPath
+	// already are - a bare "đơn hàng" literal resolves relative to the
+	// process's current working directory, which differs between
+	// `wails dev` (run from GO/) and the built .exe (CWD depends on how
+	// it was launched - a double-click sets it to the exe's own folder,
+	// not the repo root two levels up). Left unresolved, EnsureMonthlyFolder
+	// would silently create/scan an empty "đơn hàng" folder next to the
+	// exe instead of the real one at the repo root, so reloading the
+	// file list would show nothing even though real order files exist.
+	orderDir := filepath.Join(resolveRepoDir("settings.ini"), orderFolderName)
+
 	return &App{
 		cfg:              config.NewStore(configFileName),
 		appSettingsStore: appSettingsStore,
@@ -140,7 +151,7 @@ func NewApp() (*App, error) {
 			Pricing:   pricing.NewHTTPSource(settings.Gid),
 			ExcelPath: excelPath,
 		},
-		orderDir:  orderFolderName,
+		orderDir:  orderDir,
 		excelPath: excelPath,
 	}, nil
 }

@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { FaArrowsRotate, FaFolderOpen, FaXmark } from 'react-icons/fa6'
 import { useAppStore } from '../store/appStore'
 import { SelectFiles, ScanOrderFolder } from '../../wailsjs/go/main/App'
@@ -32,6 +32,17 @@ export function FileListPanel() {
       appendLog(`❌ Lỗi tải thư mục: ${String(err)}`)
     }
   }
+
+  // Auto-load the "đơn hàng" folder's contents once when the app opens,
+  // matching the old Python app's own startup behavior
+  // (load_files_from_folder(), called from MyApp.__init__) - without
+  // this, a freshly opened app shows an empty file list even when real
+  // order files are already sitting in the folder, requiring a manual
+  // "Tải lại" click every time before doing anything else.
+  useEffect(() => {
+    reload()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   async function pickFiles() {
     try {
