@@ -399,23 +399,43 @@ func clusterRowsByYIndexed(texts []pdf.Text) [][]indexedText {
 //     field's), so stream order places them correctly while spatial
 //     sorting does not.
 //
-// Word-gap detection still uses gapThreshold, but measured between
+// Word-gap detection still needs a distance check, measured between
 // STREAM-adjacent runs' transformed X (via rotateForReading), not
 // sorted-adjacent ones — needed because this generator sometimes has NO
 // glyph at all (not even a drawn space) between two fields with a real
 // visual gap (confirmed: "...Time: 18:16:19Purchase OrderP/O Number:..."
 // — "Time:" ends and "Purchase" begins with zero characters, drawn or
-// otherwise, between them). Without measuring the real position jump,
-// stream order alone glues these together, which broke
-// coop.CountPOsOnPage's own regex on "OrderP/O" (confirmed via this
-// project's own golden-fixture suite before this was added).
+// otherwise, between them; stream order alone glues these together,
+// which broke coop.CountPOsOnPage's own regex on "OrderP/O").
+//
+// The threshold itself is computed PER PAGE (rotatedPageGapThreshold),
+// not the fixed gapThreshold buildTextFromRows uses — a third real
+// archived Coop PDF (103231217-00) confirmed a fixed threshold cannot
+// serve every page: its own per-character advance is a uniform 4.21pt
+// (vs. 103145712-00's uniform 0.05pt), so gapThreshold=2.0 sits BETWEEN
+// two different real pages' normal character spacing, correctly
+// distinguishing one page's real word gaps from noise while
+// misclassifying the other page's every single character AS a word gap
+// ("P O M 3 4 3" instead of "POM343"). This generator's own per-page
+// character advance is otherwise remarkably uniform (confirmed via raw
+// per-run gap dumps: the same 3-4 decimal-place value repeats for
+// hundreds of consecutive runs on a given page), which is exactly what
+// makes a per-page MEDIAN gap a reliable proxy for "one normal character
+// step" on THAT page — real word/field gaps measured 74-thousands of
+// times that median across every page sampled, so an 10x-median floor
+// leaves enormous margin in both directions without needing to know a
+// page's own absolute font size in advance.
 func reconstructRotatedPage(page pdf.Page, rotation int) string {
 	content := page.Content()
 	rotated := rotateForReading(content.Text, rotation)
 	rows := clusterRowsByYIndexed(rotated)
-	var b strings.Builder
 	for _, items := range rows {
 		sort.SliceStable(items, func(i, j int) bool { return items[i].idx < items[j].idx })
+	}
+	threshold := rotatedPageGapThreshold(rows)
+
+	var b strings.Builder
+	for _, items := range rows {
 		lastX, lastW := -1.0, 0.0
 		for _, it := range items {
 			if it.S == "\n" {
@@ -426,7 +446,7 @@ func reconstructRotatedPage(page pdf.Page, rotation int) string {
 				if gap < 0 {
 					gap = -gap
 				}
-				if gap > gapThreshold {
+				if gap > threshold {
 					b.WriteString(" ")
 				}
 			}
@@ -436,6 +456,58 @@ func reconstructRotatedPage(page pdf.Page, rotation int) string {
 		b.WriteString("\n")
 	}
 	return b.String()
+}
+
+// gapThresholdMultiplier scales a page's own median stream-adjacent gap
+// (rotatedPageGapThreshold's "one normal character step" estimate) up
+// to a word-gap threshold. See reconstructRotatedPage's own doc comment
+// for the real measured ratios (smallest confirmed real word/field gap
+// was ~74x its page's own median step) that this margin sits well under.
+const gapThresholdMultiplier = 10.0
+
+// rotatedPageGapThreshold estimates a word-gap distance threshold
+// specific to THIS page, rather than trusting one fixed value (see
+// reconstructRotatedPage's doc comment for why a fixed value provably
+// cannot serve every page this generator produces). Collects every
+// stream-adjacent, same-row gap on the page, takes the median as a proxy
+// for "one normal character step" on this specific page, and scales it
+// up by gapThresholdMultiplier. Falls back to the fixed gapThreshold
+// (buildTextFromRows' own calibrated value) when there's not enough data
+// to compute a meaningful median, or when the scaled value would
+// actually be SMALLER than that floor — never make word-gap detection
+// more trigger-happy than the already-proven-safe baseline.
+func rotatedPageGapThreshold(rows [][]indexedText) float64 {
+	var gaps []float64
+	for _, items := range rows {
+		lastX, lastW := -1.0, 0.0
+		started := false
+		for _, it := range items {
+			if it.S == "\n" {
+				continue
+			}
+			if started {
+				gap := it.X - (lastX + lastW)
+				if gap < 0 {
+					gap = -gap
+				}
+				if gap > 0 {
+					gaps = append(gaps, gap)
+				}
+			}
+			lastX, lastW = it.X, it.W
+			started = true
+		}
+	}
+	if len(gaps) == 0 {
+		return gapThreshold
+	}
+	sort.Float64s(gaps)
+	median := gaps[len(gaps)/2]
+	threshold := median * gapThresholdMultiplier
+	if threshold < gapThreshold {
+		return gapThreshold
+	}
+	return threshold
 }
 
 // reconstructLinesFromContent rebuilds a line-structured page text

@@ -317,3 +317,67 @@ func TestExtractPageText_RotatedCoopPage_GluedFieldsStillGetASpace(t *testing.T)
 		t.Error("extracted text glues \"Purchase Order\" and \"P/O Number\" together with no separator — gap detection between stream-adjacent runs did not fire")
 	}
 }
+
+// TestExtractPageText_RotatedCoopPage_AdaptiveThresholdHandlesWideFont
+// covers a THIRD real archived Coop /Rotate 90 shape found in this
+// generator's corpus: 103231217-00.pdf has a uniform per-character
+// advance of ~4.21pt (confirmed via raw per-run gap dumps — the same
+// value repeats for hundreds of consecutive stream-adjacent runs on this
+// page), well ABOVE buildTextFromRows' fixed gapThreshold (2.0pt,
+// calibrated against two DIFFERENT real PDFs whose own normal advance is
+// smaller). Using that fixed threshold for this page's own word-gap
+// detection synthesized a space between every single character
+// ("P O M 3 4 3" instead of "POM343"). rotatedPageGapThreshold computes
+// a threshold specific to THIS page (a multiple of its own median
+// stream-adjacent gap) instead of trusting one fixed value across every
+// page this generator produces. Confirms both extremes stay correct on
+// real data: normal same-word character spacing does NOT get a
+// synthesized space, and a real field-to-field gap (P/O Number to
+// Purchase Order, drawn with zero glyphs between them on this same
+// page) still does.
+func TestExtractPageText_RotatedCoopPage_AdaptiveThresholdHandlesWideFont(t *testing.T) {
+	file, r, err := pdfOpen("coop/testdata/realpdfs/103231217-00.pdf")
+	if err != nil {
+		t.Skipf("fixture not available: %v", err)
+	}
+	defer file.Close()
+	if r.NumPage() < 1 {
+		t.Fatal("expected at least 1 page")
+	}
+	page := r.Page(1)
+	if rot := pageRotation(page); rot != 90 {
+		t.Fatalf("fixture's own rotation = %d, want 90 (fixture assumption changed?)", rot)
+	}
+	// Test reconstructLinesFromContent's OWN return value directly, not
+	// extractPageText's — extractPageText has a safety net (vendor.Identify
+	// rejects an unreadable reconstruction and falls back to the original,
+	// already-decent-enough-for-this-specific-file raw text), which would
+	// silently mask a broken reconstruction here: this particular fixture's
+	// raw GetPlainText text already keeps "POM343"/"103231217-00" intact on
+	// its own, so asserting only against extractPageText's final output
+	// cannot tell "reconstruction worked" apart from "reconstruction failed
+	// and the safety net quietly covered for it" — confirmed by mutation
+	// (temporarily shrinking gapThresholdMultiplier to 0.1 still passed an
+	// earlier, weaker version of this test that asserted against
+	// extractPageText instead of reconstructLinesFromContent).
+	recon, ok := reconstructLinesFromContent(page)
+	if !ok {
+		t.Fatal("reconstructLinesFromContent returned ok=false")
+	}
+	if containsSubstring(recon, "P O M") {
+		t.Error("reconstructed text spaces out individual characters (\"P O M\" instead of \"POM\") — the fixed gapThreshold was used instead of a per-page adaptive one")
+	}
+	for _, want := range []string{"POM343", "103231217-00", "3591312-3", "NX BLUE Huong Thanh Xuan T3.2L"} {
+		if !containsSubstring(recon, want) {
+			t.Errorf("reconstructed text missing intact substring %q — got: %.500s", want, recon)
+		}
+	}
+	// Also confirm extractPageText's own output stays correct end-to-end.
+	text, err := extractPageText(page)
+	if err != nil {
+		t.Fatalf("extractPageText returned error: %v", err)
+	}
+	if got := vendor.Identify(text); got != "Coop" {
+		t.Errorf("vendor.Identify(extractPageText result) = %q, want %q", got, "Coop")
+	}
+}
