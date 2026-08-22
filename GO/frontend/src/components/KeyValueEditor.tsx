@@ -1,5 +1,5 @@
 // GO/frontend/src/components/KeyValueEditor.tsx
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { FaTrash, FaPlus } from 'react-icons/fa6'
 
 interface KeyValueEditorProps {
@@ -8,6 +8,7 @@ interface KeyValueEditorProps {
   keyLabel: string
   valueLabel: string
   valueType: 'text' | 'number' | 'toggle'
+  onDuplicateChange?: (hasDuplicate: boolean) => void
 }
 
 interface Row {
@@ -27,8 +28,13 @@ function toRows(entries: Record<string, string>): Row[] {
 // và valueType. Dòng có khóa hoặc giá trị rỗng bị BỎ QUA khi gọi
 // onChange (không tính vào entries, không báo lỗi) — cho phép người
 // dùng gõ dở dang mà không bị validate ngay lập tức.
-export function KeyValueEditor({ entries, onChange, keyLabel, valueLabel, valueType }: KeyValueEditorProps) {
+export function KeyValueEditor({ entries, onChange, keyLabel, valueLabel, valueType, onDuplicateChange }: KeyValueEditorProps) {
   const [rows, setRows] = useState<Row[]>(() => toRows(entries))
+
+  useEffect(() => {
+    onDuplicateChange?.(false)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   function commit(next: Row[]) {
     setRows(next)
@@ -38,6 +44,10 @@ export function KeyValueEditor({ entries, onChange, keyLabel, valueLabel, valueT
       result[row.key] = row.value
     }
     onChange(result)
+    if (onDuplicateChange) {
+      const nonEmptyKeys = next.map((r) => r.key).filter((k) => k.trim() !== '')
+      onDuplicateChange(new Set(nonEmptyKeys).size !== nonEmptyKeys.length)
+    }
   }
 
   function updateKey(id: number, key: string) {

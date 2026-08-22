@@ -16,6 +16,7 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
   const [tab, setTab] = useState<SettingsTab>('gid')
   const [settings, setSettings] = useState<AppSettings | null>(null)
   const [saved, setSaved] = useState(false)
+  const [dupState, setDupState] = useState({ gid: false, zalo: false, reminder: false })
   const appendLog = useAppStore((s) => s.appendLog)
 
   useEffect(() => {
@@ -32,11 +33,7 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
     )
   }
 
-  function hasDupInMap(m: Record<string, string>): boolean {
-    const keys = Object.keys(m).filter((k) => k.trim() !== '')
-    return new Set(keys).size !== keys.length
-  }
-  const hasDuplicates = hasDupInMap(settings.gid) || hasDupInMap(settings.zalo) || hasDupInMap(settings.reminder)
+  const hasDuplicates = dupState.gid || dupState.zalo || dupState.reminder
 
   async function handleSave() {
     if (!settings) return
@@ -85,6 +82,7 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
             <KeyValueEditor
               entries={settings.gid}
               onChange={(gid) => setSettings({ ...settings, gid })}
+              onDuplicateChange={(hasDup) => setDupState((d) => ({ ...d, gid: hasDup }))}
               keyLabel="Hệ thống"
               valueLabel="Gid"
               valueType="number"
@@ -94,6 +92,7 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
             <KeyValueEditor
               entries={settings.zalo}
               onChange={(zalo) => setSettings({ ...settings, zalo })}
+              onDuplicateChange={(hasDup) => setDupState((d) => ({ ...d, zalo: hasDup }))}
               keyLabel="Nhóm"
               valueLabel="Tên hiển thị"
               valueType="text"
@@ -103,6 +102,7 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
             <KeyValueEditor
               entries={settings.reminder}
               onChange={(reminder) => setSettings({ ...settings, reminder })}
+              onDuplicateChange={(hasDup) => setDupState((d) => ({ ...d, reminder: hasDup }))}
               keyLabel="Nhóm"
               valueLabel="Bật"
               valueType="toggle"
