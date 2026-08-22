@@ -23,3 +23,9 @@ export interface LogEntry {
   time: string
   text: string
 }
+
+export interface AppSettings {
+  gid: Record<string, string>
+  zalo: Record<string, string>
+  reminder: Record<string, string>
+}
