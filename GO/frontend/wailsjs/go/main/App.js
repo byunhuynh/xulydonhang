@@ -6,12 +6,20 @@ export function ConfirmPrice(arg1, arg2) {
   return window['go']['main']['App']['ConfirmPrice'](arg1, arg2);
 }
 
+export function GetAppSettings() {
+  return window['go']['main']['App']['GetAppSettings']();
+}
+
 export function GetSTT() {
   return window['go']['main']['App']['GetSTT']();
 }
 
 export function ProcessFiles(arg1, arg2) {
   return window['go']['main']['App']['ProcessFiles'](arg1, arg2);
+}
+
+export function SaveAppSettings(arg1) {
+  return window['go']['main']['App']['SaveAppSettings'](arg1);
 }
 
 export function ScanOrderFolder() {
