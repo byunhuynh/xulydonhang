@@ -147,6 +147,9 @@ type uploadPayload struct {
 // only printed to a hidden console): the caller can route this to a
 // real, visible log line.
 func Upload(client *http.Client, path string, m Metadata, onResult func(ok bool, err error)) (string, error) {
+	if client == nil {
+		return "", fmt.Errorf("driveupload: nil http.Client")
+	}
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return "", fmt.Errorf("driveupload: read %s: %w", path, err)

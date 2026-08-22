@@ -221,6 +221,33 @@ func TestUpload_FileNotFoundReturnsErrorSynchronously(t *testing.T) {
 	}
 }
 
+func TestUpload_NilClientReturnsErrorSynchronously(t *testing.T) {
+	var serverHit int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		atomic.AddInt32(&serverHit, 1)
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer server.Close()
+	withTestServer(t, server)
+
+	path := writeTempFile(t, "order.pdf", "fake pdf content")
+
+	url, err := Upload(nil, path, Metadata{Vendor: "COOP", OutputName: "PO1"}, nil)
+	if err == nil {
+		t.Fatal("expected an error for a nil client, got nil")
+	}
+	if url != "" {
+		t.Errorf("expected an empty URL on error, got %q", url)
+	}
+
+	// Give any (incorrectly) spawned goroutine a moment to fire, then
+	// confirm the server was never actually hit.
+	time.Sleep(100 * time.Millisecond)
+	if got := atomic.LoadInt32(&serverHit); got != 0 {
+		t.Errorf("server was hit %d times after a nil-client call, want 0 (no goroutine should have been spawned)", got)
+	}
+}
+
 func TestUpload_SendsCorrectPayloadFields(t *testing.T) {
 	type received struct {
 		Filename string `json:"filename"`
