@@ -7,10 +7,12 @@ import {
   FaChevronDown,
   FaChevronRight,
 } from 'react-icons/fa6'
+import { FaUpRightFromSquare } from 'react-icons/fa6'
 import { useAppStore } from '../store/appStore'
 import type { OrderRow, PriceMismatchDetail } from '../types'
 import { SectionHeader } from './SectionHeader'
 import { ConfirmPrice } from '../../wailsjs/go/main/App'
+import { BrowserOpenURL } from '../../wailsjs/runtime/runtime'
 
 const columns: { key: Exclude<keyof OrderRow, 'priceMismatchDetails'>; label: string }[] = [
   { key: 'fileName', label: 'Tên file' },
@@ -21,6 +23,7 @@ const columns: { key: Exclude<keyof OrderRow, 'priceMismatchDetails'>; label: st
   { key: 'donGia', label: 'Đơn giá' },
   { key: 'priceMismatchCount', label: 'Đối soát giá' },
   { key: 'status', label: 'Trạng thái' },
+  { key: 'driveUrl', label: 'File Drive' },
 ]
 
 function statusMeta(row: OrderRow): { classes: string; label: string } {
@@ -183,6 +186,21 @@ export function ResultTable() {
                             )
                           ) : c.key === 'donGia' ? (
                             <span className="font-semibold text-accent">{formatMoney(row[c.key])}</span>
+                          ) : c.key === 'driveUrl' ? (
+                            row.driveUrl ? (
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation()
+                                  BrowserOpenURL(row.driveUrl)
+                                }}
+                                className="inline-flex items-center gap-1.5 rounded-full border border-border px-2.5 py-0.5 font-sans font-semibold text-accent transition-colors hover:border-accent"
+                              >
+                                <FaUpRightFromSquare size={9} /> Mở file
+                              </button>
+                            ) : (
+                              <span className="text-muted">—</span>
+                            )
                           ) : (
                             row[c.key]
                           )}
