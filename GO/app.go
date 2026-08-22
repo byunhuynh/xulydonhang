@@ -11,6 +11,7 @@ import (
 
 	"github.com/wailsapp/wails/v2/pkg/runtime"
 
+	"order-processor/internal/appsettings"
 	"order-processor/internal/config"
 	"order-processor/internal/fileset"
 	"order-processor/internal/processing"
@@ -38,15 +39,16 @@ const configFileName = "config.txt"
 
 // App struct
 type App struct {
-	ctx          context.Context
-	cfg          *config.Store
-	processor    processing.Processor
-	emitter      Emitter
-	orderDir     string
-	excelPath    string
-	resolvedRows map[int]bool
-	resolvedMu   sync.Mutex
-	processing   atomic.Bool
+	ctx              context.Context
+	cfg              *config.Store
+	appSettingsStore *appsettings.Store
+	processor        processing.Processor
+	emitter          Emitter
+	orderDir         string
+	excelPath        string
+	resolvedRows     map[int]bool
+	resolvedMu       sync.Mutex
+	processing       atomic.Bool
 }
 
 // resolveRepoFile looks for filename starting in the current working
@@ -94,6 +96,23 @@ func resolveRepoDir(filename string) string {
 
 // NewApp creates a new App application struct
 func NewApp() (*App, error) {
+	// Cấu hình (gid Google Sheets/Zalo/nhắc nhở) giờ đọc từ
+	// settings.bhconfig thay vì settings.ini — appSettingsPath PHẢI tính
+	// qua resolveRepoDir, KHÔNG dùng resolveRepoFile trực tiếp: file
+	// .bhconfig chưa tồn tại ở lần chạy đầu tiên, resolveRepoFile chỉ
+	// tìm file ĐÃ CÓ SẴN nên sẽ trả về đường dẫn tương đối sai chỗ (phụ
+	// thuộc working directory hiện tại, khác nhau giữa `wails dev` và
+	// bản .exe đã build). resolveRepoDir("settings.ini") lấy đúng thư
+	// mục chứa settings.ini (file chắc chắn tồn tại vì app đã và đang
+	// chạy dựa vào nó), cho ra đường dẫn ổn định dùng được cho cả đọc
+	// lẫn ghi, mọi lần chạy.
+	appSettingsPath := filepath.Join(resolveRepoDir("settings.ini"), "settings.bhconfig")
+	appSettingsStore := appsettings.NewStore(appSettingsPath)
+	settings, err := appSettingsStore.Load(resolveRepoFile("settings.ini"))
+	if err != nil {
+		return nil, fmt.Errorf("app: load app settings: %w", err)
+	}
+
 	// Customer/product data now comes from a live Google Sheet, not the
 	// local data.xlsx file — a prior update to just this one machine's
 	// data.xlsx never reached any OTHER machine running this app, the
@@ -105,7 +124,7 @@ func NewApp() (*App, error) {
 	// oversight (see productdata.LoadFromSheets' own doc comment).
 	// data.xlsx itself is left on disk, untouched; nothing reads it
 	// anymore.
-	store, err := productdata.LoadFromSheets(resolveRepoFile("settings.ini"), productdata.NewHTTPClient())
+	store, err := productdata.LoadFromSheets(settings.Gid, productdata.NewHTTPClient())
 	if err != nil {
 		return nil, fmt.Errorf("app: load customer/product data from Google Sheets: %w", err)
 	}
@@ -113,10 +132,11 @@ func NewApp() (*App, error) {
 	excelPath := resolveRepoFile("dondathang_test.xlsx")
 
 	return &App{
-		cfg: config.NewStore(configFileName),
+		cfg:              config.NewStore(configFileName),
+		appSettingsStore: appSettingsStore,
 		processor: &processing.RealProcessor{
 			Store:     store,
-			Pricing:   pricing.NewHTTPSource(resolveRepoFile("settings.ini")),
+			Pricing:   pricing.NewHTTPSource(settings.Gid),
 			ExcelPath: excelPath,
 		},
 		orderDir:  orderFolderName,
@@ -146,6 +166,21 @@ func (a *App) GetSTT() (int, error) {
 // SetSTT ghi lại số thứ tự đơn hàng bắt đầu.
 func (a *App) SetSTT(v int) error {
 	return a.cfg.SetSTT(v)
+}
+
+// GetAppSettings trả về toàn bộ cấu hình hiện tại (gid/zalo/reminder)
+// để popup cài đặt hiển thị.
+func (a *App) GetAppSettings() (appsettings.Settings, error) {
+	return a.appSettingsStore.Load(resolveRepoFile("settings.ini"))
+}
+
+// SaveAppSettings ghi cấu hình mới. Thay đổi gid CHỈ có hiệu lực ở lần
+// khởi động app tiếp theo — Pricing/Store hiện tại (RealProcessor) đã
+// được tạo sẵn với gid map cũ lúc NewApp chạy, không tự động cập nhật
+// lại giữa phiên làm việc (quyết định rõ ràng của user, tránh phức tạp
+// reload).
+func (a *App) SaveAppSettings(settings appsettings.Settings) error {
+	return a.appSettingsStore.Save(settings)
 }
 
 // ConfirmPrice ghi đè giá (cột Y) của một dòng sản phẩm đã bị đánh dấu

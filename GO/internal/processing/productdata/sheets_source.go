@@ -5,8 +5,6 @@ import (
 	"fmt"
 	"net/http"
 	"time"
-
-	"order-processor/internal/processing/pricing"
 )
 
 // productDataSpreadsheetID identifies the live Google Sheet holding this
@@ -24,10 +22,10 @@ const productDataSpreadsheetID = "14nGamUI8fhPiVPNm-Nf_VyHK-8Cx8rvG3KQFFT0spe0"
 // the local data.xlsx file as the production source — so that updating
 // customer/product data takes effect on every machine running this app
 // without needing to distribute an updated file, the same reasoning
-// that already applies to pricing.HTTPSource's own live fetch. settings
-// resolves to settings.ini's own <gid> block (see pricing.LoadGidMap),
-// which must contain "MAKH" and "SANPHAM" keys naming each tab's gid
-// within productDataSpreadsheetID.
+// that already applies to pricing.HTTPSource's own live fetch. gidMap
+// is a snapshot read once at app startup by the caller (see
+// appsettings.Store) — must contain "MAKH" and "SANPHAM" keys naming
+// each tab's gid within productDataSpreadsheetID.
 //
 // There is deliberately no offline fallback to a local file: if the
 // network is unreachable, this returns an error and the caller (NewApp)
@@ -37,12 +35,7 @@ const productDataSpreadsheetID = "14nGamUI8fhPiVPNm-Nf_VyHK-8Cx8rvG3KQFFT0spe0"
 // live pricing/promotion lookups mid-processing (see pricing.HTTPSource),
 // rather than adding asymmetric resilience only for this one data
 // source.
-func LoadFromSheets(settingsPath string, client *http.Client) (*Store, error) {
-	gidMap, err := pricing.LoadGidMap(settingsPath)
-	if err != nil {
-		return nil, err
-	}
-
+func LoadFromSheets(gidMap map[string]string, client *http.Client) (*Store, error) {
 	customerRows, err := fetchSheetRows(client, gidMap, "MAKH")
 	if err != nil {
 		return nil, err

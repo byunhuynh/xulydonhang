@@ -107,14 +107,9 @@ func TestLoadCustomerRows_ParsesRealSheetsCSVSample(t *testing.T) {
 // not a generic HTTP failure once the (never-reached) network call
 // eventually times out.
 func TestLoadFromSheets_MissingGidReturnsClearError(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "settings.ini")
-	if err := os.WriteFile(path, []byte("[GoogleSheets]\n<gid>\nCOOP = 123\n</gid>\n"), 0o644); err != nil {
-		t.Fatalf("failed writing settings file: %v", err)
-	}
-
-	_, err := LoadFromSheets(path, NewHTTPClient())
+	_, err := LoadFromSheets(map[string]string{"COOP": "123"}, NewHTTPClient())
 	if err == nil {
-		t.Fatal("LoadFromSheets returned nil error for a settings.ini with no MAKH/SANPHAM gid")
+		t.Fatal("LoadFromSheets returned nil error for a gid map with no MAKH/SANPHAM key")
 	}
 	if !containsSubstring(err.Error(), "MAKH") {
 		t.Errorf("LoadFromSheets error = %q, want it to mention the missing MAKH key", err.Error())
