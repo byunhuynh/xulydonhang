@@ -95,7 +95,7 @@ func trueVisualLineCount(page pdf.Page) int {
 	if len(content.Text) == 0 {
 		return 0
 	}
-	return len(clusterRowsByY(rotateForReading(content.Text, pageRotation(page), false)))
+	return len(clusterRowsByY(rotateForReading(content.Text, pageRotation(page))))
 }
 
 // isCoopGeneratedPage reports whether text was produced by Coop's own
@@ -301,63 +301,141 @@ func pageRotation(page pdf.Page) int {
 }
 
 // rotateForReading returns texts with X/Y replaced by reading-order
-// coordinates (increasing X = rightward in the DISPLAYED page, and — to
-// reuse clusterRowsByY's existing "sort Y descending, cluster by
-// proximity" logic unchanged — increasing Y = further UP the displayed
-// page, matching Rotate 0's own already-correct convention) — bypassing
-// the CONTENT STREAM's raw, unrotated coordinate system a page's
-// /Rotate entry asks a viewer to rotate for display. Only the relative
-// ordering and point-scale distances matter here (this feeds sorting
-// and a small absolute gap threshold, never absolute page positions),
-// so a simple axis swap + negation is enough — no page width/height
-// needed, unlike a full display-coordinate transform.
+// coordinates: Y for row clustering (largest Y first, matching Rotate
+// 0's own convention), X for measuring within-row DISTANCE only — see
+// reconstructRotatedPage's own doc comment for why within-row ORDER
+// comes from original stream order rather than sorting by this X value,
+// even though the value itself is still needed to size gaps between
+// stream-adjacent runs.
 //
 // Confirmed empirically against a real archived Coop PDF with /Rotate
-// 90 (103145712-00): "POM343"'s own 6 characters, read in that exact
-// order, had CONSTANT raw X and raw Y increasing by the font's own
-// per-glyph advance — i.e. in raw content-stream space, moving right in
-// reading order is moving along raw Y, not raw X, and successive
-// visual ROWS (confirmed via distinct field labels appearing later in
-// the content stream) had raw X increasing by roughly one line height
-// per row. Before this transform, clusterRowsByY bucketed by raw Y
-// directly, treating what is actually the WITHIN-row axis for a rotated
-// page as if it were the ROW axis — every row split into fragments
-// interleaved with fragments of every OTHER row once naively sorted,
-// scrambling reading order (confirmed: output like "KU Discounts -\nS"
-// for what should read "SKU Discounts -" on one line).
-//
-// mirror flips the within-row (reading-order-X) axis only, NOT the row
-// axis. Needed because a second real archived Coop PDF with the SAME
-// /Rotate 90 (103269932-00) had "POM343"'s own characters read in order
-// with raw Y DEcreasing — the opposite sign from 103145712-00 — while
-// its row axis (raw X, increasing for later rows) matched exactly. Two
-// PDFs sharing one /Rotate value but disagreeing on reading-order sign
-// for one axis only is not something /Rotate alone predicts; the caller
-// tries both and keeps whichever one the vendor-identification check
-// (see reconstructLinesFromContent) accepts, rather than this function
-// guessing a single "correct" sign that would silently mis-handle
-// whichever of the two page shapes it guessed wrong for.
-func rotateForReading(texts []pdf.Text, rotation int, mirror bool) []pdf.Text {
+// 90 (103145712-00): "POM343"'s own 6 characters, read in stream (and
+// visual reading) order, had CONSTANT raw X and raw Y increasing by the
+// font's own per-glyph advance — i.e. in raw content-stream space, the
+// WITHIN-row axis is raw Y, not raw X — and successive visual ROWS
+// (confirmed via distinct field labels appearing later in the content
+// stream) had raw X increasing by roughly one line height per row, so
+// -rawX (descending for later rows, matching Rotate 0's own convention)
+// is the correct row-clustering key. Before this transform,
+// clusterRowsByY bucketed by raw Y directly, treating what is actually
+// the WITHIN-row axis as if it were the ROW axis — every row split into
+// fragments interleaved with fragments of every OTHER row once naively
+// sorted (confirmed: output like "KU Discounts -\nS" for what should
+// read "SKU Discounts -" on one line).
+func rotateForReading(texts []pdf.Text, rotation int) []pdf.Text {
 	if rotation == 0 {
 		return texts
-	}
-	sign := 1.0
-	if mirror {
-		sign = -1.0
 	}
 	out := make([]pdf.Text, len(texts))
 	copy(out, texts)
 	for i, t := range out {
 		switch rotation {
 		case 90:
-			out[i].X, out[i].Y = sign*t.Y, -t.X
+			out[i].X, out[i].Y = t.Y, -t.X
 		case 180:
-			out[i].X, out[i].Y = sign*-t.X, -t.Y
+			out[i].X, out[i].Y = -t.X, -t.Y
 		case 270:
-			out[i].X, out[i].Y = sign*-t.Y, t.X
+			out[i].X, out[i].Y = -t.Y, t.X
 		}
 	}
 	return out
+}
+
+// indexedText carries a text run's original position in
+// Page.Content().Text — the order the PDF generator actually drew it in
+// — alongside the run itself, for reconstructRotatedPage's stream-order
+// reconstruction (see its own doc comment for why original draw order,
+// not spatial X, is the reliable within-row ordering for a rotated
+// page).
+type indexedText struct {
+	pdf.Text
+	idx int
+}
+
+// clusterRowsByYIndexed is clusterRowsByY's sibling for callers that
+// need each row's members in ORIGINAL STREAM ORDER rather than opaque
+// pdf.Text values — see reconstructRotatedPage.
+func clusterRowsByYIndexed(texts []pdf.Text) [][]indexedText {
+	indexed := make([]indexedText, len(texts))
+	for i, t := range texts {
+		indexed[i] = indexedText{t, i}
+	}
+	sort.SliceStable(indexed, func(i, j int) bool { return indexed[i].Y > indexed[j].Y })
+
+	var rows [][]indexedText
+	var rowRefY float64
+	for _, t := range indexed {
+		if len(rows) == 0 || rowRefY-t.Y > rowYJitterTolerance {
+			rows = append(rows, nil)
+			rowRefY = t.Y
+		}
+		last := len(rows) - 1
+		rows[last] = append(rows[last], t)
+	}
+	return rows
+}
+
+// reconstructRotatedPage rebuilds a rotated page's text using each row's
+// members in ORIGINAL CONTENT-STREAM ORDER, not spatial X position —
+// deliberately different from buildTextFromRows (used for Rotate-0
+// pages), which sorts by X. Two things specific to rotated pages make
+// stream order necessary, discovered empirically on two real archived
+// Coop /Rotate 90 PDFs:
+//
+//  1. X-sorting needs a reliable sign for "which direction is rightward"
+//     on the within-row axis, and that sign is NOT predictable from
+//     /Rotate alone — 103145712-00 and 103269932-00 share the same
+//     /Rotate 90 value but read in opposite raw-axis directions. Stream
+//     order sidesteps the question entirely: whichever direction the
+//     generator drew characters in IS reading order, no sign to guess.
+//  2. Some of this generator's fields are drawn with SPURIOUS padding
+//     space runs positioned earlier in Y than they "should" be relative
+//     to the field's real content (confirmed: 103269932-00's SKU
+//     "3547984-5" has 2 extra space runs positioned mid-digit in raw Y,
+//     landing between real digits once X/Y-sorted, producing corrupted
+//     output like "3 5 47984-5" instead of "3547984-5 "). These padding
+//     runs are emitted in the CORRECT position in the content stream
+//     (immediately after the real field content, before the next
+//     field's), so stream order places them correctly while spatial
+//     sorting does not.
+//
+// Word-gap detection still uses gapThreshold, but measured between
+// STREAM-adjacent runs' transformed X (via rotateForReading), not
+// sorted-adjacent ones — needed because this generator sometimes has NO
+// glyph at all (not even a drawn space) between two fields with a real
+// visual gap (confirmed: "...Time: 18:16:19Purchase OrderP/O Number:..."
+// — "Time:" ends and "Purchase" begins with zero characters, drawn or
+// otherwise, between them). Without measuring the real position jump,
+// stream order alone glues these together, which broke
+// coop.CountPOsOnPage's own regex on "OrderP/O" (confirmed via this
+// project's own golden-fixture suite before this was added).
+func reconstructRotatedPage(page pdf.Page, rotation int) string {
+	content := page.Content()
+	rotated := rotateForReading(content.Text, rotation)
+	rows := clusterRowsByYIndexed(rotated)
+	var b strings.Builder
+	for _, items := range rows {
+		sort.SliceStable(items, func(i, j int) bool { return items[i].idx < items[j].idx })
+		lastX, lastW := -1.0, 0.0
+		for _, it := range items {
+			if it.S == "\n" {
+				continue
+			}
+			if lastX >= 0 {
+				gap := it.X - (lastX + lastW)
+				if gap < 0 {
+					gap = -gap
+				}
+				if gap > gapThreshold {
+					b.WriteString(" ")
+				}
+			}
+			lastX, lastW = it.X, it.W
+			b.WriteString(it.S)
+		}
+		b.WriteString("\n")
+	}
+	return b.String()
 }
 
 // reconstructLinesFromContent rebuilds a line-structured page text
@@ -368,11 +446,14 @@ func rotateForReading(texts []pdf.Text, rotation int, mirror bool) []pdf.Text {
 // tracking used by walkTextBlocks doesn't handle this generator's
 // positioning operators, even though Page.Content()'s lower-level walk
 // does compute distinct per-run Y coordinates correctly — confirmed by
-// inspecting both against the same real archived PDF). Runs are
-// clustered into rows by Y proximity (see rowYJitterTolerance), rows
-// ordered top-to-bottom (PDF Y increases upward), and within a row, runs
-// ordered left-to-right by X with a space inserted wherever there's a
-// visible horizontal gap (mirrors normal word spacing; a small
+// inspecting both against the same real archived PDF). For a rotated
+// page (pageRotation != 0), delegates to reconstructRotatedPage — see
+// its own doc comment for why stream order, not spatial sorting, is
+// needed there. Otherwise (the overwhelmingly common Rotate-0 case),
+// runs are clustered into rows by Y proximity (see rowYJitterTolerance),
+// rows ordered top-to-bottom (PDF Y increases upward), and within a row,
+// runs ordered left-to-right by X with a space inserted wherever there's
+// a visible horizontal gap (mirrors normal word spacing; a small
 // negative/zero gap between two runs already means they're touching,
 // e.g. mid-word kerning splits).
 func reconstructLinesFromContent(page pdf.Page) (string, bool) {
@@ -381,30 +462,10 @@ func reconstructLinesFromContent(page pdf.Page) (string, bool) {
 		return "", false
 	}
 
-	rotation := pageRotation(page)
-	primary := buildTextFromRows(clusterRowsByY(rotateForReading(content.Text, rotation, false)))
-	if rotation != 90 && rotation != 270 {
-		return primary, true
+	if rotation := pageRotation(page); rotation != 0 {
+		return reconstructRotatedPage(page, rotation), true
 	}
-	// Try the within-row-mirrored candidate too (see rotateForReading's
-	// doc comment for why: two real /Rotate 90 Coop PDFs disagreed on
-	// which sign reproduces true reading order for this axis) and keep
-	// whichever one is actually identifiable as a real vendor page —
-	// vendor.Identify is a coarse check, but a mirrored reconstruction
-	// of real text reads as reversed word fragments that essentially
-	// never happen to match any vendor's real signature phrase, while a
-	// correctly-oriented one does. Prefer primary on a tie or when
-	// neither identifies (matches this function's existing contract:
-	// callers apply their own, stronger safety net against whatever
-	// this returns).
-	if vendor.Identify(primary) != "" {
-		return primary, true
-	}
-	mirrored := buildTextFromRows(clusterRowsByY(rotateForReading(content.Text, rotation, true)))
-	if vendor.Identify(mirrored) != "" {
-		return mirrored, true
-	}
-	return primary, true
+	return buildTextFromRows(clusterRowsByY(content.Text)), true
 }
 
 // gapThreshold: points; separates real word gaps from touching/kerned

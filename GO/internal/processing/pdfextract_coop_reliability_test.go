@@ -238,23 +238,25 @@ func TestExtractPageText_RotatedCoopPage_ReadsInCorrectOrder(t *testing.T) {
 	}
 }
 
-// TestExtractPageText_RotatedCoopPage_MirrorFallbackStillIdentifiable
+// TestExtractPageText_RotatedCoopPage_StreamOrderHandlesOppositeAxisSign
 // covers the OTHER real /Rotate 90 shape found in this Coop generator's
 // corpus: 103269932-00.pdf's reading order runs the OPPOSITE direction
-// along the same axis as 103145712-00 (confirmed: "POM343"'s own raw Y
-// values DEcrease in reading order here, vs increase there — the same
-// /Rotate 90 value does not by itself predict this sign). Without trying
-// the mirrored candidate, reconstructLinesFromContent's primary attempt
-// produces reversed text ("- stnuocsiD UKS" for "SKU Discounts -") that
-// vendor.Identify correctly rejects, falling back to the original
-// glued-together GetPlainText text. This test locks in that the mirrored
-// candidate — not the reversed primary one — is what gets selected;
-// this specific fixture's OWN golden-fixture test is still red for an
-// unrelated reason (this generator additionally inserts a spurious
-// space between every character on some of its pages, a distinct, not
-// yet fixed bug — see the digits appearing space-separated below), so
-// this test only locks in "reading order is right", not "exact match".
-func TestExtractPageText_RotatedCoopPage_MirrorFallbackStillIdentifiable(t *testing.T) {
+// along the same raw axis as 103145712-00 (confirmed: "POM343"'s own raw
+// Y values DEcrease in reading order here, vs increase there — the same
+// /Rotate 90 value does not by itself predict this sign). An earlier,
+// since-replaced version of this fix sorted by a transformed X value and
+// had to guess that sign, trying a "mirrored" candidate and keeping
+// whichever vendor.Identify accepted; reconstructRotatedPage instead
+// orders each row by ORIGINAL CONTENT-STREAM index, which is correct
+// regardless of which raw-axis direction happens to be reading order for
+// a given file — no sign to guess. This test also covers a second, at
+// the time separate bug this same fixture exposed: this generator can
+// draw SPURIOUS padding-space runs positioned earlier in Y than the
+// field's real content, which spatial X-sorting placed mid-token
+// (producing "3 5 47984-5" instead of "3547984-5"); stream order places
+// them in their correct position since they're emitted in the right
+// place in the content stream itself.
+func TestExtractPageText_RotatedCoopPage_StreamOrderHandlesOppositeAxisSign(t *testing.T) {
 	file, r, err := pdfOpen("coop/testdata/realpdfs/103269932-00.pdf")
 	if err != nil {
 		t.Skipf("fixture not available: %v", err)
@@ -267,14 +269,51 @@ func TestExtractPageText_RotatedCoopPage_MirrorFallbackStillIdentifiable(t *test
 	if rot := pageRotation(page); rot != 90 {
 		t.Fatalf("fixture's own rotation = %d, want 90 (fixture assumption changed?)", rot)
 	}
-	recon, ok := reconstructLinesFromContent(page)
-	if !ok {
-		t.Fatal("reconstructLinesFromContent returned ok=false")
+	text, err := extractPageText(page)
+	if err != nil {
+		t.Fatalf("extractPageText returned error: %v", err)
 	}
-	if got := vendor.Identify(recon); got != "Coop" {
-		t.Fatalf("vendor.Identify(reconstructed) = %q, want %q — mirror candidate was not selected (the unmirrored primary candidate reverses every character, e.g. \"SKU Discounts -\" becomes \"- stnuocsiD UKS\", which vendor.Identify's own coopPattern never matches)", got, "Coop")
+	if got := vendor.Identify(text); got != "Coop" {
+		t.Fatalf("vendor.Identify(extracted text) = %q, want %q", got, "Coop")
 	}
-	if containsSubstring(recon, "00-239692301") {
-		t.Error("reconstructed text contains the REVERSED PO number — primary (non-mirrored) candidate was used")
+	for _, want := range []string{
+		"P/O Number:", "103269932-00",
+		"3547984-5", "NG BLUE huong thao moc 3kg",
+		"Sub Total -",
+	} {
+		if !containsSubstring(text, want) {
+			t.Errorf("extracted text missing intact substring %q (reversed reading order or spurious mid-token padding space) — got: %.500s", want, text)
+		}
+	}
+}
+
+// TestExtractPageText_RotatedCoopPage_GluedFieldsStillGetASpace covers a
+// regression the stream-order fix (above) introduced and then had to fix
+// again: without ANY gap detection, stream order alone glues together
+// fields this generator draws with NO glyph — not even a space — between
+// them despite a real visual gap (confirmed on 103145712-00: "...Time:
+// 18:16:19Purchase OrderP/O Number:..." — "Time:"'s value and "Purchase
+// Order" have zero characters, drawn or otherwise, between them). This
+// broke coop.CountPOsOnPage's own regex on the glued "OrderP/O" sequence
+// (the whole real-fixture-corpus golden test regressed before this gap
+// detection was added back, scoped to STREAM-adjacent runs rather than
+// spatially-sorted-adjacent ones). Locks in that a real space character
+// still separates these two fields in the final output.
+func TestExtractPageText_RotatedCoopPage_GluedFieldsStillGetASpace(t *testing.T) {
+	file, r, err := pdfOpen("coop/testdata/realpdfs/103145712-00.pdf")
+	if err != nil {
+		t.Skipf("fixture not available: %v", err)
+	}
+	defer file.Close()
+	if r.NumPage() < 1 {
+		t.Fatal("expected at least 1 page")
+	}
+	page := r.Page(1)
+	text, err := extractPageText(page)
+	if err != nil {
+		t.Fatalf("extractPageText returned error: %v", err)
+	}
+	if containsSubstring(text, "OrderP/O") {
+		t.Error("extracted text glues \"Purchase Order\" and \"P/O Number\" together with no separator — gap detection between stream-adjacent runs did not fire")
 	}
 }
