@@ -67,6 +67,7 @@ type storePageResult struct {
 	tongtien        float64
 	skuLog          []string
 	mismatchDetails []PriceMismatchDetail
+	promoItems      []PromoItemSummary
 	err             error
 }
 
@@ -149,6 +150,14 @@ func (p *RealProcessor) processBigcDocument(filePath string, pageTexts []string)
 		orderRows = append(orderRows, OrderRow{
 			FileName: filepath.Base(filePath), Page: pageLabel, System: "BigC", MaKhachHang: customerCode,
 			PO: poNumber, DonGia: fmt.Sprintf("%.0f", result.tongtien), Status: statusText, StatusKind: statusKind,
+			// ShipTo is this store's own delivery warehouse, not a
+			// document-wide value - BigC's one PDF holds multiple stores'
+			// pages, each its own OrderRow. TotalPackages stays 0: BigC
+			// never tracks case count at all (NoCaseCount: true on every
+			// row this vendor writes), so 0 here is accurate, not a gap.
+			ShipTo: deliveryWarehouse, EntryDate: entryDate, CancelDate: cancelDate,
+			TotalWeightKg: coop.FormatWeightKg(result.weightKg),
+			PromoItems: result.promoItems,
 			SkuLog: result.skuLog, PriceMismatchCount: result.saigia, PriceMismatchDetails: result.mismatchDetails,
 		})
 	}
@@ -255,6 +264,7 @@ func (p *RealProcessor) processBigcStorePage(storePageText string, priceList []b
 
 	var weightKg, tongtien float64
 	saigia := 0
+	promoTotals := map[string]*PromoItemSummary{}
 	var skuLog []string
 	var mismatchDetails []PriceMismatchDetail
 
@@ -351,53 +361,62 @@ func (p *RealProcessor) processBigcStorePage(storePageText string, priceList []b
 		// function. Putting PromoNote/PromoBundleSku on the bonus row
 		// (an earlier version of this port did) produces an off-by-one
 		// row shift versus every real fixture.
-		bonusSku := p.Store.FindSkusMentioned(khuyenmai)
 		bonusQty := qtyOrdPcs
 		bonusBarcode := ""
-		if len(bonusSku) > 0 {
-			bonusBarcode = strings.Join(bonusSku, ", ")
-		}
-		if xm := xPlus1Pattern.FindStringSubmatch(khuyenmai); xm != nil {
-			// xPlus1Pattern is already in scope here — it's declared in
-			// processor_shared.go (Task 0), same package `processing`
-			// as this file, so no new import or helper is needed.
-			x, _ := strconv.Atoi(xm[1])
-			if bonusBarcode == "" {
-				bonusBarcode = barcode
-			}
-			if x >= 2 {
-				bonusQty = math.Floor(qtyOrdPcs / float64(x))
-			}
-		}
-
 		var promoNote, promoBundleSku string
-		if bonusBarcode != "" {
-			// xulydonhang.py:4769's laycachbo_khuyenmai(value) uses the
-			// leftover "value" loop variable from the promo-matching
-			// loop above, not "khuyenmai" — this plan's Global
-			// Constraints section documents this as a confirmed Python
-			// quirk NOT being ported; using khuyenmai (this item's own
-			// resolved promo string) here instead, per Phase 2b's
-			// "correct main flow" policy. Flag via knownDivergences_BigC
-			// during Task 8 if a real fixture traces a mismatch to this.
-			bundleNote := coop.ExtractBraceContent(khuyenmai)
-			if bundleNote != "" {
-				promoNote = bundleNote
-				lower := strings.ToLower(bundleNote)
-				if strings.Contains(lower, "bó kèm") || strings.Contains(lower, "quấn kèm") {
-					// xulydonhang.py:4774-4775 — same AP value written on
-					// BOTH the product row and the bonus row. Not
-					// observed in any of the 29 real fixtures (cachbokem
-					// is always empty for BigC's actual promo data), but
-					// ported for fidelity in case it's ever hit.
-					promoBundleSku = fmt.Sprintf("%s_%s_1", coop.LastFourDigits(barcode), coop.LastFourDigits(bonusBarcode))
+		// Gated on matched: a gift is part of the SAME CTKM that
+		// explains the invoice price — only compute/attach a gift
+		// (and its PromoNote/PromoBundleSku on the product row
+		// below) once this item's own khuyenmai is confirmed as
+		// the one matching the invoice price, never on a genuine
+		// price mismatch. Deliberate divergence from Python (this
+		// whole block runs unconditionally there).
+		if matched {
+			bonusSku := p.Store.FindSkusMentioned(khuyenmai)
+			if len(bonusSku) > 0 {
+				bonusBarcode = strings.Join(bonusSku, ", ")
+			}
+			if xm := xPlus1Pattern.FindStringSubmatch(khuyenmai); xm != nil {
+				// xPlus1Pattern is already in scope here — it's declared in
+				// processor_shared.go (Task 0), same package `processing`
+				// as this file, so no new import or helper is needed.
+				x, _ := strconv.Atoi(xm[1])
+				if bonusBarcode == "" {
+					bonusBarcode = barcode
 				}
-			} else {
-				// BigC's per-item no-brace fallback text is genuinely
-				// different from Coop/Satra's "KM Bó Kèm - Che Barcode"
-				// (xulydonhang.py:4777: "KM Rời - Không Che Barcode") —
-				// confirmed during planning, not a transcription error.
-				promoNote = "KM Rời - Không Che Barcode"
+				if x >= 2 {
+					bonusQty = math.Floor(qtyOrdPcs / float64(x))
+				}
+			}
+
+			if bonusBarcode != "" {
+				// xulydonhang.py:4769's laycachbo_khuyenmai(value) uses the
+				// leftover "value" loop variable from the promo-matching
+				// loop above, not "khuyenmai" — this plan's Global
+				// Constraints section documents this as a confirmed Python
+				// quirk NOT being ported; using khuyenmai (this item's own
+				// resolved promo string) here instead, per Phase 2b's
+				// "correct main flow" policy. Flag via knownDivergences_BigC
+				// during Task 8 if a real fixture traces a mismatch to this.
+				bundleNote := coop.ExtractBraceContent(khuyenmai)
+				if bundleNote != "" {
+					promoNote = bundleNote
+					lower := strings.ToLower(bundleNote)
+					if strings.Contains(lower, "bó kèm") || strings.Contains(lower, "quấn kèm") {
+						// xulydonhang.py:4774-4775 — same AP value written on
+						// BOTH the product row and the bonus row. Not
+						// observed in any of the 29 real fixtures (cachbokem
+						// is always empty for BigC's actual promo data), but
+						// ported for fidelity in case it's ever hit.
+						promoBundleSku = fmt.Sprintf("%s_%s_1", coop.LastFourDigits(barcode), coop.LastFourDigits(bonusBarcode))
+					}
+				} else {
+					// BigC's per-item no-brace fallback text is genuinely
+					// different from Coop/Satra's "KM Bó Kèm - Che Barcode"
+					// (xulydonhang.py:4777: "KM Rời - Không Che Barcode") —
+					// confirmed during planning, not a transcription error.
+					promoNote = "KM Rời - Không Che Barcode"
+				}
 			}
 		}
 
@@ -416,8 +435,9 @@ func (p *RealProcessor) processBigcStorePage(storePageText string, priceList []b
 			saigia++
 			mismatchDetails = append(mismatchDetails, PriceMismatchDetail{
 				SKU: barcode, ProductName: productInfo.Name,
-				InvoicePrice: invoicePrice, SystemPrice: finalPrice,
-				ExcelRow: productRowIndex,
+				InvoicePrice: invoicePrice, SystemPrice: finalPrice, Qty: qtyOrdPcs,
+				ExcelRow: productRowIndex, PromoText: truncatePromoText(khuyenmai),
+				PromoDateRange: khuyenmaiColumn,
 			})
 		}
 		rows = append(rows, productRow)
@@ -436,6 +456,7 @@ func (p *RealProcessor) processBigcStorePage(storePageText string, priceList []b
 				ProductName: bonusInfo.Name, LineWeightKg: bonusWeight, UseZFormula: false,
 				PromoBundleSku: promoBundleSku, NoCaseCount: true,
 			}
+			accumulatePromoItem(promoTotals, bonusRow.SKU, bonusRow.ProductName, bonusRow.Qty)
 			rows = append(rows, bonusRow)
 		}
 	}
@@ -496,10 +517,11 @@ func (p *RealProcessor) processBigcStorePage(storePageText string, priceList []b
 				ProductName: bonusInfo.Name, LineWeightKg: bonusWeight, PromoNote: promoNote,
 				PromoContent: invoicePromo, UseZFormula: false, NoCaseCount: true,
 			})
+			accumulatePromoItem(promoTotals, bonusSKU, bonusInfo.Name, bonusQty)
 		}
 	}
 
-	return storePageResult{rows: rows, weightKg: weightKg, saigia: saigia, tongtien: tongtien, skuLog: skuLog, mismatchDetails: mismatchDetails}
+	return storePageResult{rows: rows, weightKg: weightKg, saigia: saigia, tongtien: tongtien, skuLog: skuLog, mismatchDetails: mismatchDetails, promoItems: finalizePromoItems(promoTotals)}
 }
 
 // parseNumericField mirrors the repeated "strip commas, coerce to

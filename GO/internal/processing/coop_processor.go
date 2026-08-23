@@ -273,7 +273,9 @@ func (p *RealProcessor) processSegment(filePath string, realPageNum int, text, p
 
 	saigia := 0
 	totalWeight := 0.0
+	totalPackages := 0
 	totalValue := 0.0
+	promoTotals := map[string]*PromoItemSummary{}
 	var skuLog []string
 	var mismatchDetails []PriceMismatchDetail
 
@@ -285,6 +287,7 @@ func (p *RealProcessor) processSegment(filePath string, realPageNum int, text, p
 			caseCount = int(math.Ceil(product.Qty / productInfo.PackSize))
 		}
 		totalWeight += lineWeight
+		totalPackages += caseCount
 
 		invoicePrice := product.Cost / product.Qty
 		realPriceStr, _ := priceIndex.FindPrice(product.Barcode)
@@ -364,8 +367,9 @@ func (p *RealProcessor) processSegment(filePath string, realPageNum int, text, p
 			saigia++
 			mismatchDetails = append(mismatchDetails, PriceMismatchDetail{
 				SKU: product.Barcode, ProductName: productInfo.Name,
-				InvoicePrice: invoicePrice, SystemPrice: finalPrice,
-				ExcelRow: productRowIndex,
+				InvoicePrice: invoicePrice, SystemPrice: finalPrice, Qty: product.Qty,
+				ExcelRow: productRowIndex, PromoText: truncatePromoText(lastExaminedPromo),
+				PromoDateRange: lastExaminedPromoColumn,
 			})
 		}
 		rows = append(rows, productRow)
@@ -385,24 +389,37 @@ func (p *RealProcessor) processSegment(filePath string, realPageNum int, text, p
 		// bonus row — an off-by-one quirk in the original that this
 		// mirrors exactly rather than "fixing", since golden-fixture
 		// parity is the point.
-		currentRowIndex := productRowIndex
-		for i, promoPart := range strings.Split(lastExaminedPromo, "|") {
-			rows[currentRowIndex].PromoContent = lastExaminedPromo
+		// Gated on matched: a gift is part of the SAME CTKM that explains
+		// the invoice price, not a separate thing — when no promo's
+		// discount actually matched the invoice (a genuine price
+		// mismatch), lastExaminedPromo is just whichever promo was
+		// examined LAST (see the price loop above), not a confirmed
+		// applicable one, so granting a gift from it would be a guess.
+		// Deliberate divergence from Python (xulydonhang.py:1181's
+		// nhieuCtkm split runs unconditionally, even after a mismatch) —
+		// confirmed as the intended business rule, not preserved.
+		if matched {
+			currentRowIndex := productRowIndex
+			for i, promoPart := range strings.Split(lastExaminedPromo, "|") {
+				rows[currentRowIndex].PromoContent = lastExaminedPromo
 
-			bonusRow, mainRowNote, mainRowBundleSku, added := buildPromoBonusRow(p.Store, promoPart, product, i, entryDate, cancelDate, shipTo,
-				customerCode, description, warehouse, region, statCode, orderNumber(info.PONumber))
-			if !added {
-				continue
-			}
-			totalWeight += bonusRow.LineWeightKg
-			if i == 0 {
-				rows[productRowIndex].PromoNote = mainRowNote
-				if mainRowBundleSku != "" {
-					rows[productRowIndex].PromoBundleSku = mainRowBundleSku
+				bonusRow, mainRowNote, mainRowBundleSku, added := buildPromoBonusRow(p.Store, promoPart, product, i, entryDate, cancelDate, shipTo,
+					customerCode, description, warehouse, region, statCode, orderNumber(info.PONumber))
+				if !added {
+					continue
 				}
+				totalWeight += bonusRow.LineWeightKg
+				totalPackages += bonusRow.CaseCount
+				accumulatePromoItem(promoTotals, bonusRow.SKU, bonusRow.ProductName, bonusRow.Qty)
+				if i == 0 {
+					rows[productRowIndex].PromoNote = mainRowNote
+					if mainRowBundleSku != "" {
+						rows[productRowIndex].PromoBundleSku = mainRowBundleSku
+					}
+				}
+				rows = append(rows, bonusRow)
+				currentRowIndex = len(rows) - 1
 			}
-			rows = append(rows, bonusRow)
-			currentRowIndex = len(rows) - 1
 		}
 	}
 
@@ -410,11 +427,14 @@ func (p *RealProcessor) processSegment(filePath string, realPageNum int, text, p
 		if bonusRow, added := buildInvoiceBonusRow(p.Store, invoicePromo, totalValue, entryDate, cancelDate,
 			shipTo, customerCode, description, warehouse, region, statCode, orderNumber(info.PONumber)); added {
 			totalWeight += bonusRow.LineWeightKg
+			totalPackages += bonusRow.CaseCount
+			accumulatePromoItem(promoTotals, bonusRow.SKU, bonusRow.ProductName, bonusRow.Qty)
 			rows = append(rows, bonusRow)
 		}
 	}
 
-	headerDescription := fmt.Sprintf("%s (Tổng trọng lượng: %s)", description, coop.FormatWeightKg(totalWeight))
+	totalWeightFormatted := coop.FormatWeightKg(totalWeight)
+	headerDescription := fmt.Sprintf("%s (Tổng trọng lượng: %s)", description, totalWeightFormatted)
 	startRow, err := excelwriter.WriteOrderRows(p.ExcelPath, rows, headerDescription)
 	if err != nil {
 		return OrderRow{}, err
@@ -462,6 +482,9 @@ func (p *RealProcessor) processSegment(filePath string, realPageNum int, text, p
 		FileName: filepath.Base(filePath), Page: pageLabel, System: system, MaKhachHang: customerCode,
 		PO: info.PONumber, DonGia: fmt.Sprintf("%.0f", totalValue), Status: statusText, StatusKind: statusKind,
 		DriveURL: driveURL,
+		ShipTo: shipTo, EntryDate: entryDate, CancelDate: cancelDate,
+		TotalWeightKg: totalWeightFormatted, TotalPackages: totalPackages,
+		PromoItems: finalizePromoItems(promoTotals),
 		SkuLog: skuLog, PriceMismatchCount: saigia, PriceMismatchDetails: mismatchDetails,
 	}, nil
 }

@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"math"
 	"regexp"
+	"sort"
 	"strconv"
 	"strings"
 
@@ -15,6 +16,39 @@ import (
 // coopDebtDays is songayno_MT in xulydonhang.py — one global constant,
 // shared by every vendor's write function, not Coop-specific.
 const coopDebtDays = 60
+
+// accumulatePromoItem folds one bonus/promo row's (SKU, ProductName, Qty)
+// into totals, grouped by SKU — every vendor's processSegment calls this
+// once at each point a bonus row is actually added (buildPromoBonusRow's
+// and buildInvoiceBonusRow's own `added`/`ok` returns, or BigC's inline
+// equivalent), the same call sites that already accumulate that bonus
+// row's weight/case-count into totalWeight/totalPackages. A blank SKU or
+// zero qty is skipped rather than polluting the summary with a
+// meaningless zero-quantity entry.
+func accumulatePromoItem(totals map[string]*PromoItemSummary, sku, productName string, qty float64) {
+	if sku == "" || qty == 0 {
+		return
+	}
+	if existing, ok := totals[sku]; ok {
+		existing.Qty += qty
+		return
+	}
+	totals[sku] = &PromoItemSummary{SKU: sku, ProductName: productName, Qty: qty}
+}
+
+// finalizePromoItems converts the accumulator map into the []PromoItemSummary
+// OrderRow.PromoItems actually serializes, sorted by SKU for a stable,
+// deterministic message/UI ordering. Uses make(...) (never a nil slice)
+// so an order with no bonus items still serializes PromoItems as JSON
+// "[]", not "null" — see OrderRow.PromoItems' own doc comment.
+func finalizePromoItems(totals map[string]*PromoItemSummary) []PromoItemSummary {
+	items := make([]PromoItemSummary, 0, len(totals))
+	for _, v := range totals {
+		items = append(items, *v)
+	}
+	sort.Slice(items, func(i, j int) bool { return items[i].SKU < items[j].SKU })
+	return items
+}
 
 // xPlus1Pattern mirrors the "(\d+)\s*\+\s*1" match inside
 // write_to_dondathang's promo-bonus-quantity logic.

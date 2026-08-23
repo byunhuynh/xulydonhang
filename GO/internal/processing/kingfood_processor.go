@@ -109,7 +109,9 @@ func (p *RealProcessor) processKingfoodSegment(filePath string, realPageNum int,
 
 	saigia := 0
 	totalWeight := 0.0
+	totalPackages := 0
 	totalValue := 0.0
+	promoTotals := map[string]*PromoItemSummary{}
 	var skuLog []string
 	var mismatchDetails []PriceMismatchDetail
 
@@ -132,6 +134,7 @@ func (p *RealProcessor) processKingfoodSegment(filePath string, realPageNum int,
 			caseCount = int(math.Ceil(ouQty / productInfo.PackSize))
 		}
 		totalWeight += lineWeight
+		totalPackages += caseCount
 
 		realPriceStr, _ := priceIndex.FindPrice(barcode)
 		realPrice := parseNumericField(realPriceStr)
@@ -185,8 +188,9 @@ func (p *RealProcessor) processKingfoodSegment(filePath string, realPageNum int,
 			saigia++
 			mismatchDetails = append(mismatchDetails, PriceMismatchDetail{
 				SKU: barcode, ProductName: productInfo.Name,
-				InvoicePrice: invoicePrice, SystemPrice: finalPrice,
-				ExcelRow: productRowIndex,
+				InvoicePrice: invoicePrice, SystemPrice: finalPrice, Qty: ouQty,
+				ExcelRow: productRowIndex, PromoText: truncatePromoText(khuyenmai),
+				PromoDateRange: khuyenmaiColumn,
 			})
 		}
 		rows = append(rows, productRow)
@@ -195,34 +199,45 @@ func (p *RealProcessor) processKingfoodSegment(filePath string, realPageNum int,
 		// Per-item promo bonus row (xulydonhang.py:4074-4128) — single
 		// attempt, buildPromoBonusRow always called with index=0 (no
 		// "|"-split multi-CTKM loop).
-		bonusRow, mainRowNote, mainRowBundleSku, added := buildPromoBonusRow(p.Store, khuyenmai,
-			coop.Product{Barcode: barcode, Qty: ouQty}, 0, entryDate, cancelDate, kingfoodDeliveryAddress,
-			kingfoodCustomerCode, description, warehouse, region, statCode, orderNum)
-		if added {
-			totalWeight += bonusRow.LineWeightKg
+		//
+		// Gated on matched: a gift is part of the SAME CTKM that
+		// explains the invoice price — only build it once that CTKM
+		// is confirmed, never from khuyenmai's last-examined-but-
+		// unconfirmed value on a genuine price mismatch. Deliberate
+		// divergence from Python (this block runs unconditionally
+		// there).
+		if matched {
+			bonusRow, mainRowNote, mainRowBundleSku, added := buildPromoBonusRow(p.Store, khuyenmai,
+				coop.Product{Barcode: barcode, Qty: ouQty}, 0, entryDate, cancelDate, kingfoodDeliveryAddress,
+				kingfoodCustomerCode, description, warehouse, region, statCode, orderNum)
+			if added {
+				totalWeight += bonusRow.LineWeightKg
+				totalPackages += bonusRow.CaseCount
+				accumulatePromoItem(promoTotals, bonusRow.SKU, bonusRow.ProductName, bonusRow.Qty)
 
-			// Kingfood's own no-{...}-brace fallback text
-			// (xulydonhang.py:4096, "KM Giao Rời - Không Che Barcode")
-			// differs from buildPromoBonusRow's shared Coop-flavored
-			// default ("KM Bó Kèm - Che Barcode"). Unlike FujiMart's
-			// equivalent fallback (which still writes AP because its own
-			// text contains "bó kèm"), Kingfood's fallback text does NOT
-			// contain "bó kèm"/"quấn kèm", so this ALSO needs to
-			// explicitly clear AP — matching Winmart's/Emart's identical
-			// fix, confirmed against xulydonhang.py:4092-4096 (only the
-			// cachbokem branch writes AP; the else/fallback branch never
-			// does).
-			if coop.ExtractBraceContent(khuyenmai) == "" {
-				mainRowNote = "KM Giao Rời - Không Che Barcode"
-				mainRowBundleSku = ""
-				bonusRow.PromoBundleSku = ""
-			}
+				// Kingfood's own no-{...}-brace fallback text
+				// (xulydonhang.py:4096, "KM Giao Rời - Không Che Barcode")
+				// differs from buildPromoBonusRow's shared Coop-flavored
+				// default ("KM Bó Kèm - Che Barcode"). Unlike FujiMart's
+				// equivalent fallback (which still writes AP because its own
+				// text contains "bó kèm"), Kingfood's fallback text does NOT
+				// contain "bó kèm"/"quấn kèm", so this ALSO needs to
+				// explicitly clear AP — matching Winmart's/Emart's identical
+				// fix, confirmed against xulydonhang.py:4092-4096 (only the
+				// cachbokem branch writes AP; the else/fallback branch never
+				// does).
+				if coop.ExtractBraceContent(khuyenmai) == "" {
+					mainRowNote = "KM Giao Rời - Không Che Barcode"
+					mainRowBundleSku = ""
+					bonusRow.PromoBundleSku = ""
+				}
 
-			rows[productRowIndex].PromoNote = mainRowNote
-			if mainRowBundleSku != "" {
-				rows[productRowIndex].PromoBundleSku = mainRowBundleSku
+				rows[productRowIndex].PromoNote = mainRowNote
+				if mainRowBundleSku != "" {
+					rows[productRowIndex].PromoBundleSku = mainRowBundleSku
+				}
+				rows = append(rows, bonusRow)
 			}
-			rows = append(rows, bonusRow)
 		}
 	}
 
@@ -261,6 +276,8 @@ func (p *RealProcessor) processKingfoodSegment(filePath string, realPageNum int,
 				invoiceCase = int(math.Ceil(soluongkm / invoiceInfo.PackSize))
 			}
 			totalWeight += invoiceWeight
+			totalPackages += invoiceCase
+			accumulatePromoItem(promoTotals, invoiceSku, invoiceInfo.Name, soluongkm)
 
 			invoiceNote := coop.ExtractBraceContent(invoicePromo)
 			if invoiceNote == "" {
@@ -278,7 +295,8 @@ func (p *RealProcessor) processKingfoodSegment(filePath string, realPageNum int,
 		}
 	}
 
-	headerDescription := fmt.Sprintf("%s (Tổng trọng lượng: %s)", description, coop.FormatWeightKg(totalWeight))
+	totalWeightFormatted := coop.FormatWeightKg(totalWeight)
+	headerDescription := fmt.Sprintf("%s (Tổng trọng lượng: %s)", description, totalWeightFormatted)
 	startRow, err := excelwriter.WriteOrderRows(p.ExcelPath, rows, headerDescription)
 	if err != nil {
 		return OrderRow{}, err
@@ -326,6 +344,9 @@ func (p *RealProcessor) processKingfoodSegment(filePath string, realPageNum int,
 		FileName: filepath.Base(filePath), Page: pageLabel, System: "Kingfood", MaKhachHang: kingfoodCustomerCode,
 		PO: poNumber, DonGia: fmt.Sprintf("%.0f", totalValue), Status: statusText, StatusKind: statusKind,
 		DriveURL: driveURL,
+		ShipTo: kingfoodDeliveryAddress, EntryDate: entryDate, CancelDate: cancelDate,
+		TotalWeightKg: totalWeightFormatted, TotalPackages: totalPackages,
+		PromoItems: finalizePromoItems(promoTotals),
 		SkuLog: skuLog, PriceMismatchCount: saigia, PriceMismatchDetails: mismatchDetails,
 	}, nil
 }

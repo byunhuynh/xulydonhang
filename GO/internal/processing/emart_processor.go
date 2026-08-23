@@ -124,7 +124,9 @@ func (p *RealProcessor) processEmartSegment(filePath string, realPageNum int, te
 
 	saigia := 0
 	totalWeight := 0.0
+	totalPackages := 0
 	totalValue := 0.0
+	promoTotals := map[string]*PromoItemSummary{}
 	var skuLog []string
 	var mismatchDetails []PriceMismatchDetail
 
@@ -138,6 +140,7 @@ func (p *RealProcessor) processEmartSegment(filePath string, realPageNum int, te
 			caseCount = int(math.Ceil(qty / productInfo.PackSize))
 		}
 		totalWeight += lineWeight
+		totalPackages += caseCount
 
 		// giahoadon (xulydonhang.py:5095): used DIRECTLY, no division by
 		// qty. rawProduct.UnitPrice really is a per-unit price — see the
@@ -202,8 +205,9 @@ func (p *RealProcessor) processEmartSegment(filePath string, realPageNum int, te
 			saigia++
 			mismatchDetails = append(mismatchDetails, PriceMismatchDetail{
 				SKU: barcode, ProductName: productInfo.Name,
-				InvoicePrice: invoicePrice, SystemPrice: finalPrice,
-				ExcelRow: productRowIndex,
+				InvoicePrice: invoicePrice, SystemPrice: finalPrice, Qty: qty,
+				ExcelRow: productRowIndex, PromoText: truncatePromoText(lastExaminedPromo),
+				PromoDateRange: lastExaminedPromoColumn,
 			})
 		}
 		rows = append(rows, productRow)
@@ -216,44 +220,54 @@ func (p *RealProcessor) processEmartSegment(filePath string, realPageNum int, te
 		// loops over "|"-split promo parts with its own i==0/i>0 AO/AP
 		// placement branch, which buildPromoBonusRow's own index
 		// parameter already models.
-		currentRowIndex := productRowIndex
-		for i, promoPart := range strings.Split(lastExaminedPromo, "|") {
-			rows[currentRowIndex].PromoContent = lastExaminedPromo
+		// Gated on matched — same rule as Coop's identical loop: a gift
+		// is part of the SAME CTKM that explains the invoice price, so
+		// only grant it once that CTKM is actually confirmed (matched),
+		// never from lastExaminedPromo's last-examined-but-unconfirmed
+		// value on a genuine price mismatch. Deliberate divergence from
+		// Python (xulydonhang.py:5203's split runs unconditionally).
+		if matched {
+			currentRowIndex := productRowIndex
+			for i, promoPart := range strings.Split(lastExaminedPromo, "|") {
+				rows[currentRowIndex].PromoContent = lastExaminedPromo
 
-			bonusRow, mainRowNote, mainRowBundleSku, added := buildPromoBonusRow(p.Store, promoPart,
-				coop.Product{Barcode: barcode, Qty: qty}, i, entryDate, cancelDate, storeName,
-				emartCustomerCode, description, warehouse, region, statCode, orderNum)
-			if !added {
-				continue
-			}
-			totalWeight += bonusRow.LineWeightKg
-			bonusRow.NoCaseCount = true
-
-			// Emart's own no-{...}-brace fallback
-			// (xulydonhang.py:5230/:5240, "KM Rời - Không Che Barcode")
-			// never writes AP, for EITHER i==0 or i>0 — a third distinct
-			// fallback string from Coop's default ("KM Bó Kèm - Che
-			// Barcode") and Winmart's ("KM Giao Rời - Không Che
-			// Barcode"). Override the shared helper's Coop-flavored
-			// result here, scoped to Emart only, for BOTH branches
-			// (unlike Lotte/Winmart, which only ever call with index 0).
-			if coop.ExtractBraceContent(promoPart) == "" {
-				mainRowNote = "KM Rời - Không Che Barcode"
-				mainRowBundleSku = ""
-				bonusRow.PromoBundleSku = ""
-				if i != 0 {
-					bonusRow.PromoNote = "KM Rời - Không Che Barcode"
+				bonusRow, mainRowNote, mainRowBundleSku, added := buildPromoBonusRow(p.Store, promoPart,
+					coop.Product{Barcode: barcode, Qty: qty}, i, entryDate, cancelDate, storeName,
+					emartCustomerCode, description, warehouse, region, statCode, orderNum)
+				if !added {
+					continue
 				}
-			}
+				totalWeight += bonusRow.LineWeightKg
+				totalPackages += bonusRow.CaseCount
+				accumulatePromoItem(promoTotals, bonusRow.SKU, bonusRow.ProductName, bonusRow.Qty)
+				bonusRow.NoCaseCount = true
 
-			if i == 0 {
-				rows[productRowIndex].PromoNote = mainRowNote
-				if mainRowBundleSku != "" {
-					rows[productRowIndex].PromoBundleSku = mainRowBundleSku
+				// Emart's own no-{...}-brace fallback
+				// (xulydonhang.py:5230/:5240, "KM Rời - Không Che Barcode")
+				// never writes AP, for EITHER i==0 or i>0 — a third distinct
+				// fallback string from Coop's default ("KM Bó Kèm - Che
+				// Barcode") and Winmart's ("KM Giao Rời - Không Che
+				// Barcode"). Override the shared helper's Coop-flavored
+				// result here, scoped to Emart only, for BOTH branches
+				// (unlike Lotte/Winmart, which only ever call with index 0).
+				if coop.ExtractBraceContent(promoPart) == "" {
+					mainRowNote = "KM Rời - Không Che Barcode"
+					mainRowBundleSku = ""
+					bonusRow.PromoBundleSku = ""
+					if i != 0 {
+						bonusRow.PromoNote = "KM Rời - Không Che Barcode"
+					}
 				}
+
+				if i == 0 {
+					rows[productRowIndex].PromoNote = mainRowNote
+					if mainRowBundleSku != "" {
+						rows[productRowIndex].PromoBundleSku = mainRowBundleSku
+					}
+				}
+				rows = append(rows, bonusRow)
+				currentRowIndex = len(rows) - 1
 			}
-			rows = append(rows, bonusRow)
-			currentRowIndex = len(rows) - 1
 		}
 	}
 
@@ -283,6 +297,8 @@ func (p *RealProcessor) processEmartSegment(filePath string, realPageNum int, te
 				invoiceCase = int(math.Ceil(soluongkm / invoiceInfo.PackSize))
 			}
 			totalWeight += invoiceWeight
+			totalPackages += invoiceCase
+			accumulatePromoItem(promoTotals, invoiceSku, invoiceInfo.Name, soluongkm)
 
 			invoiceNote := coop.ExtractBraceContent(invoicePromo)
 			if invoiceNote == "" {
@@ -300,7 +316,8 @@ func (p *RealProcessor) processEmartSegment(filePath string, realPageNum int, te
 		}
 	}
 
-	headerDescription := fmt.Sprintf("%s (Tổng trọng lượng: %s)", description, coop.FormatWeightKg(totalWeight))
+	totalWeightFormatted := coop.FormatWeightKg(totalWeight)
+	headerDescription := fmt.Sprintf("%s (Tổng trọng lượng: %s)", description, totalWeightFormatted)
 	startRow, err := excelwriter.WriteOrderRows(p.ExcelPath, rows, headerDescription)
 	if err != nil {
 		return OrderRow{}, err
@@ -351,6 +368,9 @@ func (p *RealProcessor) processEmartSegment(filePath string, realPageNum int, te
 		FileName: filepath.Base(filePath), Page: pageLabel, System: "Emart", MaKhachHang: emartCustomerCode,
 		PO: poNumber, DonGia: fmt.Sprintf("%.0f", totalValue), Status: statusText, StatusKind: statusKind,
 		DriveURL: driveURL,
+		ShipTo: storeName, EntryDate: entryDate, CancelDate: cancelDate,
+		TotalWeightKg: totalWeightFormatted, TotalPackages: totalPackages,
+		PromoItems: finalizePromoItems(promoTotals),
 		SkuLog: skuLog, PriceMismatchCount: saigia, PriceMismatchDetails: mismatchDetails,
 	}, nil
 }

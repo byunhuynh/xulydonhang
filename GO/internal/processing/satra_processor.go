@@ -148,7 +148,9 @@ func (p *RealProcessor) processSatraSegment(filePath string, realPageNum int, te
 
 	saigia := 0
 	totalWeight := 0.0
+	totalPackages := 0
 	totalValue := 0.0
+	promoTotals := map[string]*PromoItemSummary{}
 	var skuLog []string
 	var mismatchDetails []PriceMismatchDetail
 
@@ -162,6 +164,7 @@ func (p *RealProcessor) processSatraSegment(filePath string, realPageNum int, te
 			caseCount = int(math.Ceil(qty / productInfo.PackSize))
 		}
 		totalWeight += lineWeight
+		totalPackages += caseCount
 
 		invoicePrice := rawProduct.TotalPrice
 		realPriceStr, _ := priceIndex.FindPrice(barcode)
@@ -229,8 +232,9 @@ func (p *RealProcessor) processSatraSegment(filePath string, realPageNum int, te
 			saigia++
 			mismatchDetails = append(mismatchDetails, PriceMismatchDetail{
 				SKU: barcode, ProductName: productInfo.Name,
-				InvoicePrice: invoicePrice, SystemPrice: finalPrice,
-				ExcelRow: productRowIndex,
+				InvoicePrice: invoicePrice, SystemPrice: finalPrice, Qty: qty,
+				ExcelRow: productRowIndex, PromoText: truncatePromoText(lastExaminedPromo),
+				PromoDateRange: lastExaminedPromoColumn,
 			})
 		}
 		rows = append(rows, productRow)
@@ -242,25 +246,35 @@ func (p *RealProcessor) processSatraSegment(filePath string, realPageNum int, te
 		// Coop uses; the AQ-write-every-iteration / i==0-vs-i>0 off-by-one
 		// this mirrors is the same quirk documented in detail on Coop's
 		// equivalent loop in coop_processor.go).
-		currentRowIndex := productRowIndex
-		for i, promoPart := range strings.Split(lastExaminedPromo, "|") {
-			rows[currentRowIndex].PromoContent = lastExaminedPromo
+		// Gated on matched — same rule as Coop's identical loop: a gift
+		// is part of the SAME CTKM that explains the invoice price, so
+		// only grant it once that CTKM is actually confirmed (matched),
+		// never from lastExaminedPromo's last-examined-but-unconfirmed
+		// value on a genuine price mismatch. Deliberate divergence from
+		// Python (xulydonhang.py:2555's split runs unconditionally).
+		if matched {
+			currentRowIndex := productRowIndex
+			for i, promoPart := range strings.Split(lastExaminedPromo, "|") {
+				rows[currentRowIndex].PromoContent = lastExaminedPromo
 
-			bonusRow, mainRowNote, mainRowBundleSku, added := buildPromoBonusRow(p.Store, promoPart,
-				coop.Product{Barcode: barcode, Qty: qty}, i, entryDate, cancelDate, shipTo,
-				customerCode, noteText, warehouse, region, statCode, satraOrderNumber(poNumber))
-			if !added {
-				continue
-			}
-			totalWeight += bonusRow.LineWeightKg
-			if i == 0 {
-				rows[productRowIndex].PromoNote = mainRowNote
-				if mainRowBundleSku != "" {
-					rows[productRowIndex].PromoBundleSku = mainRowBundleSku
+				bonusRow, mainRowNote, mainRowBundleSku, added := buildPromoBonusRow(p.Store, promoPart,
+					coop.Product{Barcode: barcode, Qty: qty}, i, entryDate, cancelDate, shipTo,
+					customerCode, noteText, warehouse, region, statCode, satraOrderNumber(poNumber))
+				if !added {
+					continue
 				}
+				totalWeight += bonusRow.LineWeightKg
+				totalPackages += bonusRow.CaseCount
+				accumulatePromoItem(promoTotals, bonusRow.SKU, bonusRow.ProductName, bonusRow.Qty)
+				if i == 0 {
+					rows[productRowIndex].PromoNote = mainRowNote
+					if mainRowBundleSku != "" {
+						rows[productRowIndex].PromoBundleSku = mainRowBundleSku
+					}
+				}
+				rows = append(rows, bonusRow)
+				currentRowIndex = len(rows) - 1
 			}
-			rows = append(rows, bonusRow)
-			currentRowIndex = len(rows) - 1
 		}
 	}
 
@@ -268,11 +282,14 @@ func (p *RealProcessor) processSatraSegment(filePath string, realPageNum int, te
 		if bonusRow, added := buildInvoiceBonusRow(p.Store, invoicePromo, totalValue, entryDate, cancelDate,
 			shipTo, customerCode, noteText, warehouse, region, statCode, satraOrderNumber(poNumber)); added {
 			totalWeight += bonusRow.LineWeightKg
+			totalPackages += bonusRow.CaseCount
+			accumulatePromoItem(promoTotals, bonusRow.SKU, bonusRow.ProductName, bonusRow.Qty)
 			rows = append(rows, bonusRow)
 		}
 	}
 
-	headerDescription := fmt.Sprintf("%s (Tổng trọng lượng: %s)", noteText, coop.FormatWeightKg(totalWeight))
+	totalWeightFormatted := coop.FormatWeightKg(totalWeight)
+	headerDescription := fmt.Sprintf("%s (Tổng trọng lượng: %s)", noteText, totalWeightFormatted)
 	startRow, err := excelwriter.WriteOrderRows(p.ExcelPath, rows, headerDescription)
 	if err != nil {
 		return OrderRow{}, err
@@ -320,6 +337,9 @@ func (p *RealProcessor) processSatraSegment(filePath string, realPageNum int, te
 		FileName: filepath.Base(filePath), Page: pageLabel, System: "Satra", MaKhachHang: customerCode,
 		PO: poNumber, DonGia: fmt.Sprintf("%.0f", totalValue), Status: statusText, StatusKind: statusKind,
 		DriveURL: driveURL,
+		ShipTo: shipTo, EntryDate: entryDate, CancelDate: cancelDate,
+		TotalWeightKg: totalWeightFormatted, TotalPackages: totalPackages,
+		PromoItems: finalizePromoItems(promoTotals),
 		SkuLog: skuLog, PriceMismatchCount: saigia, PriceMismatchDetails: mismatchDetails,
 	}, nil
 }

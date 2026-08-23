@@ -127,7 +127,14 @@ func TestParseKingfoodPrice(t *testing.T) {
 // 52195.073 — confirmed by direct extraction during planning) with a
 // "2+1 SP0002" promo (an "X+1" match mentioning SP0002, a known internal
 // SKU already present in the productdata test fixture) and NO {...}
-// braces.
+// braces. The price CSV's own "Giá" column is "52195" (a bare integer,
+// not "52195.073"): pricing.Index.ParseIndex strips every "." from that
+// column as a Vietnamese thousands separator (never a decimal point), so
+// a literal "52195.073" would parse to 52195073, not 52195.073 — this
+// bonus row now only builds once matched is true (see the per-item promo
+// bonus row's own "Gated on matched" comment in kingfood_processor.go),
+// and closeEnough's tolerance (relTol 1e-4) comfortably covers the 0.073
+// gap between realPrice=52195 and the real invoicePrice=52195.073.
 func TestRealProcessor_KingfoodNoBraceBonusRowDoesNotWriteAP(t *testing.T) {
 	store, err := productdata.Load("productdata/testdata/data.xlsx")
 	if err != nil {
@@ -138,7 +145,7 @@ func TestRealProcessor_KingfoodNoBraceBonusRowDoesNotWriteAP(t *testing.T) {
 	const promoValue = "2+1 SP0002"
 	priceCsv := [][]string{
 		{"STT", "Mã hàng", "Tên", "Giá", "1/1-31/12"},
-		{"1", "8936156732620", "Viên giặt xả", "52195.073", promoValue},
+		{"1", "8936156732620", "Viên giặt xả", "52195", promoValue},
 	}
 	pricingSource := &fixturePricingSource{index: pricing.ParseIndex(priceCsv)}
 

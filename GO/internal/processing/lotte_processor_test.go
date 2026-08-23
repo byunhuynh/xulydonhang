@@ -73,11 +73,16 @@ func TestRealProcessor_LotteNoBraceBonusRowUsesGiaoRoiNote(t *testing.T) {
 	// TestRealProcessor_ProcessesRealSampleLotteFile's comment); SP0002
 	// is a known internal SKU already present in the productdata test
 	// fixture (see TestFindSkusMentioned), so it's mentioned directly
-	// rather than needing a mapped barcode.
+	// rather than needing a mapped barcode. Price is "65296" (the real
+	// extracted invoice price for this barcode/PO, confirmed by direct
+	// probe) rather than an arbitrary value: the bonus row now only
+	// builds once matched is true (see processLotteSegment's own "Gated
+	// on matched" comment), so the price must actually match the
+	// invoice for this regression test to still exercise that path.
 	const promoValue = "2+1 SP0002"
 	priceCsv := [][]string{
 		{"STT", "Mã hàng", "Tên", "Giá", "1/1-31/12"},
-		{"1", "8936156730244", "Nước giặt", "500000", promoValue},
+		{"1", "8936156730244", "Nước giặt", "65296", promoValue},
 	}
 	pricingSource := &fixturePricingSource{index: pricing.ParseIndex(priceCsv)}
 

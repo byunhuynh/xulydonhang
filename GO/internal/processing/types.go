@@ -6,13 +6,58 @@ package processing
 // computed price (see excelwriter.ConfirmPrice). ExcelRow is the real
 // row number in the "Don dat hang" sheet this product was written to —
 // required to edit the right cell later, since nothing else in the
-// returned OrderRow identifies individual product rows.
+// returned OrderRow identifies individual product rows. Qty is this
+// SKU's order quantity — the frontend needs it (alongside
+// InvoicePrice/SystemPrice) to recompute the order's own DonGia total
+// after the user confirms a price choice, mirroring exactly how this
+// same totalValue += finalPrice * product.Qty accumulation happens on
+// the Go side during the original Process() call (SystemPrice here IS
+// that finalPrice, so it's already included in the OrderRow's DonGia
+// exactly once — the frontend only needs to add the delta between the
+// confirmed price and SystemPrice, times Qty, not recompute the whole
+// total from scratch).
 type PriceMismatchDetail struct {
 	SKU          string  `json:"sku"`
 	ProductName  string  `json:"productName"`
 	InvoicePrice float64 `json:"invoicePrice"`
 	SystemPrice  float64 `json:"systemPrice"`
+	Qty          float64 `json:"qty"`
 	ExcelRow     int     `json:"excelRow"`
+
+	// PromoText names the promotion (already truncated via
+	// truncatePromoText, same helper formatSkuLogLine's own "đã thử KM:"
+	// log line uses) that was examined while computing SystemPrice, if
+	// any — empty when SystemPrice is just the plain price-sheet price
+	// with no promo involved. Lets the frontend explain WHY the system
+	// price is what it is next to that value (see zaloMessage.ts),
+	// instead of showing a bare, unexplained number that happens to
+	// differ from the PO's own invoice price.
+	PromoText string `json:"promoText"`
+
+	// PromoDateRange is that same promotion's own pricing-sheet column
+	// header (e.g. "04/08-09/09") — the exact value formatSkuLogLine's
+	// "(áp dụng %s)" suffix already shows for a MATCHED price; surfaced
+	// here too so a mismatched SKU's promo can be looked up/verified
+	// against the real pricing sheet later (which column, which date
+	// range), not just identified by its free-text description. Empty
+	// whenever PromoText is empty (no promo was examined at all).
+	PromoDateRange string `json:"promoDateRange"`
+}
+
+// PromoItemSummary is one promotional/bonus SKU's TOTAL quantity across
+// the whole order, grouped by SKU (a promo can be triggered by more than
+// one purchased line, e.g. the same gift-with-purchase item earned from
+// two different products) — built by accumulatePromoItem as each
+// buildPromoBonusRow/buildInvoiceBonusRow (or BigC's own equivalent
+// inline logic) bonus row is added, keyed by that row's own SKU exactly
+// as written to Excel (a promo occasionally resolves to more than one
+// matched SKU joined as "sku1, sku2" — grouped as that same joined
+// string, matching the granularity Excel's own SKU column already
+// uses, not split further).
+type PromoItemSummary struct {
+	SKU         string  `json:"sku"`
+	ProductName string  `json:"productName"`
+	Qty         float64 `json:"qty"`
 }
 
 // OrderRow là một dòng trong bảng kết quả, ánh xạ đúng các cột của bảng
@@ -32,8 +77,39 @@ type OrderRow struct {
 	// upload may still be in progress or even fail in the background,
 	// this URL is a best-effort placeholder from the start). Empty
 	// string if the row's file was never uploaded (e.g. a Failed row
-	// with no successfully-written Excel data to link to).
+	// with no successfully-written Excel data to link to). Kept for the
+	// Drive upload that still runs in the background — no longer
+	// surfaced as its own clickable column in the frontend (the user has
+	// a separate viewing mechanism for that now), only used internally.
 	DriveURL string `json:"driveUrl"`
+
+	// ShipTo/EntryDate/CancelDate/TotalWeightKg/TotalPackages mirror the
+	// fields xulydonhang.py's ghi_message calls write into message.txt
+	// for the eventual Zalo notification (store/entry_date/cancle_date/
+	// tong_trongluong/tong_kienhang) - added so the frontend can build
+	// that same message content as a preview popup without a real Zalo
+	// send integration existing yet. TotalWeightKg is pre-formatted
+	// (coop.FormatWeightKg: kg below 1000, tấn at/above) since that
+	// formatting is already computed once per order for
+	// headerDescription; TotalPackages is the running sum of each
+	// product line's case count (ceil(qty/packSize), matching Python's
+	// sokienhang += math.ceil(...) exactly), including promo/invoice
+	// bonus rows wherever those also contribute to TotalWeightKg.
+	ShipTo        string `json:"shipTo"`
+	EntryDate     string `json:"entryDate"`
+	CancelDate    string `json:"cancelDate"`
+	TotalWeightKg string `json:"totalWeightKg"`
+	TotalPackages int    `json:"totalPackages"`
+
+	// PromoItems is every promotional/bonus SKU this order earned,
+	// totaled across the whole order (see PromoItemSummary's own doc
+	// comment) — surfaced for the same Zalo-notification-preview reason
+	// as ShipTo/EntryDate/etc above. Always built via finalizePromoItems
+	// (processor_shared.go), which uses make(...) rather than a nil
+	// slice literal, so this serializes as JSON "[]" rather than "null"
+	// when an order earns no bonus items — the frontend's TypeScript
+	// type declares this as a plain array with no null/undefined case.
+	PromoItems []PromoItemSummary `json:"promoItems"`
 
 	// PriceMismatchCount is the same "saigia" count already embedded in
 	// Status's text ("... - Có N mã sai giá") — surfaced as its own typed

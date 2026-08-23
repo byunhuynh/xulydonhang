@@ -100,7 +100,9 @@ func (p *RealProcessor) processLotteSegment(filePath string, realPageNum int, te
 
 	saigia := 0
 	totalWeight := 0.0
+	totalPackages := 0
 	totalValue := 0.0
+	promoTotals := map[string]*PromoItemSummary{}
 	var skuLog []string
 	var mismatchDetails []PriceMismatchDetail
 
@@ -114,6 +116,7 @@ func (p *RealProcessor) processLotteSegment(filePath string, realPageNum int, te
 			caseCount = int(math.Ceil(qty / productInfo.PackSize))
 		}
 		totalWeight += lineWeight
+		totalPackages += caseCount
 
 		invoicePrice := rawProduct.TotalPrice / qty
 		realPriceStr, _ := priceIndex.FindPrice(barcode)
@@ -164,8 +167,9 @@ func (p *RealProcessor) processLotteSegment(filePath string, realPageNum int, te
 			saigia++
 			mismatchDetails = append(mismatchDetails, PriceMismatchDetail{
 				SKU: barcode, ProductName: productInfo.Name,
-				InvoicePrice: invoicePrice, SystemPrice: finalPrice,
-				ExcelRow: productRowIndex,
+				InvoicePrice: invoicePrice, SystemPrice: finalPrice, Qty: qty,
+				ExcelRow: productRowIndex, PromoText: truncatePromoText(lastExaminedPromo),
+				PromoDateRange: lastExaminedPromoColumn,
 			})
 		}
 		rows = append(rows, productRow)
@@ -192,36 +196,46 @@ func (p *RealProcessor) processLotteSegment(filePath string, realPageNum int, te
 		// applies), matches Python exactly: laycachbo_khuyenmai's `{...}`
 		// extraction and the "X+1" regex both search the whole string
 		// regardless of where "|" appears in it.
-		bonusRow, mainRowNote, mainRowBundleSku, added := buildPromoBonusRow(p.Store, lastExaminedPromo,
-			coop.Product{Barcode: barcode, Qty: qty}, 0, info.EntryDate, cancelDate, shipTo,
-			customerCode, description, warehouse, region, statCode, lotteOrderNumber(info.PONumber))
-		if added {
-			totalWeight += bonusRow.LineWeightKg
+		// Gated on matched: a gift is part of the SAME CTKM that explains
+		// the invoice price — only build a bonus row once that CTKM is
+		// actually confirmed, never from lastExaminedPromo's last-
+		// examined-but-unconfirmed value on a genuine price mismatch.
+		// Deliberate divergence from Python (xulydonhang.py:2196's "if
+		// kiemtra:" block runs unconditionally, regardless of giakhop).
+		if matched {
+			bonusRow, mainRowNote, mainRowBundleSku, added := buildPromoBonusRow(p.Store, lastExaminedPromo,
+				coop.Product{Barcode: barcode, Qty: qty}, 0, info.EntryDate, cancelDate, shipTo,
+				customerCode, description, warehouse, region, statCode, lotteOrderNumber(info.PONumber))
+			if added {
+				totalWeight += bonusRow.LineWeightKg
+				totalPackages += bonusRow.CaseCount
+				accumulatePromoItem(promoTotals, bonusRow.SKU, bonusRow.ProductName, bonusRow.Qty)
 
-			// buildPromoBonusRow's no-brace fallback ("KM Bó Kèm - Che
-			// Barcode", which also flips isBundle true and writes AP)
-			// is Coop's own default (xulydonhang.py:1198's "... or 'KM
-			// Bó Kèm - Che Barcode'") and must stay unchanged there —
-			// Coop's AP-writing behavior in that branch is verified,
-			// already-shipped behavior from an earlier phase. Lotte's
-			// write_to_dondathang_lotte has a different no-brace
-			// branch (xulydonhang.py:2204-2217's "else:
-			// sheet[f'AO{current_row}'] = 'KM Giao Rời - Không Che
-			// Barcode'") that never writes AP at all in this case.
-			// Override the shared helper's Coop-flavored result here,
-			// scoped to Lotte only, rather than changing
-			// buildPromoBonusRow itself.
-			if coop.ExtractBraceContent(lastExaminedPromo) == "" {
-				mainRowNote = "KM Giao Rời - Không Che Barcode"
-				mainRowBundleSku = ""
-				bonusRow.PromoBundleSku = ""
-			}
+				// buildPromoBonusRow's no-brace fallback ("KM Bó Kèm - Che
+				// Barcode", which also flips isBundle true and writes AP)
+				// is Coop's own default (xulydonhang.py:1198's "... or 'KM
+				// Bó Kèm - Che Barcode'") and must stay unchanged there —
+				// Coop's AP-writing behavior in that branch is verified,
+				// already-shipped behavior from an earlier phase. Lotte's
+				// write_to_dondathang_lotte has a different no-brace
+				// branch (xulydonhang.py:2204-2217's "else:
+				// sheet[f'AO{current_row}'] = 'KM Giao Rời - Không Che
+				// Barcode'") that never writes AP at all in this case.
+				// Override the shared helper's Coop-flavored result here,
+				// scoped to Lotte only, rather than changing
+				// buildPromoBonusRow itself.
+				if coop.ExtractBraceContent(lastExaminedPromo) == "" {
+					mainRowNote = "KM Giao Rời - Không Che Barcode"
+					mainRowBundleSku = ""
+					bonusRow.PromoBundleSku = ""
+				}
 
-			rows[productRowIndex].PromoNote = mainRowNote
-			if mainRowBundleSku != "" {
-				rows[productRowIndex].PromoBundleSku = mainRowBundleSku
+				rows[productRowIndex].PromoNote = mainRowNote
+				if mainRowBundleSku != "" {
+					rows[productRowIndex].PromoBundleSku = mainRowBundleSku
+				}
+				rows = append(rows, bonusRow)
 			}
-			rows = append(rows, bonusRow)
 		}
 	}
 
@@ -229,11 +243,14 @@ func (p *RealProcessor) processLotteSegment(filePath string, realPageNum int, te
 		if bonusRow, added := buildInvoiceBonusRow(p.Store, invoicePromo, totalValue, info.EntryDate, cancelDate,
 			shipTo, customerCode, description, warehouse, region, statCode, lotteOrderNumber(info.PONumber)); added {
 			totalWeight += bonusRow.LineWeightKg
+			totalPackages += bonusRow.CaseCount
+			accumulatePromoItem(promoTotals, bonusRow.SKU, bonusRow.ProductName, bonusRow.Qty)
 			rows = append(rows, bonusRow)
 		}
 	}
 
-	headerDescription := fmt.Sprintf("%s (Tổng trọng lượng: %s)", description, coop.FormatWeightKg(totalWeight))
+	totalWeightFormatted := coop.FormatWeightKg(totalWeight)
+	headerDescription := fmt.Sprintf("%s (Tổng trọng lượng: %s)", description, totalWeightFormatted)
 	startRow, err := excelwriter.WriteOrderRows(p.ExcelPath, rows, headerDescription)
 	if err != nil {
 		return OrderRow{}, err
@@ -281,6 +298,9 @@ func (p *RealProcessor) processLotteSegment(filePath string, realPageNum int, te
 		FileName: filepath.Base(filePath), Page: pageLabel, System: "Lotte", MaKhachHang: customerCode,
 		PO: info.PONumber, DonGia: fmt.Sprintf("%.0f", totalValue), Status: statusText, StatusKind: statusKind,
 		DriveURL: driveURL,
+		ShipTo: shipTo, EntryDate: info.EntryDate, CancelDate: cancelDate,
+		TotalWeightKg: totalWeightFormatted, TotalPackages: totalPackages,
+		PromoItems: finalizePromoItems(promoTotals),
 		SkuLog: skuLog, PriceMismatchCount: saigia, PriceMismatchDetails: mismatchDetails,
 	}, nil
 }

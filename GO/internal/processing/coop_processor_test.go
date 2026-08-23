@@ -60,23 +60,24 @@ func TestRealProcessor_NonCoopFileProducesFailedRow(t *testing.T) {
 }
 
 // TestRealProcessor_PromoBonusRowFieldsMatchPythonRowTarget regression-tests
-// two bugs a review found in the plan's original reference code for
+// a bug a review found in the plan's original reference code for
 // coop_processor.go's promo/bonus-row logic, re-traced against
-// xulydonhang.py:1085,1174-1176,1201,1211:
-//
-//  1. khuyenmai (the promo text used for PromoContent/bonus-SKU splitting)
-//     is set on every examined promo candidate, not only on a price match —
-//     so it must still be populated when the product row ends up a price
-//     mismatch.
-//  2. the FIRST promo item (index 0) split by "|" writes its note/bundle-SKU
-//     onto the MAIN PRODUCT ROW (not its own bonus row); every later item
-//     (index > 0) writes onto its own bonus row instead.
+// xulydonhang.py:1085,1174-1176,1201,1211: the FIRST promo item (index 0)
+// split by "|" writes its note/bundle-SKU onto the MAIN PRODUCT ROW (not
+// its own bonus row); every later item (index > 0) writes onto its own
+// bonus row instead.
 //
 // This uses the real sample PDF's actual first product barcode (cleaned to
 // "3564270") together with two internal SKUs already present in the
 // productdata test fixture (SP0001, SP0002) as the promo's bonus-item
-// mentions, and a promo/price fixture engineered to NOT match the invoice
-// price — so the "even when mismatched" half of bug 1 is exercised too.
+// mentions. Price is "33726" (the real extracted invoice price for this
+// barcode, confirmed by direct probe), not an arbitrary value: the note/
+// bundle-SKU/bonus-row logic under test now only runs once matched is
+// true (see processCoopSegment's own "Gated on matched" comment), so this
+// test needs a genuinely matching price to exercise it. The companion
+// mismatch scenario (khuyenmai still populated, but no note/bonus row at
+// all) is covered separately by
+// TestRealProcessor_PromoContentSetButNoBonusRowOnMismatch below.
 func TestRealProcessor_PromoBonusRowFieldsMatchPythonRowTarget(t *testing.T) {
 	store, err := productdata.Load("productdata/testdata/data.xlsx")
 	if err != nil {
@@ -87,7 +88,7 @@ func TestRealProcessor_PromoBonusRowFieldsMatchPythonRowTarget(t *testing.T) {
 	const promoValue = "cm Tang SP0001 {Bó Kèm - Che Barcode}|Tang SP0002 {Combo 2}"
 	priceCsv := [][]string{
 		{"STT", "Mã hàng", "Tên", "Giá", "1/1-31/12"},
-		{"1", "3564270", "Nước giặt", "500000", promoValue},
+		{"1", "3564270", "Nước giặt", "33726", promoValue},
 	}
 	pricingSource := &fixturePricingSource{index: pricing.ParseIndex(priceCsv)}
 
@@ -130,11 +131,8 @@ func TestRealProcessor_PromoBonusRowFieldsMatchPythonRowTarget(t *testing.T) {
 		t.Fatalf("missing expected rows: main=%v bonus0=%v bonus1=%v", mainRow, bonusRow0, bonusRow1)
 	}
 
-	// Bug 1: PromoContent must be populated on the main row even though
-	// this product's price didn't match (500000 real price vs. the PDF's
-	// actual invoice unit price).
 	if got := cell(mainRow, colPromoContent); got != promoValue {
-		t.Errorf("main row PromoContent = %q, want %q (bug 1: khuyenmai must be set even on mismatch)", got, promoValue)
+		t.Errorf("main row PromoContent = %q, want %q", got, promoValue)
 	}
 
 	// Bug 2: item 0's note/bundle-SKU belongs on the MAIN row.
@@ -161,5 +159,80 @@ func TestRealProcessor_PromoBonusRowFieldsMatchPythonRowTarget(t *testing.T) {
 	}
 	if got := cell(bonusRow1, colPromoBundleSku); got != "" {
 		t.Errorf("bonus row 1 PromoBundleSku = %q, want empty", got)
+	}
+}
+
+// TestRealProcessor_PromoContentSetButNoBonusRowOnMismatch regression-tests
+// the companion half of the bug
+// TestRealProcessor_PromoBonusRowFieldsMatchPythonRowTarget covers: khuyenmai
+// (PromoContent) is set on every examined promo candidate, not only on a
+// price match, so it must still be populated when the product row ends up
+// a price mismatch (xulydonhang.py:1085) — but, per this Go port's
+// deliberate divergence from Python (see processCoopSegment's own "Gated
+// on matched" comment), the note/bundle-SKU/bonus-row machinery must NOT
+// run at all on a genuine mismatch, since a gift is only ever part of the
+// SAME CTKM that's confirmed to explain the invoice price.
+//
+// Uses the same real sample PDF/barcode/promo as the sibling test above,
+// but with a price ("500000") engineered to NOT match the real invoice
+// price (33726), so matched stays false throughout.
+func TestRealProcessor_PromoContentSetButNoBonusRowOnMismatch(t *testing.T) {
+	store, err := productdata.Load("productdata/testdata/data.xlsx")
+	if err != nil {
+		t.Fatalf("Load productdata failed: %v", err)
+	}
+	excelPath := copyTestWorkbookForProcessor(t)
+
+	const promoValue = "cm Tang SP0001 {Bó Kèm - Che Barcode}|Tang SP0002 {Combo 2}"
+	priceCsv := [][]string{
+		{"STT", "Mã hàng", "Tên", "Giá", "1/1-31/12"},
+		{"1", "3564270", "Nước giặt", "500000", promoValue},
+	}
+	pricingSource := &fixturePricingSource{index: pricing.ParseIndex(priceCsv)}
+
+	rp := &RealProcessor{Store: store, Pricing: pricingSource, ExcelPath: excelPath}
+	if _, err := rp.Process(context.Background(), "testdata/sample_coop_order.pdf", 1); err != nil {
+		t.Fatalf("Process returned error: %v", err)
+	}
+
+	f, err := excelize.OpenFile(excelPath)
+	if err != nil {
+		t.Fatalf("failed reopening written workbook: %v", err)
+	}
+	defer f.Close()
+	sheetRows, err := f.GetRows("Don dat hang")
+	if err != nil {
+		t.Fatalf("failed reading Don dat hang rows: %v", err)
+	}
+
+	const colSKU, colPromoNote, colPromoBundleSku, colPromoContent = 16, 40, 41, 42
+	cell := func(row []string, idx int) string {
+		if idx < len(row) {
+			return row[idx]
+		}
+		return ""
+	}
+
+	var mainRow []string
+	for _, row := range sheetRows {
+		switch cell(row, colSKU) {
+		case "3564270":
+			mainRow = row
+		case "SP0001", "SP0002":
+			t.Errorf("found a %s bonus row, want none: a genuine price mismatch must not build a gift row", cell(row, colSKU))
+		}
+	}
+	if mainRow == nil {
+		t.Fatalf("missing expected main row")
+	}
+
+	if got := cell(mainRow, colPromoContent); got != promoValue {
+		t.Errorf("main row PromoContent = %q, want %q (khuyenmai must be set even on mismatch)", got, promoValue)
+	}
+	if got := cell(mainRow, colPromoNote); got != "" {
+		t.Errorf("main row PromoNote = %q, want empty (no confirmed CTKM on a genuine mismatch)", got)
+	}
+	if got := cell(mainRow, colPromoBundleSku); got != "" {
+		t.Errorf("main row PromoBundleSku = %q, want empty (no confirmed CTKM on a genuine mismatch)", got)
 	}
 }

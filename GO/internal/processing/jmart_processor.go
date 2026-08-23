@@ -85,7 +85,9 @@ func (p *RealProcessor) processJMartSegment(filePath string, realPageNum int, te
 
 	saigia := 0
 	totalWeight := 0.0
+	totalPackages := 0
 	totalValue := 0.0
+	promoTotals := map[string]*PromoItemSummary{}
 	var skuLog []string
 	var mismatchDetails []PriceMismatchDetail
 
@@ -101,6 +103,7 @@ func (p *RealProcessor) processJMartSegment(filePath string, realPageNum int, te
 			caseCount = int(math.Ceil(ouQty / productInfo.PackSize))
 		}
 		totalWeight += lineWeight
+		totalPackages += caseCount
 
 		realPriceStr, _ := priceIndex.FindPrice(barcode)
 		realPrice := parseNumericField(realPriceStr)
@@ -152,8 +155,9 @@ func (p *RealProcessor) processJMartSegment(filePath string, realPageNum int, te
 			saigia++
 			mismatchDetails = append(mismatchDetails, PriceMismatchDetail{
 				SKU: barcode, ProductName: productInfo.Name,
-				InvoicePrice: invoicePrice, SystemPrice: finalPrice,
-				ExcelRow: productRowIndex,
+				InvoicePrice: invoicePrice, SystemPrice: finalPrice, Qty: ouQty,
+				ExcelRow: productRowIndex, PromoText: truncatePromoText(khuyenmai),
+				PromoDateRange: khuyenmaiColumn,
 			})
 		}
 		rows = append(rows, productRow)
@@ -162,28 +166,39 @@ func (p *RealProcessor) processJMartSegment(filePath string, realPageNum int, te
 		// Per-item promo bonus row — single attempt, buildPromoBonusRow
 		// always called with index=0, matching Kingfood's exact shape
 		// (both are produced by the same real Python function).
-		bonusRow, mainRowNote, mainRowBundleSku, added := buildPromoBonusRow(p.Store, khuyenmai,
-			coop.Product{Barcode: barcode, Qty: ouQty}, 0, entryDate, cancelDate, deliveryAddress,
-			jmartCustomerCode, description, warehouse, region, statCode, orderNum)
-		if added {
-			totalWeight += bonusRow.LineWeightKg
+		//
+		// Gated on matched: a gift is part of the SAME CTKM that
+		// explains the invoice price — only build it once that CTKM
+		// is confirmed, never from khuyenmai's last-examined-but-
+		// unconfirmed value on a genuine price mismatch. Deliberate
+		// divergence from Python (this block runs unconditionally
+		// there).
+		if matched {
+			bonusRow, mainRowNote, mainRowBundleSku, added := buildPromoBonusRow(p.Store, khuyenmai,
+				coop.Product{Barcode: barcode, Qty: ouQty}, 0, entryDate, cancelDate, deliveryAddress,
+				jmartCustomerCode, description, warehouse, region, statCode, orderNum)
+			if added {
+				totalWeight += bonusRow.LineWeightKg
+				totalPackages += bonusRow.CaseCount
+				accumulatePromoItem(promoTotals, bonusRow.SKU, bonusRow.ProductName, bonusRow.Qty)
 
-			// No-{...}-brace fallback text ("KM Giao Rời - Không Che
-			// Barcode") does NOT write AP — matching Kingfood's own
-			// fix (write_to_dondathang_kingfood:4092-4096, only the
-			// cachbokem branch writes AP; the else/fallback branch
-			// never does), since this is the SAME real Python function.
-			if coop.ExtractBraceContent(khuyenmai) == "" {
-				mainRowNote = "KM Giao Rời - Không Che Barcode"
-				mainRowBundleSku = ""
-				bonusRow.PromoBundleSku = ""
-			}
+				// No-{...}-brace fallback text ("KM Giao Rời - Không Che
+				// Barcode") does NOT write AP — matching Kingfood's own
+				// fix (write_to_dondathang_kingfood:4092-4096, only the
+				// cachbokem branch writes AP; the else/fallback branch
+				// never does), since this is the SAME real Python function.
+				if coop.ExtractBraceContent(khuyenmai) == "" {
+					mainRowNote = "KM Giao Rời - Không Che Barcode"
+					mainRowBundleSku = ""
+					bonusRow.PromoBundleSku = ""
+				}
 
-			rows[productRowIndex].PromoNote = mainRowNote
-			if mainRowBundleSku != "" {
-				rows[productRowIndex].PromoBundleSku = mainRowBundleSku
+				rows[productRowIndex].PromoNote = mainRowNote
+				if mainRowBundleSku != "" {
+					rows[productRowIndex].PromoBundleSku = mainRowBundleSku
+				}
+				rows = append(rows, bonusRow)
 			}
-			rows = append(rows, bonusRow)
 		}
 	}
 
@@ -217,6 +232,8 @@ func (p *RealProcessor) processJMartSegment(filePath string, realPageNum int, te
 				invoiceCase = int(math.Ceil(soluongkm / invoiceInfo.PackSize))
 			}
 			totalWeight += invoiceWeight
+			totalPackages += invoiceCase
+			accumulatePromoItem(promoTotals, invoiceSku, invoiceInfo.Name, soluongkm)
 
 			invoiceNote := coop.ExtractBraceContent(invoicePromo)
 			if invoiceNote == "" {
@@ -234,7 +251,8 @@ func (p *RealProcessor) processJMartSegment(filePath string, realPageNum int, te
 		}
 	}
 
-	headerDescription := fmt.Sprintf("%s (Tổng trọng lượng: %s)", description, coop.FormatWeightKg(totalWeight))
+	totalWeightFormatted := coop.FormatWeightKg(totalWeight)
+	headerDescription := fmt.Sprintf("%s (Tổng trọng lượng: %s)", description, totalWeightFormatted)
 	startRow, err := excelwriter.WriteOrderRows(p.ExcelPath, rows, headerDescription)
 	if err != nil {
 		return OrderRow{}, err
@@ -282,6 +300,9 @@ func (p *RealProcessor) processJMartSegment(filePath string, realPageNum int, te
 		FileName: filepath.Base(filePath), Page: pageLabel, System: "JMart", MaKhachHang: jmartCustomerCode,
 		PO: poNumber, DonGia: fmt.Sprintf("%.0f", totalValue), Status: statusText, StatusKind: statusKind,
 		DriveURL: driveURL,
+		ShipTo: deliveryAddress, EntryDate: entryDate, CancelDate: cancelDate,
+		TotalWeightKg: totalWeightFormatted, TotalPackages: totalPackages,
+		PromoItems: finalizePromoItems(promoTotals),
 		SkuLog: skuLog, PriceMismatchCount: saigia, PriceMismatchDetails: mismatchDetails,
 	}, nil
 }
