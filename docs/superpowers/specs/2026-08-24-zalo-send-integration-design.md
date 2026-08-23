@@ -61,7 +61,7 @@ bằng Go — không phụ thuộc Python/Playwright của
   khẩn cấp (session bị vô hiệu hoá, file được untrack) nhưng lịch sử git
   trên `origin` vẫn còn — xem chi tiết trong ghi nhớ dự án liên quan.
   **Bài học áp dụng trực tiếp vào thiết kế này**: thư mục profile trình
-  duyệt mới (`GO/zalo_profile/`, sẽ chứa cookie phiên đăng nhập thật
+  duyệt mới (`zalo_profile/`, sẽ chứa cookie phiên đăng nhập thật
   ngay khi người dùng quét QR lần đầu) PHẢI được thêm vào
   `.gitignore` **trước khi** bất kỳ ai chạy tính năng này lần đầu — xem
   mục Rủi ro.
@@ -356,7 +356,7 @@ chấp nhận được, đây là công cụ nội bộ chạy trên máy đã b
   nhập 1 lần trước cả batch, gửi tuần tự, lỗi từng job chỉ skip job đó.
 - Nâng `selectedPOs` lên `appStore`, đổi nút to ở `ControlPanel` theo
   state đó, xoá placeholder "SẮP RA MẮT".
-- Thêm `GO/zalo_profile/` (hoặc tên tương đương) vào `.gitignore`
+- Thêm `zalo_profile/` (hoặc tên tương đương) vào `.gitignore`
   **trước khi** tính năng này chạy lần đầu trên bất kỳ máy nào.
 
 ### Không làm (YAGNI)
@@ -380,7 +380,7 @@ chấp nhận được, đây là công cụ nội bộ chạy trên máy đã b
 
 ## Rủi ro / lưu ý
 
-- **`GO/zalo_profile/` PHẢI vào `.gitignore` trước khi tính năng chạy
+- **`zalo_profile/` PHẢI vào `.gitignore` trước khi tính năng chạy
   lần đầu** — thư mục này sẽ chứa cookie phiên đăng nhập Zalo Web thật
   ngay sau lần quét QR đầu tiên. Repo này từng rò rỉ đúng loại dữ liệu
   này qua `zalo_state.json` (xem ghi nhớ dự án "Zalo session leak
@@ -425,4 +425,4 @@ chấp nhận được, đây là công cụ nội bộ chạy trên máy đã b
 - Frontend: verify bằng `wails dev` thật — tick chọn PO, xác nhận nút
   to đổi thành "GỬI TIN ZALO", bấm gửi, quan sát `LogPanel` hiện tiến
   trình, xác nhận tin thật tới đúng hội thoại Zalo test, xác nhận
-  `GO/zalo_profile/` được tạo và KHÔNG xuất hiện trong `git status`.
+  `zalo_profile/` được tạo và KHÔNG xuất hiện trong `git status`.
