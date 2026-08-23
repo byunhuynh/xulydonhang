@@ -68,6 +68,18 @@ bằng Go — không phụ thuộc Python/Playwright của
 
 ## Kiến trúc
 
+**Cập nhật:** Phần code bên dưới ban đầu là bản viết mới (chưa có gì để
+tham khảo). Sau khi viết spec này, bạn đã tự viết + build + test thật
+1 CLI Go dùng chromedp (`sendmessage_zalo/go/cmd/chromedp/main.go` +
+`richtext/`, xác nhận gửi tin thành công qua `zalosend-chromedp.exe`,
+bản `cmd/playwright` không dùng nữa) — nên `ChromedpSender` KHÔNG còn
+viết mới nữa mà PORT từ CLI đó (chỉ đổi vòng đời browser: mở 1 lần cho
+cả batch thay vì mỗi lần chạy CLI). Sketch dưới đây (interface
+`ZaloSender`) vẫn đúng nguyên vẹn; phần cài đặt `ChromedpSender` xem
+code ĐẦY ĐỦ, chính xác trong plan
+([docs/superpowers/plans/2026-08-24-zalo-send-integration.md](../plans/2026-08-24-zalo-send-integration.md),
+Task 3) thay vì sketch rút gọn ở mục 1 dưới đây.
+
 ### 1. Package mới `internal/zalosend`
 
 ```go
@@ -89,10 +101,10 @@ type ZaloSender interface {
 	EnsureLoggedIn(ctx context.Context) error
 
 	// SendMessage tìm đúng hội thoại theo contactQuery (tên liên hệ/nhóm
-	// hiển thị trên Zalo) rồi gửi message dạng text thuần (mỗi dòng
-	// message thành 1 dòng trong ô soạn tin, giống send_message
-	// (không phải send_pasted_message) bên Python — xem Phạm vi vì sao
-	// không port chế độ rich).
+	// hiển thị trên Zalo) rồi gửi message bằng cách dán (paste) 1 khối
+	// HTML dựng qua richtext.BuildHTML — luôn qua đường này (kể cả nội
+	// dung text thuần, không có cú pháp markup nào) vì đó là cách bản
+	// CLI chromedp gốc đã hoạt động, không có đường "gõ từng dòng" riêng.
 	SendMessage(ctx context.Context, contactQuery, message string) error
 
 	// Close đóng trình duyệt — gọi lúc App shutdown.
@@ -340,18 +352,24 @@ không cần sửa lại Go, chỉ cần frontend lắng nghe thêm.
 ### 7. `go.mod`
 
 Thêm `github.com/chromedp/chromedp` (kéo theo
-`github.com/chromedp/cdproto`). Yêu cầu máy chạy app đã cài Chrome/Edge
-(chromedp tự tìm binary Chrome hệ thống theo mặc định trên Windows) —
-chấp nhận được, đây là công cụ nội bộ chạy trên máy đã biết trước.
+`github.com/chromedp/cdproto`) — ghim ĐÚNG version đã build/test thật
+trong `sendmessage_zalo/go/go.sum` (`v0.16.0`), không lấy `@latest`, để
+không vô tình đổi hành vi so với bản đã xác nhận chạy được. Yêu cầu máy
+chạy app đã cài Chrome/Edge (chromedp tự tìm binary Chrome hệ thống
+theo mặc định trên Windows) — chấp nhận được, đây là công cụ nội bộ
+chạy trên máy đã biết trước.
 
 ## Phạm vi
 
 ### Làm thật
 
-- Package `internal/zalosend`: interface `ZaloSender`, cài đặt
-  `ChromedpSender` (đăng nhập + giữ phiên qua `user-data-dir` riêng, tìm
-  hội thoại, gõ + gửi text thuần, xác nhận qua response `message/sms`),
-  `ResolveContact`.
+- Package `internal/zalosend`: interface `ZaloSender`; `richtext/`
+  (copy nguyên văn từ `sendmessage_zalo/go/richtext/`); cài đặt
+  `ChromedpSender` — PORT từ `sendmessage_zalo/go/cmd/chromedp/main.go`
+  (đã tự viết/build/test, xác nhận gửi tin thật thành công qua
+  `zalosend-chromedp.exe`; bản `cmd/playwright` không dùng nữa), chỉ
+  đổi vòng đời browser (mở 1 lần cho cả batch thay vì mỗi lần chạy CLI)
+  và cách báo lỗi (trả `error` thay vì in console); `ResolveContact`.
 - `App.SendZaloMessages` + `zalo:log`/`zalo:sent`/`zalo:done`, đăng
   nhập 1 lần trước cả batch, gửi tuần tự, lỗi từng job chỉ skip job đó.
 - Nâng `selectedPOs` lên `appStore`, đổi nút to ở `ControlPanel` theo
@@ -361,10 +379,16 @@ chấp nhận được, đây là công cụ nội bộ chạy trên máy đã b
 
 ### Không làm (YAGNI)
 
-- **Không port `rich_paste_engine.py`** (chế độ `--rich`, dán HTML định
-  dạng) — nội dung `buildZaloMessageForPO` hiện tại là text thuần,
-  không có cú pháp markup nào cần dịch. Nếu sau này nội dung tin nhắn
-  cần định dạng (đậm/màu/list), port phần này là 1 việc riêng.
+- **Không viết mới logic tương tác DOM/CDP với Zalo** — toàn bộ port từ
+  code Go+chromedp đã tự viết và xác nhận chạy thật
+  (`sendmessage_zalo/go/cmd/chromedp/main.go`), không phải viết lại từ
+  đầu. `richtext/` (đậm/nghiêng/gạch chân/màu/list, xem
+  `RICH_TEXT_SYNTAX.md`) đi kèm MIỄN PHÍ qua việc port —
+  `sendPastedMessage` luôn dán qua engine này dù nội dung có markup hay
+  không, nên không còn khái niệm "không port rich" nữa. `buildZaloMessageForPO`
+  hiện tại vẫn chỉ tạo text thuần — không cần đổi gì để dùng được engine
+  này, chỉ đơn giản là v1 chưa CHỦ ĐỘNG dùng cú pháp rich trong nội dung
+  tin nhắn thật.
 - **Không headless** — luôn hiện cửa sổ Chrome (cần cho QR lần đầu +
   quan sát), không thêm tuỳ chọn ẩn cửa sổ ở v1.
 - **Không gửi song song nhiều tin cùng lúc** — tuần tự, 1 trình duyệt.
@@ -388,19 +412,20 @@ chấp nhận được, đây là công cụ nội bộ chạy trên máy đã b
   TRƯỚC, độc lập với phần còn lại của code, verify bằng `git status`
   sau khi thư mục được tạo lần đầu (`wails dev` test thật) để chắc chắn
   nó không xuất hiện trong danh sách untracked.
-- **`waitForSendConfirmation` (xác nhận gửi thành công qua network
-  response) là phần kỹ thuật chưa chắc chắn nhất** — chromedp không có
-  API tiện lợi tương đương `page.expect_response` của Playwright; cần
-  tự viết `chromedp.ListenTarget` + channel + timeout. Nếu cách này
-  chứng minh không ổn định lúc triển khai, phương án dự phòng: chờ 1
-  khoảng thời gian cố định rồi kiểm tra bong bóng tin nhắn CUỐI CÙNG
-  trong khung chat có khớp nội dung vừa gửi hay không (kiểm tra DOM
-  thay vì network) — kém chính xác hơn nhưng đơn giản hơn nhiều.
+- **`waitMessageResponse` (xác nhận gửi thành công qua network
+  response) ĐÃ được xác nhận hoạt động thật** trong bản CLI gốc
+  (`cmd/chromedp/main.go`, dùng `chromedp.ListenTarget` khớp cặp
+  `EventResponseReceived`+`EventLoadingFinished` rồi `network.GetResponseBody`)
+  — không còn là rủi ro "chưa chắc chắn" như suy đoán ban đầu của spec
+  này trước khi có code thật để tham khảo. Rủi ro CÒN LẠI chỉ là lỗi
+  phát sinh lúc PORT (đổi vòng đời browser, đổi cách trả lỗi) — Task 3
+  của plan port gần như nguyên văn để giảm thiểu rủi ro này, và Task 9
+  verify lại bằng gửi thật sau khi port.
 - **Chọn lựa hội thoại qua `.txt-highlight` có thể fragile giống hệt
   bản Python** — đây là DOM nội bộ không chính thức của Zalo Web, có
   thể đổi bất cứ lúc nào Zalo cập nhật giao diện. Rủi ro đã tồn tại sẵn
   ở bản Python, không phải rủi ro MỚI do việc port sang Go.
-  `waitForSendConfirmation`/`SendMessage` nên trả lỗi rõ ràng (không
+  `waitMessageResponse`/`SendMessage` nên trả lỗi rõ ràng (không
   silent fail) để `zalo:log` báo đúng job nào thất bại, thay vì cả batch
   treo.
 - **Không kiểm thử được luồng chromedp thật bằng automated test** (cần

@@ -4,15 +4,16 @@
 
 **Goal:** Nút to ở `ControlPanel.tsx` đổi thành nút gửi tin Zalo thật khi có PO được chọn trong `ResultTable.tsx`, gửi đúng nội dung đã build sẵn (giống hệt modal xem trước) tới đúng liên hệ Zalo, bằng cách điều khiển 1 Chrome thật qua `chromedp` (Go), không phụ thuộc Python.
 
-**Architecture:** Package Go mới `internal/zalosend` (interface `ZaloSender` + cài đặt `ChromedpSender`) cắm vào `App.SendZaloMessages`, chạy nền và phát sự kiện `zalo:log`/`zalo:sent`/`zalo:done` theo đúng pattern `ProcessFiles`/`runBatch` đã có. Frontend nâng `selectedPOs` + `resolvedChoice` (lựa chọn giá đã xác nhận) từ state cục bộ của `ResultTable.tsx` lên `appStore.ts` để `ControlPanel.tsx` build được đúng job list rồi gọi `SendZaloMessages`.
+**Architecture:** Package Go mới `internal/zalosend` — KHÔNG viết mới logic điều khiển trình duyệt, mà PORT từ `sendmessage_zalo/go/cmd/chromedp/main.go` + `richtext/` (Go + chromedp, bạn đã tự viết/build/test, xác nhận gửi tin thật thành công; bản `cmd/playwright` không dùng nữa). Interface `ZaloSender` + cài đặt `ChromedpSender` (port của CLI đó, chỉ đổi vòng đời browser từ "mở/đóng mỗi lần chạy" sang "mở 1 lần, dùng cho cả batch") cắm vào `App.SendZaloMessages`, chạy nền và phát sự kiện `zalo:log`/`zalo:sent`/`zalo:done` theo đúng pattern `ProcessFiles`/`runBatch` đã có. Frontend nâng `selectedPOs` + `resolvedChoice` (lựa chọn giá đã xác nhận) từ state cục bộ của `ResultTable.tsx` lên `appStore.ts` để `ControlPanel.tsx` build được đúng job list rồi gọi `SendZaloMessages`.
 
-**Tech Stack:** Go 1.25, `github.com/chromedp/chromedp` (mới), Wails v2, React + Zustand + TypeScript.
+**Tech Stack:** Go 1.25, `github.com/chromedp/chromedp` v0.16.0 (mới, ghim đúng version đã test — xem Task 3), Wails v2, React + Zustand + TypeScript.
 
 **Spec:** [docs/superpowers/specs/2026-08-24-zalo-send-integration-design.md](../specs/2026-08-24-zalo-send-integration-design.md)
 
 ## Global Constraints
 
-- Không port `rich_paste_engine.py` (chế độ rich/paste) — chỉ gửi text thuần, khớp nội dung `buildZaloMessageForPO` hiện tại.
+- KHÔNG viết mới logic tương tác DOM/CDP với Zalo — port nguyên văn từ `sendmessage_zalo/go/cmd/chromedp/main.go` (đã chạy thật) trong Task 3, chỉ đổi phần vòng đời browser (mở 1 lần thay vì mỗi lần gửi) và cách báo lỗi (trả `error` thay vì in console).
+- `richtext/` (rich-text: đậm/nghiêng/gạch chân/màu/list, xem `RICH_TEXT_SYNTAX.md`) đi kèm MIỄN PHÍ qua việc port — `sendPastedMessage` luôn dán qua engine này dù nội dung có markup hay không. `buildZaloMessageForPO` hiện tại vẫn chỉ tạo text thuần (không cần đổi) — không có việc "không port rich" nữa, chỉ đơn giản là v1 chưa CHỦ ĐỘNG dùng cú pháp rich trong nội dung tin.
 - Không headless — trình duyệt luôn hiện cửa sổ (cần cho QR lần đầu).
 - Gửi tuần tự, không song song — 1 trình duyệt dùng chung.
 - `zalo_profile/` (thư mục ở REPO ROOT, cùng cấp `settings.ini`/`zalo_state.json` — xem Task 1 vì sao KHÔNG phải `GO/zalo_profile/`; chứa cookie phiên đăng nhập thật) PHẢI vào `.gitignore` trước khi tính năng chạy lần đầu trên bất kỳ máy nào — sự cố rò rỉ `zalo_state.json` trước đây không được lặp lại.
@@ -180,71 +181,101 @@ git commit -m "feat(go): add ZaloSender interface and contact resolution"
 
 ---
 
-### Task 3: `internal/zalosend` — `ChromedpSender` (cài đặt thật)
+### Task 3: `internal/zalosend` — port `ChromedpSender` từ code Go+chromedp ĐÃ CHẠY THẬT
+
+**Nguồn:** `sendmessage_zalo/go/cmd/chromedp/main.go` + `sendmessage_zalo/go/richtext/*.go` — bạn đã tự viết, build (`zalosend-chromedp.exe`) và xác nhận gửi tin thật thành công. Task này KHÔNG viết logic điều khiển trình duyệt mới — chỉ (1) copy `richtext/` nguyên văn, (2) chuyển các hàm trong `cmd/chromedp/main.go` từ 1 CLI (`package main`, mở/đóng browser MỚI mỗi lần chạy) thành method của `ChromedpSender` (browser mở 1 lần, sống xuyên suốt nhiều lần `SendMessage` trong 1 lượt gửi hàng loạt — xem Global Constraints). KHÔNG dùng bản `cmd/playwright` — đã bỏ, không còn dùng `playwright-go`.
 
 **Files:**
-- Modify: `GO/go.mod`, `GO/go.sum` (thêm dependency)
+- Modify: `GO/go.mod`, `GO/go.sum` (thêm dependency, ghim đúng version đã chạy thật)
+- Create: `GO/internal/zalosend/richtext/parser.go`, `GO/internal/zalosend/richtext/html.go`, `GO/internal/zalosend/richtext/parser_test.go` (copy nguyên văn)
 - Create: `GO/internal/zalosend/chromedp_sender.go`
 
 **Interfaces:**
 - Consumes: `ZaloSender` interface (Task 2).
 - Produces: `type ChromedpSender struct { ProfileDir string; ... }` implementing `ZaloSender` — dùng ở Task 4 (`app.go`).
 
-- [ ] **Step 1: Thêm dependency chromedp**
+- [ ] **Step 1: Thêm dependency chromedp — ghim ĐÚNG version đã chạy thật**
 
-Run: `cd GO && go get github.com/chromedp/chromedp@latest`
-Expected: `go.mod`/`go.sum` được cập nhật tự động (thêm `github.com/chromedp/chromedp` + `github.com/chromedp/cdproto` + các dependency gián tiếp).
+`sendmessage_zalo/go/go.sum` xác nhận version đã build/test:
+`github.com/chromedp/chromedp v0.16.0`, `github.com/chromedp/cdproto v0.0.0-20260714215040-dc233986426f`.
 
-- [ ] **Step 2: Viết `chromedp_sender.go`**
+Run: `cd GO && go get github.com/chromedp/chromedp@v0.16.0`
+Expected: `go.mod`/`go.sum` được cập nhật (thêm `github.com/chromedp/chromedp`, `github.com/chromedp/cdproto`, `github.com/chromedp/sysutil` + các dependency gián tiếp).
 
-Tạo `GO/internal/zalosend/chromedp_sender.go`:
+- [ ] **Step 2: Copy `richtext/` nguyên văn (không đổi 1 dòng logic)**
+
+Copy 3 file, giữ nguyên nội dung 100% (package clause đã là `package richtext`, không import gì ngoài `regexp`/`html`/`strings` — không có đường dẫn import nào cần sửa):
+- `sendmessage_zalo/go/richtext/parser.go` → `GO/internal/zalosend/richtext/parser.go`
+- `sendmessage_zalo/go/richtext/html.go` → `GO/internal/zalosend/richtext/html.go`
+- `sendmessage_zalo/go/richtext/parser_test.go` → `GO/internal/zalosend/richtext/parser_test.go`
+
+Run: `cd GO && go test ./internal/zalosend/richtext/... -v`
+Expected: PASS (test đã có sẵn, xác nhận copy đúng không làm hỏng gì).
+
+- [ ] **Step 3: Viết `chromedp_sender.go` — port từ `cmd/chromedp/main.go`**
+
+Tạo `GO/internal/zalosend/chromedp_sender.go`. Phần `ChromedpSender`/`ensureBrowser`/`EnsureLoggedIn`/`SendMessage`/`Close` ở đầu file là phần MỚI (tách vòng đời browser ra khỏi CLI 1-lần-chạy gốc); phần còn lại (`pressKeyCombo` → hết file) port GẦN NHƯ NGUYÊN VĂN từ `cmd/chromedp/main.go` — chỉ đổi import path `"zalosend/richtext"` → `"order-processor/internal/zalosend/richtext"`, và bỏ 2 dòng `fmt.Printf`/`fmt.Println` chẩn đoán trong `openConversation` gốc (dòng in ra console của 1 CLI — vô nghĩa trong app GUI, caller (`SendMessage`) đã trả lỗi rõ ràng thay thế):
 
 ```go
 package zalosend
 
 import (
 	"context"
-	"errors"
+	"encoding/json"
 	"fmt"
+	"os"
 	"strings"
 	"sync"
 	"time"
 
+	"github.com/chromedp/cdproto/input"
 	"github.com/chromedp/cdproto/network"
 	"github.com/chromedp/chromedp"
 	"github.com/chromedp/chromedp/kb"
+
+	"order-processor/internal/zalosend/richtext"
 )
 
 const (
-	loginPollInterval  = 1 * time.Second
 	loginTimeout       = 120 * time.Second
 	sendConfirmTimeout = 15 * time.Second
 )
 
-// ChromedpSender là cài đặt thật của ZaloSender, dùng chromedp điều
-// khiển 1 Chrome thật (không headless — cần hiện cửa sổ để quét QR lần
-// đầu, và để người dùng quan sát/can thiệp nếu có gì bất thường, đúng
-// hành vi mặc định của send_message.py khi KHÔNG truyền --headless).
-// ProfileDir PHẢI là 1 thư mục nằm trong .gitignore (xem Task 1) —
-// chứa cookie phiên đăng nhập thật ngay sau lần quét QR đầu tiên.
+var indentClicksPerLevel = map[string]int{
+	"bullet":   1,
+	"numbered": 3,
+}
+
+// ChromedpSender là cài đặt thật của ZaloSender — port TRỰC TIẾP từ
+// sendmessage_zalo/go/cmd/chromedp/main.go (đã tự chạy thật, xác nhận
+// gửi tin thành công, KHÔNG dùng playwright-go). Khác biệt DUY NHẤT so
+// với bản CLI gốc: bản gốc mở/đóng 1 browser context MỚI cho mỗi lần
+// chạy (1 lệnh = 1 tin); ChromedpSender giữ browser SỐNG XUYÊN SUỐT
+// nhiều lần SendMessage trong cùng 1 lượt gửi hàng loạt (EnsureLoggedIn
+// mở + đăng nhập 1 lần, SendMessage chỉ làm phần openConversation +
+// sendPastedMessage, Close đóng lúc App shutdown). Mọi logic tương tác
+// DOM/CDP bên trong (selector, thời gian chờ, cách paste/gửi) giữ
+// NGUYÊN không đổi so với bản đã test.
 type ChromedpSender struct {
 	ProfileDir string
 
-	mu            sync.Mutex
-	allocCancel   context.CancelFunc
-	browserCtx    context.Context
-	browserCancel context.CancelFunc
+	mu          sync.Mutex
+	allocCancel context.CancelFunc
+	ctx         context.Context
+	cancel      context.CancelFunc
 }
 
-// ensureBrowser mở allocator + context 1 LẦN (idempotent — các lần gọi
-// sau chỉ thấy c.browserCtx đã khác nil và trả về ngay), giữ trình
-// duyệt sống xuyên suốt vòng đời ChromedpSender thay vì mở/đóng mỗi
-// lần gửi.
+// ensureBrowser mở allocator + context 1 LẦN (idempotent) — port của
+// phần đầu run() (main.go dòng 326-346), bỏ phần Navigate/login (chuyển
+// sang EnsureLoggedIn).
 func (c *ChromedpSender) ensureBrowser() error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	if c.browserCtx != nil {
+	if c.ctx != nil {
 		return nil
+	}
+	if err := os.MkdirAll(c.ProfileDir, 0o755); err != nil {
+		return fmt.Errorf("zalosend: tạo thư mục profile %s: %w", c.ProfileDir, err)
 	}
 
 	opts := append(chromedp.DefaultExecAllocatorOptions[:],
@@ -253,199 +284,397 @@ func (c *ChromedpSender) ensureBrowser() error {
 		chromedp.WindowSize(1280, 900),
 	)
 	allocCtx, allocCancel := chromedp.NewExecAllocator(context.Background(), opts...)
-	browserCtx, browserCancel := chromedp.NewContext(allocCtx)
-	// chromedp.Run với 0 action vẫn buộc trình duyệt thật sự khởi động
-	// (chromedp mặc định lazy-start lúc action đầu tiên chạy) — làm
-	// ngay ở đây để lỗi khởi động Chrome (ví dụ chưa cài Chrome) lộ ra
-	// ngay tại EnsureLoggedIn, không phải lúc SendMessage đầu tiên.
-	if err := chromedp.Run(browserCtx); err != nil {
-		browserCancel()
-		allocCancel()
-		return fmt.Errorf("zalosend: khởi động trình duyệt: %w", err)
-	}
+	ctx, cancel := chromedp.NewContext(allocCtx)
 
 	c.allocCancel = allocCancel
-	c.browserCtx, c.browserCancel = browserCtx, browserCancel
+	c.ctx, c.cancel = ctx, cancel
 	return nil
 }
 
-// EnsureLoggedIn mở trình duyệt (nếu chưa), điều hướng chat.zalo.me,
-// chờ tối đa loginTimeout (120s, khớp send_message.py) nếu URL rơi vào
-// id.zalo.me (chưa đăng nhập — cần quét QR trong cửa sổ vừa mở).
+// EnsureLoggedIn — port của phần Navigate + chờ QR trong run() (main.go
+// dòng 347-373), không đổi logic/thời gian chờ.
 func (c *ChromedpSender) EnsureLoggedIn(ctx context.Context) error {
 	if err := c.ensureBrowser(); err != nil {
 		return err
 	}
-	if err := chromedp.Run(c.browserCtx, chromedp.Navigate("https://chat.zalo.me/")); err != nil {
-		return fmt.Errorf("zalosend: điều hướng chat.zalo.me: %w", err)
+
+	if err := chromedp.Run(c.ctx,
+		chromedp.EmulateViewport(1280, 900),
+		chromedp.Navigate("https://chat.zalo.me/"),
+	); err != nil {
+		return fmt.Errorf("zalosend: không mở được trang: %w", err)
 	}
-	// Chờ trang render xong trước khi đọc URL lần đầu — khớp
-	// send_message.py's page.wait_for_timeout(4000) sau Navigate.
-	time.Sleep(4 * time.Second)
+	chromedp.Run(c.ctx, chromedp.Sleep(4*time.Second))
+
+	var curURL string
+	chromedp.Run(c.ctx, chromedp.Location(&curURL))
+	if !strings.Contains(curURL, "id.zalo.me") {
+		return nil
+	}
 
 	deadline := time.Now().Add(loginTimeout)
-	for {
-		var url string
-		if err := chromedp.Run(c.browserCtx, chromedp.Location(&url)); err != nil {
-			return fmt.Errorf("zalosend: đọc URL hiện tại: %w", err)
-		}
-		if !strings.Contains(url, "id.zalo.me") {
+	for time.Now().Before(deadline) {
+		chromedp.Run(c.ctx, chromedp.Location(&curURL))
+		if strings.Contains(curURL, "chat.zalo.me") && !strings.Contains(curURL, "id.zalo.me") {
+			chromedp.Run(c.ctx, chromedp.Sleep(3*time.Second))
 			return nil
 		}
-		if time.Now().After(deadline) {
-			return errors.New("zalosend: hết thời gian chờ đăng nhập — vui lòng quét QR trong cửa sổ trình duyệt vừa mở rồi thử gửi lại")
-		}
-		time.Sleep(loginPollInterval)
+		time.Sleep(1 * time.Second)
 	}
+	return fmt.Errorf("zalosend: hết thời gian chờ đăng nhập (quét QR trong cửa sổ trình duyệt vừa mở rồi thử gửi lại)")
 }
 
-// SendMessage tìm hội thoại theo contactQuery rồi gửi message. PHẢI gọi
-// EnsureLoggedIn trước (ít nhất 1 lần trong vòng đời ChromedpSender này).
+// SendMessage — port của phần openConversation+sendPastedMessage trong
+// run() (main.go dòng 375-386), chỉ đổi cách báo lỗi: bản CLI gốc in ra
+// console rồi return nil khi thất bại (chấp nhận được cho 1 lệnh chạy
+// tay); ở đây PHẢI trả error thật để runZaloBatch (app.go, Task 4) log
+// đúng job nào thất bại và tiếp tục job sau.
 func (c *ChromedpSender) SendMessage(ctx context.Context, contactQuery, message string) error {
-	if c.browserCtx == nil {
-		return errors.New("zalosend: chưa gọi EnsureLoggedIn")
+	if c.ctx == nil {
+		return fmt.Errorf("zalosend: chưa gọi EnsureLoggedIn")
 	}
 
-	if err := chromedp.Run(c.browserCtx,
-		chromedp.Click("#contact-search-input", chromedp.ByID),
-		// Chọn hết nội dung cũ (nếu có, từ lần tìm trước) rồi gõ đè lên —
-		// tránh dùng chromedp.SetValue (set thẳng DOM .value, không chắc
-		// kích hoạt đúng sự kiện input/onChange của khung tìm kiếm này,
-		// khác hẳn field text thường): Ctrl+A rồi gõ mới là cách chắc
-		// chắn hoạt động giống thao tác tay thật, cùng cách kb.Control+"a"
-		// đã dùng ở SendMessage bên dưới cho "select all" trên tin nhắn.
-		chromedp.KeyEvent(kb.Control+"a"),
-		chromedp.SendKeys("#contact-search-input", contactQuery, chromedp.ByID),
-	); err != nil {
-		return fmt.Errorf("zalosend: gõ tìm kiếm %q: %w", contactQuery, err)
+	opened, err := openConversation(c.ctx, contactQuery)
+	if err != nil {
+		return fmt.Errorf("zalosend: tìm hội thoại %q: %w", contactQuery, err)
 	}
-	// Khớp send_message.py's page.wait_for_timeout(1500) sau khi gõ tìm
-	// kiếm — cho kết quả tìm kiếm kịp render trước khi tìm .txt-highlight.
-	time.Sleep(1500 * time.Millisecond)
-
-	if err := chromedp.Run(c.browserCtx,
-		chromedp.WaitVisible(".txt-highlight", chromedp.ByQuery),
-		chromedp.Click(".txt-highlight", chromedp.ByQuery),
-		chromedp.WaitVisible("#richInput", chromedp.ByID),
-	); err != nil {
-		return fmt.Errorf("zalosend: không tìm thấy hội thoại %q: %w", contactQuery, err)
+	if !opened {
+		return fmt.Errorf("zalosend: không tìm thấy hội thoại %q", contactQuery)
 	}
 
-	lines := strings.Split(message, "\n")
-	actions := []chromedp.Action{chromedp.Click("#richInput", chromedp.ByID)}
-	for i, line := range lines {
-		if i > 0 {
-			// Shift+Enter = xuống dòng TRONG cùng 1 tin (Enter không kèm
-			// Shift = gửi luôn) — khớp send_message.py's
-			// page.keyboard.press("Shift+Enter") giữa các dòng.
-			actions = append(actions, chromedp.KeyEvent(kb.Shift+kb.Enter))
+	ok, body, err := sendPastedMessage(c.ctx, message)
+	if err != nil {
+		return fmt.Errorf("zalosend: gửi tin tới %q: %w", contactQuery, err)
+	}
+	if !ok {
+		if len(body) > 300 {
+			body = body[:300]
 		}
-		if line != "" {
-			actions = append(actions, chromedp.KeyEvent(line))
-		}
+		return fmt.Errorf("zalosend: Zalo báo lỗi khi gửi tới %q: %s", contactQuery, body)
 	}
-	if err := chromedp.Run(c.browserCtx, actions...); err != nil {
-		return fmt.Errorf("zalosend: gõ nội dung tin nhắn: %w", err)
-	}
-
-	confirmed := make(chan error, 1)
-	if err := watchForSendConfirmation(c.browserCtx, confirmed); err != nil {
-		return fmt.Errorf("zalosend: chuẩn bị xác nhận gửi: %w", err)
-	}
-	if err := chromedp.Run(c.browserCtx, chromedp.KeyEvent(kb.Enter)); err != nil {
-		return fmt.Errorf("zalosend: bấm Enter để gửi: %w", err)
-	}
-	select {
-	case err := <-confirmed:
-		if err != nil {
-			return fmt.Errorf("zalosend: gửi tới %q thất bại: %w", contactQuery, err)
-		}
-		return nil
-	case <-time.After(sendConfirmTimeout):
-		return fmt.Errorf("zalosend: không nhận được xác nhận gửi tới %q sau %s (tin có thể đã gửi, kiểm tra lại thủ công)", contactQuery, sendConfirmTimeout)
-	}
-}
-
-// watchForSendConfirmation bật network.Enable() rồi đăng ký 1 listener
-// (qua chromedp.ListenTarget) khớp response có URL chứa "message/sms" —
-// tương đương page.expect_response bên Playwright, nhưng chromedp không
-// có API chờ-response tiện lợi tương đương nên phải tự viết bằng
-// channel. ĐÂY LÀ PHẦN CHƯA CHẮC CHẮN NHẤT của toàn bộ package (xem
-// mục Rủi ro trong spec) — nếu qua kiểm thử thủ công (Task 9) mà
-// listener không bao giờ khớp (ví dụ Zalo đổi URL endpoint), phương án
-// dự phòng đã ghi trong spec: thay bằng kiểm tra DOM (bong bóng tin
-// nhắn cuối cùng) thay vì network response.
-func watchForSendConfirmation(browserCtx context.Context, result chan<- error) error {
-	if err := chromedp.Run(browserCtx, network.Enable()); err != nil {
-		return err
-	}
-
-	var once sync.Once
-	chromedp.ListenTarget(browserCtx, func(ev interface{}) {
-		respEv, ok := ev.(*network.EventResponseReceived)
-		if !ok || !strings.Contains(respEv.Response.URL, "message/sms") {
-			return
-		}
-		once.Do(func() {
-			// ListenTarget gọi callback ĐỒNG BỘ trên goroutine xử lý sự
-			// kiện CDP — không được block/chạy Action ở đây (sẽ deadlock),
-			// nên đọc response body trong 1 goroutine riêng.
-			go func() {
-				var body []byte
-				readErr := chromedp.Run(browserCtx, chromedp.ActionFunc(func(ctx context.Context) error {
-					b, err := network.GetResponseBody(respEv.RequestID).Do(ctx)
-					if err != nil {
-						return err
-					}
-					body = b
-					return nil
-				}))
-				if readErr != nil {
-					result <- fmt.Errorf("đọc response gửi tin: %w", readErr)
-					return
-				}
-				if !strings.Contains(string(body), `"error_code":0`) {
-					snippet := string(body)
-					if len(snippet) > 300 {
-						snippet = snippet[:300]
-					}
-					result <- fmt.Errorf("Zalo báo lỗi: %s", snippet)
-					return
-				}
-				result <- nil
-			}()
-		})
-	})
 	return nil
 }
 
 // Close đóng trình duyệt — an toàn gọi nhiều lần, gọi khi chưa từng mở
-// trình duyệt (browserCtx nil) cũng không lỗi.
+// trình duyệt (c.ctx nil) cũng không lỗi.
 func (c *ChromedpSender) Close() error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	if c.browserCancel != nil {
-		c.browserCancel()
+	if c.cancel != nil {
+		c.cancel()
 	}
 	if c.allocCancel != nil {
 		c.allocCancel()
 	}
-	c.browserCtx = nil
+	c.ctx = nil
 	return nil
+}
+
+// ---- Phần dưới đây port GẦN NHƯ NGUYÊN VĂN từ cmd/chromedp/main.go
+// (đã chạy thật, xác nhận gửi tin thành công) — chỉ đổi import
+// "zalosend/richtext" → "order-processor/internal/zalosend/richtext",
+// KHÔNG đổi bất kỳ selector/thời gian chờ/logic tương tác nào.
+
+func pressKeyCombo(ctx context.Context, mods input.Modifier, code, key string, vkey int64) error {
+	down := input.DispatchKeyEvent(input.KeyDown).
+		WithModifiers(mods).WithCode(code).WithKey(key).
+		WithWindowsVirtualKeyCode(vkey).WithNativeVirtualKeyCode(vkey)
+	up := input.DispatchKeyEvent(input.KeyUp).
+		WithModifiers(mods).WithCode(code).WithKey(key).
+		WithWindowsVirtualKeyCode(vkey).WithNativeVirtualKeyCode(vkey)
+	return chromedp.Run(ctx,
+		chromedp.ActionFunc(func(ctx context.Context) error { return down.Do(ctx) }),
+		chromedp.ActionFunc(func(ctx context.Context) error { return up.Do(ctx) }),
+	)
+}
+
+func pressEnter(ctx context.Context) error {
+	return chromedp.Run(ctx, chromedp.KeyEvent(kb.Enter))
+}
+
+type point struct {
+	X float64 `json:"x"`
+	Y float64 `json:"y"`
+}
+
+func ensureFormatMode(ctx context.Context) error {
+	var alreadyOn bool
+	err := chromedp.Run(ctx, chromedp.Evaluate(`
+		(() => {
+			const btn = document.querySelector('[title="Định dạng tin nhắn (Ctrl + Shift + X)"]');
+			return !!(btn && btn.className.includes('focused'));
+		})()
+	`, &alreadyOn))
+	if err != nil {
+		return err
+	}
+	if !alreadyOn {
+		// Ctrl+Shift+X: modifier bitmask Ctrl(2)+Shift(8)=10, phím chính 'X'.
+		if err := pressKeyCombo(ctx, input.ModifierCtrl|input.ModifierShift, "KeyX", "X", 88); err != nil {
+			return err
+		}
+		if err := chromedp.Run(ctx, chromedp.WaitVisible(`[title="In đậm"]`, chromedp.ByQuery)); err != nil {
+			return err
+		}
+		chromedp.Run(ctx, chromedp.Sleep(300*time.Millisecond))
+	}
+	return nil
+}
+
+func applyIndents(ctx context.Context, lines []richtext.ParsedLine) error {
+	seenCounts := map[string]int{}
+	for _, line := range lines {
+		if line.ListType == "" || line.Indent <= 0 || line.PlainText == "" {
+			continue
+		}
+		skip := seenCounts[line.PlainText]
+		seenCounts[line.PlainText] = skip + 1
+
+		args, _ := json.Marshal(map[string]any{"text": line.PlainText, "skip": skip})
+		var coords *point
+		err := chromedp.Run(ctx, chromedp.Evaluate(fmt.Sprintf(`
+			(() => {
+				const args = %s;
+				const text = args.text, skip = args.skip;
+				const root = document.activeElement;
+				const blocks = root.querySelectorAll('[data-component="rtf-block"]');
+				let matchCount = 0;
+				for (const node of blocks) {
+					if (node.textContent.trim() === text) {
+						if (matchCount === skip) {
+							let target = node;
+							const spans = node.querySelectorAll('[data-text="true"]');
+							if (spans.length > 0) {
+								target = spans[spans.length - 1];
+							}
+							target.scrollIntoView({ block: "center" });
+							const r = target.getBoundingClientRect();
+							return { x: r.x + r.width - 2, y: r.y + r.height / 2 };
+						}
+						matchCount += 1;
+					}
+				}
+				return null;
+			})()
+		`, string(args)), &coords))
+		if err != nil {
+			return err
+		}
+		if coords == nil {
+			continue
+		}
+
+		if err := chromedp.Run(ctx, chromedp.MouseClickXY(coords.X, coords.Y)); err != nil {
+			return err
+		}
+		chromedp.Run(ctx, chromedp.Sleep(150*time.Millisecond))
+
+		clicksPerLevel := indentClicksPerLevel[line.ListType]
+		if clicksPerLevel == 0 {
+			clicksPerLevel = 1
+		}
+		for i := 0; i < line.Indent*clicksPerLevel; i++ {
+			if err := chromedp.Run(ctx, chromedp.Click(`[title="Lùi đầu dòng"]`, chromedp.ByQuery)); err != nil {
+				return err
+			}
+			chromedp.Run(ctx, chromedp.Sleep(150*time.Millisecond))
+		}
+	}
+	return nil
+}
+
+// waitMessageResponse đăng ký trước 1 listener CDP cho network domain,
+// trả về 1 hàm "chờ kết quả" sẽ block tới khi thấy response khớp
+// urlSubstr ĐÃ TẢI XONG (khớp cặp EventResponseReceived +
+// EventLoadingFinished cùng RequestID, không chỉ ResponseReceived —
+// tránh đọc body khi chưa tải xong hẳn) rồi tự gọi
+// network.GetResponseBody để lấy nội dung.
+func waitMessageResponse(ctx context.Context, urlSubstr string) (func(timeout time.Duration) (int64, string, error), error) {
+	type matched struct {
+		id     network.RequestID
+		status int64
+	}
+	resultCh := make(chan matched, 1)
+	var mu sync.Mutex
+	var pending *matched
+
+	chromedp.ListenTarget(ctx, func(ev any) {
+		switch e := ev.(type) {
+		case *network.EventResponseReceived:
+			if strings.Contains(e.Response.URL, urlSubstr) {
+				mu.Lock()
+				pending = &matched{id: e.RequestID, status: e.Response.Status}
+				mu.Unlock()
+			}
+		case *network.EventLoadingFinished:
+			mu.Lock()
+			if pending != nil && pending.id == e.RequestID {
+				m := *pending
+				pending = nil
+				mu.Unlock()
+				select {
+				case resultCh <- m:
+				default:
+				}
+				return
+			}
+			mu.Unlock()
+		}
+	})
+
+	if err := chromedp.Run(ctx, network.Enable()); err != nil {
+		return nil, err
+	}
+
+	wait := func(timeout time.Duration) (int64, string, error) {
+		select {
+		case m := <-resultCh:
+			var body []byte
+			err := chromedp.Run(ctx, chromedp.ActionFunc(func(ctx context.Context) error {
+				b, err := network.GetResponseBody(m.id).Do(ctx)
+				body = b
+				return err
+			}))
+			if err != nil {
+				return m.status, "", err
+			}
+			return m.status, string(body), nil
+		case <-time.After(timeout):
+			return 0, "", fmt.Errorf("hết thời gian chờ response chứa %q", urlSubstr)
+		}
+	}
+	return wait, nil
+}
+
+// sendPastedMessage dán (paste) TOÀN BỘ message dưới dạng 1 khối HTML
+// (qua richtext.BuildHTML — mỗi dòng thành 1 <div>, không có cú pháp
+// markup nào thì vẫn ra <div> thường) trong 1 sự kiện paste DUY NHẤT,
+// KHÔNG gõ từng dòng/Shift+Enter như send_message.py bản không --rich —
+// nhanh và ổn định hơn, và giúp nội dung có markup (đậm/nghiêng/màu/
+// list) hiển thị đúng định dạng nếu sau này zaloMessage.ts dùng tới cú
+// pháp đó (xem RICH_TEXT_SYNTAX.md) — không cần đổi gì thêm ở đây.
+func sendPastedMessage(ctx context.Context, markupText string) (bool, string, error) {
+	if err := chromedp.Run(ctx, chromedp.Click("#richInput", chromedp.ByQuery)); err != nil {
+		return false, "", err
+	}
+	chromedp.Run(ctx, chromedp.Sleep(150*time.Millisecond))
+
+	if err := ensureFormatMode(ctx); err != nil {
+		return false, "", err
+	}
+
+	lines := richtext.ParseDocument(markupText)
+	html := richtext.BuildHTML(lines)
+	plainParts := make([]string, len(lines))
+	for i, l := range lines {
+		plainParts[i] = l.PlainText
+	}
+	plainFallback := strings.Join(plainParts, "\n")
+
+	wait, err := waitMessageResponse(ctx, "message/sms")
+	if err != nil {
+		return false, "", err
+	}
+
+	args, _ := json.Marshal(map[string]any{"html": html, "text": plainFallback})
+	err = chromedp.Run(ctx, chromedp.Evaluate(fmt.Sprintf(`
+		(() => {
+			const args = %s;
+			const el = document.activeElement;
+			const dt = new DataTransfer();
+			dt.setData('text/html', args.html);
+			dt.setData('text/plain', args.text);
+			const evt = new ClipboardEvent('paste', {
+				clipboardData: dt,
+				bubbles: true,
+				cancelable: true,
+			});
+			el.dispatchEvent(evt);
+		})()
+	`, string(args)), nil))
+	if err != nil {
+		return false, "", err
+	}
+	chromedp.Run(ctx, chromedp.Sleep(300*time.Millisecond))
+
+	needsIndent := false
+	for _, l := range lines {
+		if l.ListType != "" && l.Indent > 0 {
+			needsIndent = true
+			break
+		}
+	}
+	if needsIndent {
+		if err := applyIndents(ctx, lines); err != nil {
+			return false, "", err
+		}
+	}
+
+	if err := pressEnter(ctx); err != nil {
+		return false, "", err
+	}
+	status, body, err := wait(sendConfirmTimeout)
+	if err != nil {
+		return false, "", err
+	}
+	ok := status == 200 && strings.Contains(body, `"error_code":0`)
+	return ok, body, nil
+}
+
+// openConversation tìm hội thoại theo tên qua ô tìm kiếm và mở nó ra,
+// trả về false (không lỗi) nếu không tìm thấy kết quả nào hoặc không
+// thấy ô soạn tin sau khi chọn — SendMessage (ở trên) chuyển 2 trường
+// hợp "false, nil" này thành error thật cho caller.
+func openConversation(ctx context.Context, contactQuery string) (bool, error) {
+	if err := chromedp.Run(ctx, chromedp.Click("#contact-search-input", chromedp.ByQuery)); err != nil {
+		return false, err
+	}
+	if err := chromedp.Run(ctx, chromedp.SendKeys("#contact-search-input", contactQuery, chromedp.ByQuery)); err != nil {
+		return false, err
+	}
+	chromedp.Run(ctx, chromedp.Sleep(1500*time.Millisecond))
+
+	var coords *point
+	err := chromedp.Run(ctx, chromedp.Evaluate(`
+		(() => {
+			const el = document.querySelector('.txt-highlight');
+			if (!el) return null;
+			const r = el.getBoundingClientRect();
+			return { x: r.x + r.width / 2, y: r.y + r.height / 2 };
+		})()
+	`, &coords))
+	if err != nil {
+		return false, err
+	}
+	if coords == nil {
+		return false, nil
+	}
+
+	if err := chromedp.Run(ctx, chromedp.MouseClickXY(coords.X, coords.Y)); err != nil {
+		return false, err
+	}
+	chromedp.Run(ctx, chromedp.Sleep(1500*time.Millisecond))
+
+	if err := chromedp.Run(ctx, chromedp.WaitVisible("#richInput", chromedp.ByQuery)); err != nil {
+		return false, nil
+	}
+	return true, nil
 }
 ```
 
-- [ ] **Step 3: Build + vet (không có test tự động — trình duyệt thật, xem Task 9)**
+- [ ] **Step 4: Build + vet (không có test tự động cho phần điều khiển trình duyệt — logic ĐÃ được xác nhận chạy thật ở bản CLI gốc, xem Task 9 cho xác nhận sau khi port)**
 
 Run: `cd GO && go build ./... && go vet ./...`
-Expected: build + vet sạch, không lỗi. (Đây KHÔNG xác nhận logic gửi tin đúng — chỉ xác nhận code compile. Xác nhận thật chỉ có ở Task 9.)
+Expected: build + vet sạch, không lỗi. (Bước này chỉ xác nhận code port đúng cú pháp/kiểu — logic tương tác Zalo đã được xác nhận đúng từ trước ở bản CLI `zalosend-chromedp.exe`; Task 9 xác nhận lại sau khi port, phòng trường hợp sai sót lúc chuyển đổi.)
 
-- [ ] **Step 4: Commit**
+- [ ] **Step 5: Commit**
 
 ```bash
-git add GO/go.mod GO/go.sum GO/internal/zalosend/chromedp_sender.go
-git commit -m "feat(go): add ChromedpSender — real Zalo send via chromedp"
+git add GO/go.mod GO/go.sum GO/internal/zalosend/richtext GO/internal/zalosend/chromedp_sender.go
+git commit -m "feat(go): port ChromedpSender from the already-working sendmessage_zalo/go/cmd/chromedp CLI"
 ```
+
+`sendmessage_zalo/go/` (bản gốc: CLI, `cmd/playwright`, `zalosend.exe`/`zalosend-chromedp.exe`/`zalosend-playwright.exe`) KHÔNG bị xoá — giữ nguyên làm bản gốc/tham khảo, không phải phần app chạy thật nữa (Wails app giờ tự chứa toàn bộ logic gửi Zalo trong `GO/internal/zalosend/`).
 
 ---
 
