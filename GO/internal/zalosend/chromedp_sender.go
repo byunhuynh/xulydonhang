@@ -79,25 +79,37 @@ func (c *ChromedpSender) EnsureLoggedIn(ctx context.Context) error {
 		return err
 	}
 
-	if err := chromedp.Run(c.ctx,
+	// Snapshot c.ctx dưới c.mu thay vì đọc trực tiếp field nhiều lần bên
+	// dưới — Close() có thể chạy đồng thời (vd shutdown app trong lúc
+	// batch gửi vẫn còn đang chạy ở goroutine khác) và ghi c.ctx=nil dưới
+	// cùng 1 lock; đọc field trực tiếp không lock sẽ là data race và có
+	// thể truyền context nil vào chromedp.Run gây panic.
+	c.mu.Lock()
+	browserCtx := c.ctx
+	c.mu.Unlock()
+	if browserCtx == nil {
+		return fmt.Errorf("zalosend: trình duyệt đã bị đóng")
+	}
+
+	if err := chromedp.Run(browserCtx,
 		chromedp.EmulateViewport(1280, 900),
 		chromedp.Navigate("https://chat.zalo.me/"),
 	); err != nil {
 		return fmt.Errorf("zalosend: không mở được trang: %w", err)
 	}
-	chromedp.Run(c.ctx, chromedp.Sleep(4*time.Second))
+	chromedp.Run(browserCtx, chromedp.Sleep(4*time.Second))
 
 	var curURL string
-	chromedp.Run(c.ctx, chromedp.Location(&curURL))
+	chromedp.Run(browserCtx, chromedp.Location(&curURL))
 	if !strings.Contains(curURL, "id.zalo.me") {
 		return nil
 	}
 
 	deadline := time.Now().Add(loginTimeout)
 	for time.Now().Before(deadline) {
-		chromedp.Run(c.ctx, chromedp.Location(&curURL))
+		chromedp.Run(browserCtx, chromedp.Location(&curURL))
 		if strings.Contains(curURL, "chat.zalo.me") && !strings.Contains(curURL, "id.zalo.me") {
-			chromedp.Run(c.ctx, chromedp.Sleep(3*time.Second))
+			chromedp.Run(browserCtx, chromedp.Sleep(3*time.Second))
 			return nil
 		}
 		time.Sleep(1 * time.Second)
@@ -111,11 +123,17 @@ func (c *ChromedpSender) EnsureLoggedIn(ctx context.Context) error {
 // tay); ở đây PHẢI trả error thật để runZaloBatch (app.go, Task 4) log
 // đúng job nào thất bại và tiếp tục job sau.
 func (c *ChromedpSender) SendMessage(ctx context.Context, contactQuery, message string) error {
-	if c.ctx == nil {
+	// Snapshot c.ctx dưới c.mu (cùng lý do như EnsureLoggedIn ở trên) —
+	// tránh đọc field không lock trong khi Close() có thể đang ghi nil
+	// đồng thời ở goroutine khác.
+	c.mu.Lock()
+	browserCtx := c.ctx
+	c.mu.Unlock()
+	if browserCtx == nil {
 		return fmt.Errorf("zalosend: chưa gọi EnsureLoggedIn")
 	}
 
-	opened, err := openConversation(c.ctx, contactQuery)
+	opened, err := openConversation(browserCtx, contactQuery)
 	if err != nil {
 		return fmt.Errorf("zalosend: tìm hội thoại %q: %w", contactQuery, err)
 	}
@@ -123,10 +141,15 @@ func (c *ChromedpSender) SendMessage(ctx context.Context, contactQuery, message 
 		return fmt.Errorf("zalosend: không tìm thấy hội thoại %q", contactQuery)
 	}
 
-	ok, body, err := sendPastedMessage(c.ctx, message)
+	ok, body, err := sendPastedMessage(browserCtx, message)
 	if err != nil {
 		return fmt.Errorf("zalosend: gửi tin tới %q: %w", contactQuery, err)
 	}
+	// Port của chromedp.Run(ctx, chromedp.Sleep(1*time.Second)) ngay
+	// trước return nil trong run() (main.go dòng 398) — chạy sau MỌI lần
+	// sendPastedMessage trả về không lỗi, bất kể ok true/false, trước khi
+	// SendMessage return.
+	chromedp.Run(browserCtx, chromedp.Sleep(1*time.Second))
 	if !ok {
 		if len(body) > 300 {
 			body = body[:300]
