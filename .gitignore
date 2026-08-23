@@ -38,6 +38,10 @@ Thumbs.db
 zalo_state.json
 log.log
 
+# ===== Chromedp Zalo session (chứa cookie đăng nhập thật, KHÔNG commit — xem
+# ghi nhớ dự án "Zalo session leak incident") =====
+zalo_profile/
+
 # ===== Superpowers scratch (per-plan SDD ledgers/workspaces) =====
 .superpowers/
 
