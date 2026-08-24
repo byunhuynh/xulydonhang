@@ -20,6 +20,16 @@ import (
 const (
 	loginTimeout       = 120 * time.Second
 	sendConfirmTimeout = 15 * time.Second
+
+	// browserOpTimeout là hạn giờ mặc định cho MỘT lượt tương tác trình
+	// duyệt (mở trang, tìm hội thoại + dán + gửi 1 tin) khi caller không
+	// tự đặt deadline. Không có nó, một chromedp.WaitVisible chờ selector
+	// mà DOM Zalo đã đổi (rủi ro đã ghi nhận với `.txt-highlight`/
+	// `#richInput`) sẽ block VĨNH VIỄN: a.sending (app.go) không bao giờ
+	// được trả về false và nút gửi chết cho tới khi khởi động lại app.
+	// KHÔNG áp cho vòng chờ quét QR 120s trong EnsureLoggedIn — đó là
+	// khoảng chờ người dùng CỐ Ý, không phải treo.
+	browserOpTimeout = 90 * time.Second
 )
 
 var indentClicksPerLevel = map[string]int{
@@ -72,35 +82,92 @@ func (c *ChromedpSender) ensureBrowser() error {
 	return nil
 }
 
+// browserContext snapshot c.ctx dưới c.mu thay vì để caller đọc trực
+// tiếp field nhiều lần — Close() có thể chạy đồng thời (vd shutdown app
+// trong lúc batch gửi vẫn còn đang chạy ở goroutine khác) và ghi
+// c.ctx=nil dưới cùng 1 lock; đọc field trực tiếp không lock sẽ là data
+// race và có thể truyền context nil vào chromedp.Run gây panic. Trả nil
+// nếu trình duyệt chưa mở hoặc đã đóng — caller tự quyết thông báo lỗi.
+func (c *ChromedpSender) browserContext() context.Context {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.ctx
+}
+
+// opTimeout lấy hạn giờ cho 1 lượt tương tác trình duyệt: ưu tiên phần
+// thời gian còn lại của deadline caller đặt (runZaloBatch trong app.go
+// đặt 1 deadline riêng cho mỗi job), ngược lại dùng mặc định
+// browserOpTimeout. Trả về 0 nếu deadline đã trôi qua — context dẫn xuất
+// sẽ hết hạn ngay, đúng ý caller là "đã hết giờ".
+func opTimeout(ctx context.Context, fallback time.Duration) time.Duration {
+	if ctx == nil {
+		return fallback
+	}
+	deadline, ok := ctx.Deadline()
+	if !ok {
+		return fallback
+	}
+	remaining := time.Until(deadline)
+	if remaining < 0 {
+		return 0
+	}
+	return remaining
+}
+
+// navigateToZalo chạy cặp EmulateViewport+Navigate mở đầu trên 1 context
+// CÓ HẠN GIỜ dẫn xuất từ context trình duyệt. context.WithTimeout lồng
+// trên chromedp context là cách chuẩn để chặn giờ 1 lời gọi mà KHÔNG phá
+// huỷ cả browser context (cancel con không lan ngược lên cha).
+func navigateToZalo(browserCtx context.Context, timeout time.Duration) error {
+	runCtx, cancel := context.WithTimeout(browserCtx, timeout)
+	defer cancel()
+	return chromedp.Run(runCtx,
+		chromedp.EmulateViewport(1280, 900),
+		chromedp.Navigate("https://chat.zalo.me/"),
+	)
+}
+
 // EnsureLoggedIn — port của phần Navigate + chờ QR trong run() (main.go
-// dòng 347-373), không đổi logic/thời gian chờ.
+// dòng 347-373), không đổi logic/thời gian chờ (vòng chờ QR vẫn đúng
+// loginTimeout=120s); chỉ bọc thêm hạn giờ cho các lời gọi tương tác
+// trình duyệt và thêm 1 lần mở lại trình duyệt nếu nó đã bị đóng tay.
 func (c *ChromedpSender) EnsureLoggedIn(ctx context.Context) error {
 	if err := c.ensureBrowser(); err != nil {
 		return err
 	}
 
-	// Snapshot c.ctx dưới c.mu thay vì đọc trực tiếp field nhiều lần bên
-	// dưới — Close() có thể chạy đồng thời (vd shutdown app trong lúc
-	// batch gửi vẫn còn đang chạy ở goroutine khác) và ghi c.ctx=nil dưới
-	// cùng 1 lock; đọc field trực tiếp không lock sẽ là data race và có
-	// thể truyền context nil vào chromedp.Run gây panic.
-	c.mu.Lock()
-	browserCtx := c.ctx
-	c.mu.Unlock()
+	browserCtx := c.browserContext()
 	if browserCtx == nil {
 		return fmt.Errorf("zalosend: trình duyệt đã bị đóng")
 	}
+	timeout := opTimeout(ctx, browserOpTimeout)
 
-	if err := chromedp.Run(browserCtx,
-		chromedp.EmulateViewport(1280, 900),
-		chromedp.Navigate("https://chat.zalo.me/"),
-	); err != nil {
-		return fmt.Errorf("zalosend: không mở được trang: %w", err)
+	if navErr := navigateToZalo(browserCtx, timeout); navErr != nil {
+		// Trình duyệt này CỐ Ý hiện cửa sổ (cần cho QR) nên người dùng tự
+		// tay đóng nó giữa chừng là chuyện thường. Khi đó c.ctx vẫn khác
+		// nil (ensureBrowser tưởng "đang mở") nhưng mọi lời gọi chromedp
+		// đều hỏng vĩnh viễn. Coi Navigate hỏng = trình duyệt đã mất: reset
+		// trạng thái bằng Close() rồi mở lại 1 trình duyệt mới và thử lại
+		// ĐÚNG 1 LẦN (không lặp vô hạn).
+		_ = c.Close()
+		if reopenErr := c.ensureBrowser(); reopenErr != nil {
+			return fmt.Errorf("zalosend: không mở được trang (%v) và mở lại trình duyệt cũng thất bại: %w", navErr, reopenErr)
+		}
+		browserCtx = c.browserContext()
+		if browserCtx == nil {
+			return fmt.Errorf("zalosend: trình duyệt đã bị đóng")
+		}
+		if retryErr := navigateToZalo(browserCtx, timeout); retryErr != nil {
+			return fmt.Errorf("zalosend: không mở được trang kể cả sau khi mở lại trình duyệt: %w", retryErr)
+		}
 	}
-	chromedp.Run(browserCtx, chromedp.Sleep(4*time.Second))
+
+	postNavCtx, postNavCancel := context.WithTimeout(browserCtx, timeout)
+	chromedp.Run(postNavCtx, chromedp.Sleep(4*time.Second))
 
 	var curURL string
-	chromedp.Run(browserCtx, chromedp.Location(&curURL))
+	chromedp.Run(postNavCtx, chromedp.Location(&curURL))
+	postNavCancel()
 	if !strings.Contains(curURL, "id.zalo.me") {
 		return nil
 	}
@@ -123,17 +190,20 @@ func (c *ChromedpSender) EnsureLoggedIn(ctx context.Context) error {
 // tay); ở đây PHẢI trả error thật để runZaloBatch (app.go, Task 4) log
 // đúng job nào thất bại và tiếp tục job sau.
 func (c *ChromedpSender) SendMessage(ctx context.Context, contactQuery, message string) error {
-	// Snapshot c.ctx dưới c.mu (cùng lý do như EnsureLoggedIn ở trên) —
-	// tránh đọc field không lock trong khi Close() có thể đang ghi nil
-	// đồng thời ở goroutine khác.
-	c.mu.Lock()
-	browserCtx := c.ctx
-	c.mu.Unlock()
+	browserCtx := c.browserContext()
 	if browserCtx == nil {
 		return fmt.Errorf("zalosend: chưa gọi EnsureLoggedIn")
 	}
 
-	opened, err := openConversation(browserCtx, contactQuery)
+	// Chặn giờ cho TOÀN BỘ lượt gửi này (tìm hội thoại + dán + gửi) trên 1
+	// context con của browser context — nếu 1 selector nào đó không còn
+	// khớp DOM Zalo thì WaitVisible bên trong sẽ thất bại sau timeout thay
+	// vì treo mãi mãi và làm kẹt cờ a.sending của app. Cancel context con
+	// KHÔNG đóng trình duyệt: job sau vẫn dùng lại browserCtx bình thường.
+	runCtx, cancel := context.WithTimeout(browserCtx, opTimeout(ctx, browserOpTimeout))
+	defer cancel()
+
+	opened, err := openConversation(runCtx, contactQuery)
 	if err != nil {
 		return fmt.Errorf("zalosend: tìm hội thoại %q: %w", contactQuery, err)
 	}
@@ -141,7 +211,7 @@ func (c *ChromedpSender) SendMessage(ctx context.Context, contactQuery, message 
 		return fmt.Errorf("zalosend: không tìm thấy hội thoại %q", contactQuery)
 	}
 
-	ok, body, err := sendPastedMessage(browserCtx, message)
+	ok, body, err := sendPastedMessage(runCtx, message)
 	if err != nil {
 		return fmt.Errorf("zalosend: gửi tin tới %q: %w", contactQuery, err)
 	}
@@ -149,7 +219,7 @@ func (c *ChromedpSender) SendMessage(ctx context.Context, contactQuery, message 
 	// trước return nil trong run() (main.go dòng 398) — chạy sau MỌI lần
 	// sendPastedMessage trả về không lỗi, bất kể ok true/false, trước khi
 	// SendMessage return.
-	chromedp.Run(browserCtx, chromedp.Sleep(1*time.Second))
+	chromedp.Run(runCtx, chromedp.Sleep(1*time.Second))
 	if !ok {
 		if len(body) > 300 {
 			body = body[:300]
@@ -161,17 +231,37 @@ func (c *ChromedpSender) SendMessage(ctx context.Context, contactQuery, message 
 
 // Close đóng trình duyệt — an toàn gọi nhiều lần, gọi khi chưa từng mở
 // trình duyệt (c.ctx nil) cũng không lỗi.
+//
+// Dùng chromedp.Cancel (đường tắt shutdown "lịch sự" mà chromedp
+// khuyến nghị) thay vì gọi thẳng cancel closure: nó CHỜ tiến trình
+// Chrome thật sự thoát hẳn, không chỉ cắt context. Quan trọng vì Wails
+// gọi hàm này trong OnShutdown rồi thoát tiến trình chính ngay sau đó —
+// cắt context suông có thể để lại 1 Chrome mồ côi chưa kịp bị thu hồi.
+// Vì chromedp.Cancel có thể block một chút, nó được gọi NGOÀI c.mu (sau
+// khi đã snapshot + xoá các field dưới lock) để không chặn goroutine gửi
+// đang cùng đọc c.ctx.
 func (c *ChromedpSender) Close() error {
 	c.mu.Lock()
-	defer c.mu.Unlock()
-	if c.cancel != nil {
-		c.cancel()
+	ctx := c.ctx
+	cancel := c.cancel
+	allocCancel := c.allocCancel
+	c.ctx, c.cancel, c.allocCancel = nil, nil, nil
+	c.mu.Unlock()
+
+	if ctx == nil {
+		return nil
 	}
-	if c.allocCancel != nil {
-		c.allocCancel()
+
+	err := chromedp.Cancel(ctx)
+	if err != nil && cancel != nil {
+		// Không thoát êm được thì cắt thẳng context để chắc chắn không rò
+		// rỉ goroutine của chromedp.
+		cancel()
 	}
-	c.ctx = nil
-	return nil
+	if allocCancel != nil {
+		allocCancel()
+	}
+	return err
 }
 
 // ---- Phần dưới đây port GẦN NHƯ NGUYÊN VĂN từ cmd/chromedp/main.go
