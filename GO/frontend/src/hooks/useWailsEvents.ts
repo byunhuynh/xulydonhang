@@ -10,6 +10,7 @@ export function useWailsEvents() {
   const setStt = useAppStore((s) => s.setStt)
   const addFiles = useAppStore((s) => s.addFiles)
   const setLockStatus = useAppStore((s) => s.setLockStatus)
+  const clearSelection = useAppStore((s) => s.clearSelection)
 
   useEffect(() => {
     const offLog = EventsOn('process:log', (line: string) => appendLog(line))
@@ -20,6 +21,10 @@ export function useWailsEvents() {
     })
     const offDrop = EventsOn('files:dropped', (paths: string[]) => addFiles(paths))
     const offLock = EventsOn('applock:status', (status: LockStatus) => setLockStatus(status))
+    const offZaloLog = EventsOn('zalo:log', (line: string) => appendLog(line))
+    // zalo:sent (po/ok) được phát nhưng CHƯA có UI trạng thái riêng ở
+    // v1 (xem spec/Phạm vi) - không lắng nghe ở đây, chỉ zalo:log/done.
+    const offZaloDone = EventsOn('zalo:done', () => clearSelection())
     // Attaches the actual dragover/dragleave/drop DOM listeners on window;
     // without this call the Go-side runtime.OnFileDrop callback never fires
     // and WebView2 falls back to navigating the window to the dropped file.
@@ -32,7 +37,9 @@ export function useWailsEvents() {
       offDone()
       offDrop()
       offLock()
+      offZaloLog()
+      offZaloDone()
       OnFileDropOff()
     }
-  }, [appendLog, appendRow, setProcessing, setStt, addFiles, setLockStatus])
+  }, [appendLog, appendRow, setProcessing, setStt, addFiles, setLockStatus, clearSelection])
 }
