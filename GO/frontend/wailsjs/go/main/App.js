@@ -30,6 +30,10 @@ export function SelectFiles() {
   return window['go']['main']['App']['SelectFiles']();
 }
 
+export function SendZaloMessages(arg1) {
+  return window['go']['main']['App']['SendZaloMessages'](arg1);
+}
+
 export function SetSTT(arg1) {
   return window['go']['main']['App']['SetSTT'](arg1);
 }
