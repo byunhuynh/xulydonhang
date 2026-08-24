@@ -24,15 +24,16 @@ func main() {
 
 	err = wails.Run(&options.App{
 		Title:     "Blue Hà Thành - Order System v3.0",
-		Width:     1100,
-		Height:    850,
-		MinWidth:  900,
-		MinHeight: 800,
+		Width:     1440,
+		Height:    900,
+		MinWidth:  1100,
+		MinHeight: 750,
 		Frameless: true,
 		AssetServer: &assetserver.Options{
 			Assets: assets,
 		},
-		OnStartup: app.startup,
+		OnStartup:  app.startup,
+		OnShutdown: app.shutdown,
 		Bind: []interface{}{
 			app,
 		},

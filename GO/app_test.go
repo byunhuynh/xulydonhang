@@ -10,9 +10,11 @@ import (
 
 	"github.com/xuri/excelize/v2"
 
+	"order-processor/internal/appsettings"
 	"order-processor/internal/config"
 	"order-processor/internal/processing"
 	"order-processor/internal/processing/excelwriter"
+	"order-processor/internal/zalosend"
 )
 
 type fakeEmitter struct {
@@ -333,5 +335,154 @@ func TestApp_ConfirmPrice_SecondCallForSameRowUsesSetPriceNotConfirmPrice(t *tes
 	val, _ := f.GetCellValue("Don dat hang", "Y9")
 	if val != "30000" {
 		t.Fatalf("Y9 = %q after the second (change-of-mind) call, want %q", val, "30000")
+	}
+}
+
+type fakeZaloSender struct {
+	loginErr   error
+	sendErrs   map[string]error // key = contactQuery
+	loginCalls int
+	sentTo     []string
+}
+
+func (f *fakeZaloSender) EnsureLoggedIn(ctx context.Context) error {
+	f.loginCalls++
+	return f.loginErr
+}
+
+func (f *fakeZaloSender) SendMessage(ctx context.Context, contactQuery, message string) error {
+	f.sentTo = append(f.sentTo, contactQuery)
+	if f.sendErrs != nil {
+		if err, ok := f.sendErrs[contactQuery]; ok {
+			return err
+		}
+	}
+	return nil
+}
+
+func (f *fakeZaloSender) Close() error { return nil }
+
+func newTestAppForZalo(t *testing.T, sender zalosend.ZaloSender, zaloMap map[string]string) *App {
+	t.Helper()
+	store := appsettings.NewStore(filepath.Join(t.TempDir(), "settings.bhconfig"))
+	if err := store.Save(appsettings.Settings{Zalo: zaloMap}); err != nil {
+		t.Fatalf("seed settings: %v", err)
+	}
+	return &App{appSettingsStore: store, zaloSender: sender}
+}
+
+func sentEventsOf(t *testing.T, events []emittedEvent) []map[string]any {
+	t.Helper()
+	var out []map[string]any
+	for _, e := range events {
+		if e.name == "zalo:sent" {
+			data, ok := e.data[0].(map[string]any)
+			if !ok {
+				t.Fatalf("zalo:sent data is not map[string]any: %#v", e.data)
+			}
+			out = append(out, data)
+		}
+	}
+	return out
+}
+
+func TestRunZaloBatch_SendsEachJobAndEmitsEvents(t *testing.T) {
+	sender := &fakeZaloSender{}
+	a := newTestAppForZalo(t, sender, map[string]string{"COOP": "Nhom Coop", "BIGC": "Nhom BigC"})
+	emitter := &fakeEmitter{}
+
+	a.runZaloBatch(emitter, []ZaloJob{
+		{PO: "PO1", System: "COOP", Message: "noi dung 1"},
+		{PO: "PO2", System: "BIGC", Message: "noi dung 2"},
+	})
+
+	if sender.loginCalls != 1 {
+		t.Fatalf("loginCalls = %d, want 1", sender.loginCalls)
+	}
+	wantSentTo := []string{"Nhom Coop", "Nhom BigC"}
+	if !reflect.DeepEqual(sender.sentTo, wantSentTo) {
+		t.Fatalf("sentTo = %#v, want %#v", sender.sentTo, wantSentTo)
+	}
+
+	lastEvent := emitter.events[len(emitter.events)-1]
+	if lastEvent.name != "zalo:done" {
+		t.Fatalf("last event = %q, want zalo:done", lastEvent.name)
+	}
+
+	sent := sentEventsOf(t, emitter.events)
+	if len(sent) != 2 || sent[0]["po"] != "PO1" || sent[0]["ok"] != true || sent[1]["po"] != "PO2" || sent[1]["ok"] != true {
+		t.Fatalf("zalo:sent events = %#v", sent)
+	}
+}
+
+func TestRunZaloBatch_SkipsJobWithoutContact(t *testing.T) {
+	sender := &fakeZaloSender{}
+	a := newTestAppForZalo(t, sender, map[string]string{"COOP": "Nhom Coop"})
+	emitter := &fakeEmitter{}
+
+	a.runZaloBatch(emitter, []ZaloJob{
+		{PO: "PO1", System: "UNKNOWN", Message: "noi dung 1"},
+		{PO: "PO2", System: "COOP", Message: "noi dung 2"},
+	})
+
+	if !reflect.DeepEqual(sender.sentTo, []string{"Nhom Coop"}) {
+		t.Fatalf("sentTo = %#v, want only the configured contact attempted", sender.sentTo)
+	}
+
+	sent := sentEventsOf(t, emitter.events)
+	if len(sent) != 2 || sent[0]["po"] != "PO1" || sent[0]["ok"] != false || sent[1]["po"] != "PO2" || sent[1]["ok"] != true {
+		t.Fatalf("zalo:sent events = %#v", sent)
+	}
+}
+
+func TestRunZaloBatch_ContinuesAfterOneJobFails(t *testing.T) {
+	sender := &fakeZaloSender{sendErrs: map[string]error{"Nhom Loi": errors.New("boom")}}
+	a := newTestAppForZalo(t, sender, map[string]string{"LOI": "Nhom Loi", "COOP": "Nhom Coop"})
+	emitter := &fakeEmitter{}
+
+	a.runZaloBatch(emitter, []ZaloJob{
+		{PO: "PO1", System: "LOI", Message: "x"},
+		{PO: "PO2", System: "COOP", Message: "y"},
+	})
+
+	if !reflect.DeepEqual(sender.sentTo, []string{"Nhom Loi", "Nhom Coop"}) {
+		t.Fatalf("sentTo = %#v, want both contacts attempted despite the first failing", sender.sentTo)
+	}
+	sent := sentEventsOf(t, emitter.events)
+	if len(sent) != 2 || sent[0]["ok"] != false || sent[1]["ok"] != true {
+		t.Fatalf("zalo:sent events = %#v", sent)
+	}
+}
+
+func TestRunZaloBatch_AbortsWholeBatchIfLoginFails(t *testing.T) {
+	sender := &fakeZaloSender{loginErr: errors.New("login timeout")}
+	a := newTestAppForZalo(t, sender, map[string]string{"COOP": "Nhom Coop"})
+	emitter := &fakeEmitter{}
+
+	a.runZaloBatch(emitter, []ZaloJob{{PO: "PO1", System: "COOP", Message: "x"}})
+
+	if len(sender.sentTo) != 0 {
+		t.Fatalf("sentTo = %#v, want no send attempted after login failure", sender.sentTo)
+	}
+	lastEvent := emitter.events[len(emitter.events)-1]
+	if lastEvent.name != "zalo:done" {
+		t.Fatalf("last event = %q, want zalo:done", lastEvent.name)
+	}
+}
+
+func TestApp_SendZaloMessages_RejectsWhileAlreadySending(t *testing.T) {
+	sender := &fakeZaloSender{}
+	a := newTestAppForZalo(t, sender, map[string]string{"COOP": "Nhom Coop"})
+	emitter := &fakeEmitter{}
+	a.emitter = emitter
+	a.sending.Store(true)
+
+	a.SendZaloMessages([]ZaloJob{{PO: "PO1", System: "COOP", Message: "x"}})
+
+	if len(emitter.events) != 1 || emitter.events[0].name != "zalo:log" {
+		t.Fatalf("events = %#v, want a single zalo:log warning", emitter.events)
+	}
+	if sender.loginCalls != 0 {
+		t.Fatalf("loginCalls = %d, want 0 (must not start a new batch while one is running)", sender.loginCalls)
 	}
 }

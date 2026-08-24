@@ -20,6 +20,7 @@ import (
 	"order-processor/internal/processing/excelwriter"
 	"order-processor/internal/processing/pricing"
 	"order-processor/internal/processing/productdata"
+	"order-processor/internal/zalosend"
 )
 
 // Emitter trừu tượng hoá runtime.EventsEmit để logic của App test được mà
@@ -51,6 +52,8 @@ type App struct {
 	resolvedRows     map[int]bool
 	resolvedMu       sync.Mutex
 	processing       atomic.Bool
+	zaloSender       zalosend.ZaloSender
+	sending          atomic.Bool
 }
 
 // resolveRepoFile looks for filename starting in the current working
@@ -157,6 +160,9 @@ func NewApp() (*App, error) {
 		processor:        processor,
 		orderDir:         orderDir,
 		excelPath:        excelPath,
+		zaloSender: &zalosend.ChromedpSender{
+			ProfileDir: filepath.Join(resolveRepoDir("settings.ini"), "zalo_profile"),
+		},
 	}
 
 	processor.LogFunc = func(msg string) {
@@ -374,4 +380,75 @@ func (a *App) processOne(f string, stt int) (rows []processing.OrderRow, err err
 		}
 	}()
 	return a.processor.Process(context.Background(), f, stt)
+}
+
+// ZaloJob là 1 lần gửi cần thực hiện: nội dung tin nhắn ĐÃ được frontend
+// build sẵn bằng buildZaloMessageForPO (y hệt nội dung modal xem trước
+// đã hiển thị cho người dùng) — Go không build lại text, chỉ resolve
+// liên hệ (theo System) rồi gửi.
+type ZaloJob struct {
+	PO      string `json:"po"`
+	System  string `json:"system"`
+	Message string `json:"message"`
+}
+
+// SendZaloMessages gửi tuần tự từng job trong 1 goroutine nền, phát sự
+// kiện zalo:log/zalo:sent/zalo:done — cùng pattern ProcessFiles/runBatch.
+// Từ chối nếu đang có 1 lượt gửi khác chạy (atomic.Bool, giống
+// a.processing) — không cho 2 batch gửi chồng lên nhau trên cùng 1
+// trình duyệt.
+func (a *App) SendZaloMessages(jobs []ZaloJob) {
+	if !a.sending.CompareAndSwap(false, true) {
+		a.emitter.Emit("zalo:log", "⚠️ Đã có một lượt gửi Zalo đang chạy, vui lòng đợi hoàn tất.")
+		return
+	}
+	go a.runZaloBatch(a.emitter, jobs)
+}
+
+func (a *App) runZaloBatch(emitter Emitter, jobs []ZaloJob) {
+	defer func() {
+		if r := recover(); r != nil {
+			emitter.Emit("zalo:log", fmt.Sprintf("❌ Lỗi không mong muốn: %v", r))
+		}
+		a.sending.Store(false)
+		emitter.Emit("zalo:done", nil)
+	}()
+
+	ctx := context.Background()
+	emitter.Emit("zalo:log", "🔐 Đang kiểm tra đăng nhập Zalo (quét QR trên cửa sổ trình duyệt nếu được yêu cầu)...")
+	if err := a.zaloSender.EnsureLoggedIn(ctx); err != nil {
+		emitter.Emit("zalo:log", fmt.Sprintf("❌ Không đăng nhập được Zalo: %v", err))
+		return
+	}
+
+	settings, err := a.appSettingsStore.Load(resolveRepoFile("settings.ini"))
+	if err != nil {
+		emitter.Emit("zalo:log", fmt.Sprintf("❌ Không đọc được cấu hình liên hệ Zalo: %v", err))
+		return
+	}
+
+	for _, job := range jobs {
+		contact, err := zalosend.ResolveContact(job.System, settings.Zalo)
+		if err != nil {
+			emitter.Emit("zalo:log", fmt.Sprintf("❌ %s: chưa cấu hình liên hệ Zalo cho %s (sửa ở Cài đặt > Zalo)", job.PO, job.System))
+			emitter.Emit("zalo:sent", map[string]any{"po": job.PO, "ok": false})
+			continue
+		}
+		emitter.Emit("zalo:log", fmt.Sprintf("📤 Đang gửi %s → %s...", job.PO, contact))
+		if err := a.zaloSender.SendMessage(ctx, contact, job.Message); err != nil {
+			emitter.Emit("zalo:log", fmt.Sprintf("❌ Gửi %s thất bại: %v", job.PO, err))
+			emitter.Emit("zalo:sent", map[string]any{"po": job.PO, "ok": false})
+			continue
+		}
+		emitter.Emit("zalo:log", fmt.Sprintf("✅ Đã gửi %s", job.PO))
+		emitter.Emit("zalo:sent", map[string]any{"po": job.PO, "ok": true})
+	}
+}
+
+// shutdown đóng trình duyệt Zalo (nếu đã mở) khi app thoát — tránh để
+// lại 1 tiến trình Chrome mồ côi chạy nền sau khi đóng cửa sổ chính.
+func (a *App) shutdown(ctx context.Context) {
+	if a.zaloSender != nil {
+		_ = a.zaloSender.Close()
+	}
 }
