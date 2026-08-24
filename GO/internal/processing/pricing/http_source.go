@@ -36,13 +36,26 @@ func NewHTTPSource(gidMap map[string]string) *HTTPSource {
 // FetchIndex mirrors find_price_by_sku/find_all_promotions_by_sku_and_time's
 // URL construction: sheetKey is the same value as their sheet_name
 // parameter (e.g. "COOP", "LOTTE" — must match a key in GidMap).
+//
+// Uses /export?format=csv rather than /gviz/tq?tqx=out:csv: the gviz
+// endpoint was confirmed (see productdata.fetchSheetRows' own doc
+// comment) to silently corrupt another tab of a *different* spreadsheet,
+// concatenating hundreds of real rows into the CSV header and losing
+// them to code that (correctly) treats row 0 as a header. This
+// spreadsheet's own vendor tabs (COOP/SATRA/LOTTE/WINMART checked
+// directly) were NOT actually losing any SKU rows under gviz — the two
+// endpoints returned identical SKU sets, gviz just omits a few blank
+// filler rows that ParseIndex already ignores — but switched anyway as
+// a precaution against the same silent-data-loss failure mode, since
+// /export?format=csv is the more standard, non-gviz export path and
+// costs nothing here.
 func (s *HTTPSource) FetchIndex(sheetKey string) (*Index, error) {
 	gid, ok := s.GidMap[sheetKey]
 	if !ok {
 		return nil, fmt.Errorf("pricing: no %s gid configured", sheetKey)
 	}
 
-	url := fmt.Sprintf("https://docs.google.com/spreadsheets/d/%s/gviz/tq?tqx=out:csv&gid=%s", spreadsheetID, gid)
+	url := fmt.Sprintf("https://docs.google.com/spreadsheets/d/%s/export?format=csv&gid=%s", spreadsheetID, gid)
 	resp, err := s.Client.Get(url)
 	if err != nil {
 		return nil, fmt.Errorf("pricing: fetch %s: %w", url, err)
