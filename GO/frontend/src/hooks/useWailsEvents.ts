@@ -5,7 +5,7 @@ import type { OrderRow } from '../types'
 
 export function useWailsEvents() {
   const appendLog = useAppStore((s) => s.appendLog)
-  const appendRow = useAppStore((s) => s.appendRow)
+  const upsertRow = useAppStore((s) => s.upsertRow)
   const setProcessing = useAppStore((s) => s.setProcessing)
   const setStt = useAppStore((s) => s.setStt)
   const addFiles = useAppStore((s) => s.addFiles)
@@ -14,7 +14,7 @@ export function useWailsEvents() {
 
   useEffect(() => {
     const offLog = EventsOn('process:log', (line: string) => appendLog(line))
-    const offRow = EventsOn('process:row', (row: OrderRow) => appendRow(row))
+    const offRow = EventsOn('process:row', (row: OrderRow) => upsertRow(row))
     const offDone = EventsOn('process:done', (finalStt: number) => {
       setProcessing(false)
       setStt(finalStt)
@@ -53,5 +53,5 @@ export function useWailsEvents() {
       offZaloDone()
       OnFileDropOff()
     }
-  }, [appendLog, appendRow, setProcessing, setStt, addFiles, setLockStatus, deselectPO])
+  }, [appendLog, upsertRow, setProcessing, setStt, addFiles, setLockStatus, deselectPO])
 }

@@ -68,6 +68,7 @@ type OrderRow struct {
 	System      string `json:"system"`
 	MaKhachHang string `json:"maKhachHang"`
 	PO          string `json:"po"`
+	ResultKey   string `json:"resultKey"`
 	DonGia      string `json:"donGia"`
 	Status      string `json:"status"`
 	StatusKind  string `json:"statusKind"`

@@ -1,6 +1,7 @@
 import { create } from 'zustand'
 import type { LogEntry, OrderRow } from '../types'
 import type { PriceBasis } from '../lib/zaloMessage'
+import { upsertOrderRow } from '../lib/orderRowUpsert'
 
 export type LockStatus = 'checking' | 'unlocked' | 'locked'
 
@@ -30,6 +31,7 @@ interface AppState {
   appendLog: (line: string) => void
   clearLog: () => void
   appendRow: (row: OrderRow) => void
+  upsertRow: (row: OrderRow) => void
   resetRows: () => void
   adjustRowDonGia: (rowIndex: number, delta: number) => void
   setLockStatus: (status: LockStatus) => void
@@ -77,6 +79,7 @@ export const useAppStore = create<AppState>((set) => ({
     })),
   clearLog: () => set({ logLines: [] }),
   appendRow: (row) => set((state) => ({ rows: [...state.rows, row] })),
+  upsertRow: (row) => set((state) => ({ rows: upsertOrderRow(state.rows, row) })),
   resetRows: () => set({ rows: [] }),
   // Applied after ConfirmPrice succeeds for one mismatched SKU: donGia is
   // the order's total (sum of unitPrice * qty across every product line,

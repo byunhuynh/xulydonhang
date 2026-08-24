@@ -21,6 +21,7 @@ export interface OrderRow {
   system: string
   maKhachHang: string
   po: string
+  resultKey: string
   donGia: string
   status: string
   statusKind: string
