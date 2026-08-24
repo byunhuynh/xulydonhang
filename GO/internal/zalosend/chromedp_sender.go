@@ -114,10 +114,30 @@ func opTimeout(ctx context.Context, fallback time.Duration) time.Duration {
 	return remaining
 }
 
+// warmUpBrowser BẮT BUỘC chạy trước MỌI chromedp.Run có hạn giờ trên 1
+// browser context vừa tạo. chromedp cấp phát tiến trình Chrome LƯỜI
+// (lazy): lần Run ĐẦU TIÊN trên 1 context mới là lần thật sự khởi động
+// Chrome, và vòng đời tiến trình đó bị buộc vào context của CHÍNH lần Run
+// đầu tiên ấy. Nếu lần Run đầu tiên chạy trên 1 context.WithTimeout con
+// thì `defer cancel()` của nó (luôn chạy khi hàm trả về, dù thành công
+// hay hết giờ) sẽ giết luôn cả trình duyệt — đúng như tài liệu chromedp
+// ghi: "it's generally a bad idea to use a context timeout on the first
+// Run call, as it will stop the entire browser". Vì vậy ở đây ta gọi
+// chromedp.Run KHÔNG kèm action nào trên context trình duyệt THÔ (không
+// bọc timeout) để việc cấp phát xảy ra trên context sống lâu; sau đó mọi
+// lần Run có hạn giờ đều an toàn.
+func warmUpBrowser(browserCtx context.Context) error {
+	if err := chromedp.Run(browserCtx); err != nil {
+		return fmt.Errorf("zalosend: không khởi động được trình duyệt: %w", err)
+	}
+	return nil
+}
+
 // navigateToZalo chạy cặp EmulateViewport+Navigate mở đầu trên 1 context
 // CÓ HẠN GIỜ dẫn xuất từ context trình duyệt. context.WithTimeout lồng
 // trên chromedp context là cách chuẩn để chặn giờ 1 lời gọi mà KHÔNG phá
-// huỷ cả browser context (cancel con không lan ngược lên cha).
+// huỷ cả browser context (cancel con không lan ngược lên cha) — VỚI ĐIỀU
+// KIỆN trình duyệt đã được warmUpBrowser cấp phát trước đó.
 func navigateToZalo(browserCtx context.Context, timeout time.Duration) error {
 	runCtx, cancel := context.WithTimeout(browserCtx, timeout)
 	defer cancel()
@@ -125,6 +145,24 @@ func navigateToZalo(browserCtx context.Context, timeout time.Duration) error {
 		chromedp.EmulateViewport(1280, 900),
 		chromedp.Navigate("https://chat.zalo.me/"),
 	)
+}
+
+// waitAndReadURL chờ trang ổn định rồi đọc URL hiện tại, cũng trên 1
+// context có hạn giờ dẫn xuất từ context trình duyệt. Lỗi được TRẢ VỀ chứ
+// không nuốt: nếu không đọc nổi URL thì ta KHÔNG biết đang ở trang đăng
+// nhập hay trang chat, và coi chuỗi rỗng là "đã đăng nhập" chính là cách
+// EnsureLoggedIn báo thành công giả trong khi trình duyệt đã chết.
+func waitAndReadURL(browserCtx context.Context, timeout time.Duration) (string, error) {
+	runCtx, cancel := context.WithTimeout(browserCtx, timeout)
+	defer cancel()
+	if err := chromedp.Run(runCtx, chromedp.Sleep(4*time.Second)); err != nil {
+		return "", err
+	}
+	var curURL string
+	if err := chromedp.Run(runCtx, chromedp.Location(&curURL)); err != nil {
+		return "", err
+	}
+	return curURL, nil
 }
 
 // EnsureLoggedIn — port của phần Navigate + chờ QR trong run() (main.go
@@ -139,6 +177,14 @@ func (c *ChromedpSender) EnsureLoggedIn(ctx context.Context) error {
 	browserCtx := c.browserContext()
 	if browserCtx == nil {
 		return fmt.Errorf("zalosend: trình duyệt đã bị đóng")
+	}
+	// PHẢI hâm nóng TRƯỚC navigateToZalo: ensureBrowser mới chỉ dựng
+	// allocator + context chứ chưa chạy gì, nên nếu không có bước này thì
+	// lần Run đầu tiên của cả vòng đời trình duyệt lại chính là lần Run có
+	// hạn giờ trong navigateToZalo — và cancel của nó sẽ giết Chrome ngay
+	// sau lần điều hướng đầu tiên (xem chú thích warmUpBrowser).
+	if err := warmUpBrowser(browserCtx); err != nil {
+		return err
 	}
 	timeout := opTimeout(ctx, browserOpTimeout)
 
@@ -157,24 +203,33 @@ func (c *ChromedpSender) EnsureLoggedIn(ctx context.Context) error {
 		if browserCtx == nil {
 			return fmt.Errorf("zalosend: trình duyệt đã bị đóng")
 		}
+		// Trình duyệt mới ⇒ lại là 1 context chromedp chưa từng Run: phải
+		// hâm nóng lần nữa trước khi navigateToZalo bọc hạn giờ.
+		if warmErr := warmUpBrowser(browserCtx); warmErr != nil {
+			return fmt.Errorf("zalosend: không mở được trang (%v) và trình duyệt mở lại cũng không khởi động được: %w", navErr, warmErr)
+		}
 		if retryErr := navigateToZalo(browserCtx, timeout); retryErr != nil {
 			return fmt.Errorf("zalosend: không mở được trang kể cả sau khi mở lại trình duyệt: %w", retryErr)
 		}
 	}
 
-	postNavCtx, postNavCancel := context.WithTimeout(browserCtx, timeout)
-	chromedp.Run(postNavCtx, chromedp.Sleep(4*time.Second))
-
-	var curURL string
-	chromedp.Run(postNavCtx, chromedp.Location(&curURL))
-	postNavCancel()
+	curURL, err := waitAndReadURL(browserCtx, timeout)
+	if err != nil {
+		return fmt.Errorf("zalosend: không đọc được địa chỉ trang sau khi mở: %w", err)
+	}
 	if !strings.Contains(curURL, "id.zalo.me") {
 		return nil
 	}
 
 	deadline := time.Now().Add(loginTimeout)
 	for time.Now().Before(deadline) {
-		chromedp.Run(browserCtx, chromedp.Location(&curURL))
+		// Vòng lặp này chạy trên browserCtx THÔ (không hạn giờ) vì 120s chờ
+		// người dùng quét QR là khoảng chờ cố ý; nhưng lỗi Run ở đây thì
+		// không phải "chưa quét xong" mà là trình duyệt đã chết/bị đóng —
+		// nuốt nó sẽ quay 120 vòng vô ích rồi báo "hết giờ đăng nhập" sai.
+		if err := chromedp.Run(browserCtx, chromedp.Location(&curURL)); err != nil {
+			return fmt.Errorf("zalosend: mất kết nối trình duyệt trong lúc chờ đăng nhập: %w", err)
+		}
 		if strings.Contains(curURL, "chat.zalo.me") && !strings.Contains(curURL, "id.zalo.me") {
 			chromedp.Run(browserCtx, chromedp.Sleep(3*time.Second))
 			return nil
