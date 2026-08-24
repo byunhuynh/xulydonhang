@@ -1,0 +1,278 @@
+package processing
+
+import (
+	"fmt"
+	"math"
+	"path/filepath"
+	"regexp"
+	"strconv"
+	"strings"
+	"time"
+
+	"order-processor/internal/processing/coop"
+	"order-processor/internal/processing/excelwriter"
+	"order-processor/internal/processing/productdata"
+)
+
+var (
+	jitAirWaybillNamePattern      = regexp.MustCompile(`(?i)^air_waybill_(.+)_(\d{8})(?: \(\d+\))?\.pdf$`)
+	jitAirWaybillTrackingPattern  = regexp.MustCompile(`Mãvậnđơn:([A-Z0-9]+)Mãđơnhàng:`)
+	jitAirWaybillPOPattern        = regexp.MustCompile(`Mãđơnhàng:(\d{6}[A-Z0-9]{8})`)
+	jitAirWaybillItemStartPattern = regexp.MustCompile(`\[TopValue\]`)
+	jitAirWaybillQtyPattern       = regexp.MustCompile(`SL:(\d+)`)
+	jitAirWaybillSkuPattern       = regexp.MustCompile(`CH\d+`)
+	jitWhitespacePattern          = regexp.MustCompile(`\s+`)
+)
+
+const jitDebtDays = 15
+
+var writeJITOrderRows = excelwriter.WriteOrderRows
+
+type jitAirWaybillPageResult struct {
+	resultIndex int
+	excelStart  int
+	excelRows   []excelwriter.Row
+	row         OrderRow
+	productLogs []string
+}
+
+func jitRegionInfo(shipTo string) (region, statCode, warehouse string) {
+	if shipTo == "WH6_HN" || shipTo == "WH6_HTLA" {
+		return "TMĐT_MB", "HN", "TP_HN_12"
+	}
+	return "TMĐT_MN", "LA", "LA_KHOTMDT"
+}
+
+func parseJITAirWaybillFilename(path string) (warehouse, orderDate string, ok bool) {
+	match := jitAirWaybillNamePattern.FindStringSubmatch(filepath.Base(path))
+	if match == nil {
+		return "", "", false
+	}
+	parsed, err := time.Parse("02012006", match[2])
+	if err != nil {
+		return "", "", false
+	}
+	return match[1], parsed.Format("02/01/2006"), true
+}
+
+func parseJITAirWaybillPage(text string) (string, string, []coop.Product, error) {
+	compact := jitWhitespacePattern.ReplaceAllString(text, "")
+	trackingMatch := jitAirWaybillTrackingPattern.FindStringSubmatch(compact)
+	if trackingMatch == nil {
+		return "", "", nil, fmt.Errorf("không tìm thấy mã vận đơn JIT")
+	}
+	poMatch := jitAirWaybillPOPattern.FindStringSubmatch(compact)
+	if poMatch == nil {
+		return "", "", nil, fmt.Errorf("không tìm thấy mã đơn hàng JIT")
+	}
+
+	productsText := compact
+	if marker := strings.Index(compact, "Nộidunghàng"); marker >= 0 {
+		productsText = compact[marker:]
+	}
+	starts := jitAirWaybillItemStartPattern.FindAllStringIndex(productsText, -1)
+	products := make([]coop.Product, 0, len(starts))
+	for i, start := range starts {
+		end := len(productsText)
+		if i+1 < len(starts) {
+			end = starts[i+1][0]
+		}
+		block := productsText[start[1]:end]
+		if i+1 < len(starts) {
+			block = strings.TrimSuffix(block, fmt.Sprintf("%d.", i+2))
+		}
+		qtyMatch := jitAirWaybillQtyPattern.FindStringSubmatch(block)
+		if qtyMatch == nil {
+			continue
+		}
+		qty, err := strconv.Atoi(qtyMatch[1])
+		if err != nil {
+			continue
+		}
+		name := block[:strings.Index(block, qtyMatch[0])]
+		name = "[TopValue]" + strings.Trim(name, " ,")
+		products = append(products, coop.Product{Barcode: name, Qty: float64(qty)})
+	}
+	if len(products) == 0 {
+		return "", "", nil, fmt.Errorf("không trích xuất được sản phẩm JIT nào")
+	}
+	return trackingMatch[1], poMatch[1], products, nil
+}
+
+func resolveJITProductSku(store *productdata.Store, productKey string) (string, bool) {
+	resolved, ok := store.ResolveSkuAlias(productKey)
+	if ok {
+		return resolved, true
+	}
+	if chCode := jitAirWaybillSkuPattern.FindString(productKey); chCode != "" {
+		resolved, ok = store.ResolveSkuAlias(chCode)
+		if ok {
+			return resolved, true
+		}
+	}
+	return resolved, false
+}
+
+func extractJITAirWaybillPageTexts(path string) ([]string, error) {
+	f, reader, err := pdfOpen(path)
+	if err != nil {
+		return nil, err
+	}
+	defer f.Close()
+
+	texts := make([]string, 0, reader.NumPage())
+	for pageNum := 1; pageNum <= reader.NumPage(); pageNum++ {
+		page := reader.Page(pageNum)
+		text, ok := reconstructLinesFromContent(page)
+		if !ok {
+			text, err = extractPageText(page)
+			if err != nil {
+				return nil, fmt.Errorf("trang %d: %w", pageNum, err)
+			}
+		}
+		texts = append(texts, text)
+	}
+	return texts, nil
+}
+
+func (p *RealProcessor) processJITAirWaybillDocument(filePath, warehouseCode, orderDate string, emit func(OrderRow)) ([]OrderRow, error) {
+	texts, err := extractJITAirWaybillPageTexts(filePath)
+	if err != nil {
+		return nil, fmt.Errorf("không đọc được air waybill JIT: %w", err)
+	}
+	priceIndex, err := p.Pricing.FetchIndex("JIT")
+	if err != nil {
+		return nil, fmt.Errorf("không tải được giá JIT: %w", err)
+	}
+
+	location, locationErr := time.LoadLocation("Asia/Ho_Chi_Minh")
+	if locationErr != nil {
+		location = time.FixedZone("Asia/Ho_Chi_Minh", 7*60*60)
+	}
+	period := "chiều"
+	if time.Now().In(location).Hour() < 12 {
+		period = "sáng"
+	}
+	dateDescription := fmt.Sprintf("%s (%s)", orderDate, period)
+	orderNumber := fmt.Sprintf("ĐĐHJIT-%s-%s", dateDescription, warehouseCode)
+	description := fmt.Sprintf("JIT-CHOICE Ngày đổ %s %s", dateDescription, warehouseCode)
+	region, statCode, warehouse := jitRegionInfo(warehouseCode)
+
+	result := make([]OrderRow, len(texts))
+	pending := make([]jitAirWaybillPageResult, 0, len(texts))
+	allExcelRows := make([]excelwriter.Row, 0)
+	for pageIdx, text := range texts {
+		tracking, po, products, parseErr := parseJITAirWaybillPage(text)
+		pageLabel := fmt.Sprintf("%d/%d", pageIdx+1, len(texts))
+		if parseErr != nil {
+			p.emitJITLog(fmt.Sprintf("❌ JIT [%s] không đọc được đơn: %v", pageLabel, parseErr))
+			result[pageIdx] = emitOrderRow(emit, OrderRow{FileName: filepath.Base(filePath), Page: pageLabel, System: "JIT-CHOICE", Status: fmt.Sprintf("%s - %v", StatusFailed, parseErr), StatusKind: StatusKindFailed})
+			continue
+		}
+		p.emitJITLog(fmt.Sprintf("🚀 JIT [%s] PO: %s | MVĐ: %s", pageLabel, po, tracking))
+
+		excelRows := make([]excelwriter.Row, 0, len(products))
+		productLogs := make([]string, 0, len(products))
+		totalValue := 0.0
+		totalWeight := 0.0
+		totalPackages := 0
+		for _, product := range products {
+			sku, mapped := resolveJITProductSku(p.Store, product.Barcode)
+			if !mapped {
+				p.emitJITLog(fmt.Sprintf("❌ JIT [%s] PO: %s | không ánh xạ được sản phẩm %q", pageLabel, po, product.Barcode))
+				result[pageIdx] = emitOrderRow(emit, OrderRow{FileName: filepath.Base(filePath), Page: pageLabel, System: "JIT-CHOICE", PO: po, MaVanDon: tracking, Status: fmt.Sprintf("%s - không ánh xạ được sản phẩm %q", StatusFailed, product.Barcode), StatusKind: StatusKindFailed})
+				excelRows = nil
+				break
+			}
+			info, _ := p.Store.GetProductInfo(sku)
+			priceText, foundPrice := priceIndex.FindPrice(sku)
+			unitPrice, priceErr := strconv.ParseFloat(strings.ReplaceAll(priceText, ",", ""), 64)
+			if !foundPrice || priceErr != nil || unitPrice <= 0 {
+				p.emitJITLog(fmt.Sprintf("❌ JIT [%s] PO: %s | không tìm thấy đơn giá hợp lệ cho SKU %s", pageLabel, po, sku))
+				result[pageIdx] = emitOrderRow(emit, OrderRow{FileName: filepath.Base(filePath), Page: pageLabel, System: "JIT-CHOICE", PO: po, MaVanDon: tracking, Status: fmt.Sprintf("%s - không tìm thấy đơn giá JIT hợp lệ cho SKU %s", StatusFailed, sku), StatusKind: StatusKindFailed})
+				excelRows = nil
+				break
+			}
+			lineWeight := info.WeightKg * product.Qty
+			caseCount := 0
+			if info.PackSize > 0 {
+				caseCount = int(math.Ceil(product.Qty / info.PackSize))
+			}
+			totalValue += unitPrice * product.Qty
+			totalWeight += lineWeight
+			totalPackages += caseCount
+			productLogs = append(productLogs, fmt.Sprintf("✅ %s %s | SL: %s | Giá: %.0f", sku, info.Name, strconv.FormatFloat(product.Qty, 'f', -1, 64), unitPrice))
+			excelRows = append(excelRows, excelwriter.Row{
+				EntryDate: orderDate, DebtDays: jitDebtDays, OrderNumber: orderNumber,
+				Status: "Chưa thực hiện", CancelDate: orderDate, ShipTo: warehouseCode,
+				CustomerCode: "MN_JIT_01512", Description: description, SKU: sku,
+				Warehouse: warehouse, VATPercent: 8, RegionCode: region, StatCode: statCode,
+				Qty: product.Qty, UnitPrice: unitPrice, ProductName: info.Name,
+				CaseCount: caseCount, LineWeightKg: lineWeight, PromoNote: po + " - " + tracking, UseZFormula: true,
+			})
+		}
+		if excelRows == nil {
+			continue
+		}
+
+		finalRow := OrderRow{
+			FileName: filepath.Base(filePath), Page: pageLabel, System: "JIT-CHOICE",
+			MaKhachHang: "MN_JIT_01512", PO: po, MaVanDon: tracking, DonGia: fmt.Sprintf("%.0f", totalValue),
+			Status: StatusDone, StatusKind: StatusKindDone, ShipTo: warehouseCode,
+			EntryDate: orderDate, CancelDate: orderDate, TotalWeightKg: coop.FormatWeightKg(totalWeight),
+			TotalPackages: totalPackages, PromoItems: make([]PromoItemSummary, 0),
+			JITPeriod: period,
+		}
+		provisional := finalRow
+		provisional.Status = StatusProcessing
+		provisional.StatusKind = StatusKindProcessing
+		provisional = emitOrderRow(emit, provisional)
+		finalRow.ResultKey = provisional.ResultKey
+
+		pending = append(pending, jitAirWaybillPageResult{
+			resultIndex: pageIdx,
+			excelStart:  len(allExcelRows),
+			excelRows:   excelRows,
+			row:         finalRow,
+			productLogs: productLogs,
+		})
+		allExcelRows = append(allExcelRows, excelRows...)
+	}
+
+	if len(pending) == 0 {
+		return result, nil
+	}
+
+	startRow, writeErr := writeJITOrderRows(p.ExcelPath, allExcelRows, description)
+	if writeErr != nil {
+		for _, page := range pending {
+			failed := page.row
+			failed.Status = fmt.Sprintf("%s - %v", StatusFailed, writeErr)
+			failed.StatusKind = StatusKindFailed
+			failed.ExcelRows = nil
+			p.emitJITLog(fmt.Sprintf("❌ JIT [%s] PO: %s | lỗi ghi dondathang.xlsx: %v", failed.Page, failed.PO, writeErr))
+			result[page.resultIndex] = emitOrderRow(emit, failed)
+		}
+		return result, nil
+	}
+
+	for _, page := range pending {
+		finalRow := page.row
+		finalRow.ExcelRows = make([]int, len(page.excelRows))
+		for i := range finalRow.ExcelRows {
+			finalRow.ExcelRows[i] = startRow + page.excelStart + i
+		}
+		for _, line := range page.productLogs {
+			p.emitJITLog(line)
+		}
+		p.emitJITLog(fmt.Sprintf("✅ JIT [%s] PO: %s | MVĐ: %s | đã ghi %d dòng sản phẩm", finalRow.Page, finalRow.PO, finalRow.MaVanDon, len(page.excelRows)))
+		result[page.resultIndex] = emitOrderRow(emit, finalRow)
+	}
+	return result, nil
+}
+
+func (p *RealProcessor) emitJITLog(line string) {
+	if p.LogFunc != nil {
+		p.LogFunc(line)
+	}
+}

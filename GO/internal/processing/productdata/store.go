@@ -290,6 +290,8 @@ func (s *Store) GetProductInfo(sku string) (ProductInfo, bool) {
 }
 
 var skuCleanupPattern = regexp.MustCompile(`(\d{7})-\d`)
+var skuAliasNoisePattern = regexp.MustCompile(`[^\p{L}\p{N}]`)
+var skuAliasSizePattern = regexp.MustCompile(`\d+(?:ml|kg|l|g)$`)
 
 // CleanSkuNumber mirrors clean_sku_number: strips a Coop-style
 // "1234567-1" barcode down to its 7-digit prefix.
@@ -310,6 +312,53 @@ func (s *Store) ResolveSku(barcode string) string {
 		return mapped
 	}
 	return cleaned
+}
+
+// ResolveSkuAlias resolves exact aliases first, then tolerates the small
+// presentation-only differences found in Top Value airway labels: spacing,
+// punctuation, casing and the optional word "New". If exact normalized
+// equality is required; this deliberately does not use substring/fuzzy
+// matching because shorter and longer Top Value variants can be different SKUs.
+func (s *Store) ResolveSkuAlias(alias string) (string, bool) {
+	resolved := s.ResolveSku(alias)
+	if _, ok := s.products[resolved]; ok {
+		return resolved, true
+	}
+	normalized := normalizeSkuAlias(alias)
+	matchedSku := ""
+	for key, sku := range s.skuMapping {
+		candidate := normalizeSkuAlias(key)
+		if candidate == "" || candidate != normalized {
+			continue
+		}
+		if matchedSku != "" && matchedSku != sku {
+			return resolved, false
+		}
+		matchedSku = sku
+	}
+	if matchedSku != "" {
+		if _, ok := s.products[matchedSku]; ok {
+			return matchedSku, true
+		}
+	}
+	return resolved, false
+}
+
+func normalizeSkuAlias(value string) string {
+	value = strings.ToLower(value)
+	// Top Value labels omit these catalogue-only presentation words on some
+	// products. Ambiguous normalized matches are still rejected above.
+	for _, noise := range []string{"topvalue", "new", "hương", "túi"} {
+		value = strings.ReplaceAll(value, noise, "")
+	}
+	value = skuAliasNoisePattern.ReplaceAllString(value, "")
+	if size := skuAliasSizePattern.FindString(value); size != "" {
+		prefix := strings.TrimSuffix(value, size)
+		if strings.HasSuffix(prefix, size) {
+			value = prefix
+		}
+	}
+	return value
 }
 
 // FindSkusMentioned mirrors check_value_in_sanpham: scans free text for

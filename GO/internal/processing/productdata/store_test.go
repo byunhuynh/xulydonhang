@@ -73,6 +73,30 @@ func TestResolveSku_MapsVendorSkuToInternalCode(t *testing.T) {
 	}
 }
 
+func TestResolveSkuAliasDoesNotPromoteShortProductToLongerVariant(t *testing.T) {
+	store := newStore(nil, [][]string{
+		{"SKU", "Name", "Weight", "Pack", "Alias"},
+		{"TP31630", "Blue 3.2L", "3.2", "4", "[Top Value] Nước rửa chén Blue túi 3.2L"},
+		{"TP31647", "Blue 3.2L không mùi", "3.2", "4", "[Top Value] Nước rửa chén Blue túi 3.2L không mùi"},
+	})
+	got, ok := store.ResolveSkuAlias("[TopValue]NướcrửachénBluetúi3.2LNew")
+	if !ok || got != "TP31630" {
+		t.Fatalf("ResolveSkuAlias(short product) = (%q, %v), want (TP31630, true)", got, ok)
+	}
+}
+
+func TestResolveSkuAliasHandlesTopValueCataloguePresentationWords(t *testing.T) {
+	store := newStore(nil, [][]string{
+		{"SKU", "Name", "Weight", "Pack", "TopValue"},
+		{"TP31333", "Nước xả vải Blue Hương Thanh Xuân túi 2.1L", "2.1", "8", "Nước xả vải Blue Hương Thanh Xuân túi 2.1L"},
+	})
+
+	got, ok := store.ResolveSkuAlias("[TopValue]NướcxảvảiBluethanhxuân2,1LNew,2,1l")
+	if !ok || got != "TP31333" {
+		t.Fatalf("ResolveSkuAlias() = (%q, %v), want (TP31333, true)", got, ok)
+	}
+}
+
 func TestResolveSku_PreservedBugMapsWeightColumnToo(t *testing.T) {
 	store, err := Load(testDataPath)
 	if err != nil {

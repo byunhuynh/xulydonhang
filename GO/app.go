@@ -361,10 +361,13 @@ func (a *App) runBatch(emitter Emitter, files []string, stt int) {
 		streamed := map[string]bool{}
 		emitRow := func(row processing.OrderRow) {
 			row = emitProcessRow(emitter, row)
+			isFirstAppearance := !streamed[row.ResultKey]
 			if row.ResultKey != "" {
 				streamed[row.ResultKey] = true
 			}
-			current++
+			if isFirstAppearance {
+				current++
+			}
 		}
 		rows, err := a.processOne(f, current, emitRow)
 		if err != nil {

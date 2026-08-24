@@ -71,6 +71,15 @@ func (p *RealProcessor) process(ctx context.Context, filePath string, stt int, e
 		return []OrderRow{row}, nil
 	}
 
+	if warehouse, orderDate, ok := parseJITAirWaybillFilename(filePath); ok {
+		rows, jitErr := p.processJITAirWaybillDocument(filePath, warehouse, orderDate, emit)
+		if jitErr != nil {
+			row := emitOrderRow(emit, OrderRow{FileName: filepath.Base(filePath), System: "JIT-CHOICE", Status: fmt.Sprintf("%s - %v", StatusFailed, jitErr), StatusKind: StatusKindFailed})
+			rows = []OrderRow{row}
+		}
+		return rows, nil
+	}
+
 	// BigC's identifying markers are present on every page of a real
 	// BigC file (see vendor.Identify's bigcPattern doc comment), but
 	// only page 0 carries the master price list, customer code, and

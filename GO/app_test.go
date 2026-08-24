@@ -117,6 +117,42 @@ func TestRunBatch_EmitsLogRowPerFileThenDone(t *testing.T) {
 }
 
 func TestApp_RunBatchStreamsRowsWithoutDuplicates(t *testing.T) {
+	t.Run("updates to a streamed key do not increment STT", func(t *testing.T) {
+		processor := &streamingStubProcessor{
+			emitted: []processing.OrderRow{
+				{ResultKey: "jit|1/1|PO1", StatusKind: processing.StatusKindProcessing},
+				{ResultKey: "jit|1/1|PO1", StatusKind: processing.StatusKindDone},
+			},
+			returned: []processing.OrderRow{{ResultKey: "jit|1/1|PO1", StatusKind: processing.StatusKindDone}},
+		}
+		cfg := config.NewStore(filepath.Join(t.TempDir(), "config.txt"))
+		a := &App{cfg: cfg, processor: processor, excelPath: freshOrderWorkbook(t)}
+		emitter := &fakeEmitter{}
+
+		a.runBatch(emitter, []string{"jit.pdf"}, 7)
+
+		var rows []processing.OrderRow
+		for _, event := range emitter.events {
+			if event.name == "process:row" {
+				rows = append(rows, event.data[0].(processing.OrderRow))
+			}
+		}
+		if len(rows) != 2 || rows[0].StatusKind != processing.StatusKindProcessing || rows[1].StatusKind != processing.StatusKindDone {
+			t.Fatalf("streamed rows = %+v, want processing then final update", rows)
+		}
+		lastEvent := emitter.events[len(emitter.events)-1]
+		if !reflect.DeepEqual(lastEvent.data, []interface{}{8}) {
+			t.Fatalf("process:done data = %#v, want one new key to advance STT from 7 to 8", lastEvent.data)
+		}
+		gotSTT, err := cfg.GetSTT()
+		if err != nil {
+			t.Fatal(err)
+		}
+		if gotSTT != 8 {
+			t.Fatalf("saved STT = %d, want 8 after one stable key", gotSTT)
+		}
+	})
+
 	t.Run("streaming processor emits each row once", func(t *testing.T) {
 		processor := &streamingStubProcessor{
 			emitted: []processing.OrderRow{{ResultKey: "a", SkuLog: []string{"streamed sku"}}},

@@ -69,9 +69,12 @@ type OrderRow struct {
 	MaKhachHang string `json:"maKhachHang"`
 	PO          string `json:"po"`
 	ResultKey   string `json:"resultKey"`
+	MaVanDon    string `json:"maVanDon"`
 	DonGia      string `json:"donGia"`
 	Status      string `json:"status"`
 	StatusKind  string `json:"statusKind"`
+	ExcelRows   []int  `json:"excelRows"`
+	JITPeriod   string `json:"jitPeriod"`
 
 	// DriveURL is the constructed "view" link from driveupload.Upload -
 	// populated the moment a row is built (fire-and-forget: the real
@@ -144,11 +147,13 @@ type OrderRow struct {
 // đúng ngữ nghĩa cũ; StatusKind là discriminator kiểu (typed) dùng để
 // frontend phân loại màu/icon mà không phụ thuộc vào khớp chuỗi con emoji.
 const (
-	StatusDone    = "✅ Hoàn Thành"
-	StatusWarning = "⚠️ Hoàn Thành"
-	StatusFailed  = "❌ Thất bại"
+	StatusProcessing = "⏳ Đang xử lý"
+	StatusDone       = "✅ Hoàn Thành"
+	StatusWarning    = "⚠️ Hoàn Thành"
+	StatusFailed     = "❌ Thất bại"
 
-	StatusKindDone    = "done"
-	StatusKindWarning = "warning"
-	StatusKindFailed  = "failed"
+	StatusKindProcessing = "processing"
+	StatusKindDone       = "done"
+	StatusKindWarning    = "warning"
+	StatusKindFailed     = "failed"
 )
