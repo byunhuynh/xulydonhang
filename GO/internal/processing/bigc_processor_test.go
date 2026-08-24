@@ -3,14 +3,208 @@ package processing
 import (
 	"context"
 	"fmt"
+	"os"
+	"path/filepath"
 	"testing"
 
+	"github.com/pdfcpu/pdfcpu/pkg/api"
 	"github.com/xuri/excelize/v2"
 
+	"order-processor/internal/pdfpage"
 	"order-processor/internal/processing/bigc"
 	"order-processor/internal/processing/pricing"
 	"order-processor/internal/processing/productdata"
 )
+
+func bigcTestWorkbookRowCount(t *testing.T, path string) int {
+	t.Helper()
+	book, err := excelize.OpenFile(path)
+	if err != nil {
+		t.Fatalf("open workbook %s: %v", path, err)
+	}
+	defer book.Close()
+	rows, err := book.GetRows("Don dat hang")
+	if err != nil {
+		t.Fatalf("read Don dat hang rows: %v", err)
+	}
+	return len(rows)
+}
+
+func bigcStreamingFixture(t *testing.T) string {
+	t.Helper()
+	source := "testdata/sample_bigc_order.pdf"
+	page0, cleanup0, err := pdfpage.ExtractPage(source, 1)
+	if err != nil {
+		t.Fatalf("extract BigC page 1: %v", err)
+	}
+	t.Cleanup(cleanup0)
+	store1, cleanup1, err := pdfpage.ExtractPage(source, 2)
+	if err != nil {
+		t.Fatalf("extract BigC page 2: %v", err)
+	}
+	t.Cleanup(cleanup1)
+	store2, cleanup2, err := pdfpage.ExtractPage(source, 3)
+	if err != nil {
+		t.Fatalf("extract BigC page 3: %v", err)
+	}
+	t.Cleanup(cleanup2)
+
+	fixturePath := filepath.Join(t.TempDir(), "bigc-streaming-mixed-pages.pdf")
+	inputs := []string{page0, store1, "testdata/not_a_coop_file.pdf", store2}
+	if err := api.MergeCreateFile(inputs, fixturePath, false, nil); err != nil {
+		t.Fatalf("build mixed BigC fixture: %v", err)
+	}
+	return fixturePath
+}
+
+func newBigCStreamingProcessor(t *testing.T, excelPath string) *RealProcessor {
+	t.Helper()
+	store, err := productdata.Load("productdata/testdata/data.xlsx")
+	if err != nil {
+		t.Fatalf("load product fixture: %v", err)
+	}
+	return &RealProcessor{
+		Store: store, Pricing: &fixturePricingSource{index: pricing.ParseIndex(nil)}, ExcelPath: excelPath,
+	}
+}
+
+func TestBigCStreamingEmitsProvisionalStoresBeforeCombinedWriteAndFinalizesSameKeys(t *testing.T) {
+	excelPath := copyTestWorkbookForProcessor(t)
+	initialRows := bigcTestWorkbookRowCount(t, excelPath)
+	rp := newBigCStreamingProcessor(t, excelPath)
+	filePath := bigcStreamingFixture(t)
+
+	var events []OrderRow
+	rows, err := rp.ProcessStreaming(context.Background(), filePath, 1, func(row OrderRow) {
+		if row.StatusKind == StatusKindProcessing {
+			if got := bigcTestWorkbookRowCount(t, excelPath); got != initialRows {
+				t.Errorf("workbook already has %d rows during provisional callback, want unchanged %d before combined write", got, initialRows)
+			}
+		}
+		events = append(events, row)
+	})
+	if err != nil {
+		t.Fatalf("ProcessStreaming returned error: %v", err)
+	}
+	if len(rows) != 3 {
+		t.Fatalf("returned %d rows, want one final row per store page: %+v", len(rows), rows)
+	}
+	if len(events) != 5 {
+		t.Fatalf("emitted %d events, want processing/failed/processing/done/done: %+v", len(events), events)
+	}
+
+	base := filepath.Base(filePath)
+	po := "2631057733376"
+	firstKey := orderResultKey(base, "2/4", po)
+	failedKey := orderResultKey(base, "3/4", "")
+	lastKey := orderResultKey(base, "4/4", po)
+	wantKeys := []string{firstKey, failedKey, lastKey, firstKey, lastKey}
+	wantKinds := []string{StatusKindProcessing, StatusKindFailed, StatusKindProcessing, StatusKindDone, StatusKindDone}
+	for i := range events {
+		if events[i].ResultKey != wantKeys[i] || events[i].StatusKind != wantKinds[i] {
+			t.Errorf("event %d = key %q status %q, want key %q status %q", i, events[i].ResultKey, events[i].StatusKind, wantKeys[i], wantKinds[i])
+		}
+	}
+
+	if rows[0].ResultKey != firstKey || rows[0].StatusKind != StatusKindDone {
+		t.Errorf("first returned store = key %q status %q, want %q done", rows[0].ResultKey, rows[0].StatusKind, firstKey)
+	}
+	if rows[1].ResultKey != failedKey || rows[1].StatusKind != StatusKindFailed {
+		t.Errorf("parse-failed returned page = key %q status %q, want %q failed", rows[1].ResultKey, rows[1].StatusKind, failedKey)
+	}
+	if rows[2].ResultKey != lastKey || rows[2].StatusKind != StatusKindDone {
+		t.Errorf("last returned store = key %q status %q, want %q done", rows[2].ResultKey, rows[2].StatusKind, lastKey)
+	}
+	if len(rows[0].ExcelRows) != 1 || rows[0].ExcelRows[0] != initialRows+1 {
+		t.Errorf("first store ExcelRows = %v, want [%d] (absolute combined-write header row)", rows[0].ExcelRows, initialRows+1)
+	}
+	if len(rows[1].ExcelRows) != 0 || len(rows[2].ExcelRows) != 0 {
+		t.Errorf("rows without written workbook lines got ExcelRows: failed=%v last-empty-store=%v", rows[1].ExcelRows, rows[2].ExcelRows)
+	}
+}
+
+func TestBigCStreamingCombinedWriteFailureFinalizesEveryProvisionalKey(t *testing.T) {
+	rp := newBigCStreamingProcessor(t, filepath.Join(t.TempDir(), "missing", "dondathang.xlsx"))
+	filePath := "testdata/sample_bigc_order.pdf"
+
+	var events []OrderRow
+	rows, err := rp.ProcessStreaming(context.Background(), filePath, 1, func(row OrderRow) {
+		events = append(events, row)
+	})
+	if err != nil {
+		t.Fatalf("ProcessStreaming returned error: %v", err)
+	}
+	if len(rows) != 19 || len(events) != 38 {
+		t.Fatalf("returned %d rows and emitted %d events, want 19 final rows and 38 lifecycle events", len(rows), len(events))
+	}
+	for i := 0; i < 19; i++ {
+		provisional := events[i]
+		final := events[i+19]
+		if provisional.StatusKind != StatusKindProcessing {
+			t.Errorf("provisional event %d status = %q, want processing", i, provisional.StatusKind)
+		}
+		if final.ResultKey != provisional.ResultKey || final.StatusKind != StatusKindFailed {
+			t.Errorf("final event %d = key %q status %q, want same key %q failed", i, final.ResultKey, final.StatusKind, provisional.ResultKey)
+		}
+		if rows[i].ResultKey != provisional.ResultKey || rows[i].StatusKind != StatusKindFailed {
+			t.Errorf("returned row %d = key %q status %q, want same key %q failed", i, rows[i].ResultKey, rows[i].StatusKind, provisional.ResultKey)
+		}
+		if len(rows[i].ExcelRows) != 0 {
+			t.Errorf("failed returned row %d ExcelRows = %v, want none", i, rows[i].ExcelRows)
+		}
+	}
+}
+
+func TestBigCLatestPDFSmoke(t *testing.T) {
+	const pdfName = "806_SOUTHDC_Q06_3005382_2634058273095.pdf"
+	filePath := filepath.Join("..", "..", "..", "đơn hàng", pdfName)
+	if _, err := os.Stat(filePath); err != nil {
+		t.Skipf("latest BigC smoke PDF is not available: %v", err)
+	}
+
+	store, err := productdata.Load("../../../data.xlsx")
+	if err != nil {
+		t.Fatalf("load production product fixture: %v", err)
+	}
+	excelPath := filepath.Join(t.TempDir(), "dondathang.xlsx")
+	copyFile(t, "excelwriter/testdata/dondathang.xlsx", excelPath)
+	rp := &RealProcessor{Store: store, Pricing: loadFrozenBigcPricingSource(t), ExcelPath: excelPath}
+
+	var events []OrderRow
+	rows, err := rp.ProcessStreaming(context.Background(), filePath, 1, func(row OrderRow) {
+		events = append(events, row)
+	})
+	if err != nil {
+		t.Fatalf("ProcessStreaming latest BigC PDF: %v", err)
+	}
+	if len(rows) != 23 {
+		t.Fatalf("latest BigC PDF returned %d store rows, want 23: %+v", len(rows), rows)
+	}
+	if len(events) != 46 {
+		t.Fatalf("latest BigC PDF emitted %d lifecycle events, want 46 processing/final events", len(events))
+	}
+
+	seen := make(map[string]bool, len(rows))
+	for i, row := range rows {
+		if row.StatusKind == StatusKindFailed {
+			t.Errorf("returned store row %d failed: %+v", i, row)
+		}
+		if seen[row.ResultKey] {
+			t.Errorf("duplicate final ResultKey %q at returned store row %d", row.ResultKey, i)
+		}
+		seen[row.ResultKey] = true
+
+		provisional := events[i]
+		final := events[i+23]
+		if provisional.ResultKey != row.ResultKey || provisional.StatusKind != StatusKindProcessing {
+			t.Errorf("store %d provisional = key %q status %q, want key %q processing", i, provisional.ResultKey, provisional.StatusKind, row.ResultKey)
+		}
+		if final.ResultKey != row.ResultKey || final.StatusKind != row.StatusKind {
+			t.Errorf("store %d final event = key %q status %q, want returned key %q status %q", i, final.ResultKey, final.StatusKind, row.ResultKey, row.StatusKind)
+		}
+	}
+	t.Logf("smoke PDF %s: stores=%d uniqueKeys=%d failed=0 workbook=%s", filePath, len(rows), len(seen), excelPath)
+}
 
 func TestRealProcessor_ProcessesRealSampleBigcFile(t *testing.T) {
 	store, err := productdata.Load("productdata/testdata/data.xlsx")
@@ -146,7 +340,7 @@ func TestRealProcessor_ProcessesBigcDocument_IsolatesPerPageErrors(t *testing.T)
 		"6\n" +
 		"1\n"
 
-	rows, err := rp.processBigcDocument("synthetic_bigc_isolation.pdf", []string{page0, page1, page2, page3})
+	rows, err := rp.processBigcDocument("synthetic_bigc_isolation.pdf", []string{page0, page1, page2, page3}, nil)
 	if err != nil {
 		t.Fatalf("processBigcDocument returned error: %v", err)
 	}
@@ -485,7 +679,7 @@ func TestRealProcessor_ProcessesBigcDocument_PriceMismatchDetailsAcrossStores(t 
 		"6\n" +
 		"1\n"
 
-	rows, err := rp.processBigcDocument("synthetic_bigc_mismatch_offsets.pdf", []string{page0, page1, page2, page3})
+	rows, err := rp.processBigcDocument("synthetic_bigc_mismatch_offsets.pdf", []string{page0, page1, page2, page3}, nil)
 	if err != nil {
 		t.Fatalf("processBigcDocument returned error: %v", err)
 	}

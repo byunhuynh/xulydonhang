@@ -71,6 +71,12 @@ type storePageResult struct {
 	err             error
 }
 
+type pendingBigcStore struct {
+	resultIndex int
+	excelStart  int
+	excelCount  int
+}
+
 // processBigcDocument mirrors process_file's BigC branch
 // (xulydonhang.py:9404-9536) plus write_to_dondathang_bigc
 // (:4541-4897), for the WHOLE file at once rather than Python's
@@ -83,13 +89,13 @@ type storePageResult struct {
 // mechanism — same final outcome (one combined block, one header, one
 // aggregate weight total), simpler mechanism enabled by the chosen
 // architecture, not a behavior change.
-func (p *RealProcessor) processBigcDocument(filePath string, pageTexts []string) ([]OrderRow, error) {
+func (p *RealProcessor) processBigcDocument(filePath string, pageTexts []string, emit func(OrderRow)) ([]OrderRow, error) {
 	poNumber, entryDate, cancelDate, ok := bigc.ParseOrderInfo(pageTexts[0])
 	if !ok {
-		return []OrderRow{{
+		return []OrderRow{emitOrderRow(emit, OrderRow{
 			FileName: filepath.Base(filePath), Page: fmt.Sprintf("1/%d", len(pageTexts)), System: "BigC",
 			Status: StatusFailed + " - không tách được số PO/ngày đặt hàng từ trang 0", StatusKind: StatusKindFailed,
-		}}, nil
+		})}, nil
 	}
 	priceList := bigc.ExtractPriceList(pageTexts[0])
 	customerCode, deliveryWarehouse := bigc.ResolveCustomerCode(pageTexts[0])
@@ -99,15 +105,16 @@ func (p *RealProcessor) processBigcDocument(filePath string, pageTexts []string)
 
 	priceIndex, err := p.Pricing.FetchIndex("BIGC")
 	if err != nil {
-		return []OrderRow{{
+		return []OrderRow{emitOrderRow(emit, OrderRow{
 			FileName: filepath.Base(filePath), Page: fmt.Sprintf("1/%d", len(pageTexts)), System: "BigC",
 			Status: fmt.Sprintf("%s - không tải được giá/khuyến mãi: %v", StatusFailed, err), StatusKind: StatusKindFailed,
-		}}, nil
+		})}, nil
 	}
 
 	var allRows []excelwriter.Row
 	var totalWeight float64
 	var orderRows []OrderRow
+	var pending []pendingBigcStore
 	headerWritten := false
 
 	for pageIdx := 1; pageIdx < len(pageTexts); pageIdx++ {
@@ -116,10 +123,10 @@ func (p *RealProcessor) processBigcDocument(filePath string, pageTexts []string)
 			customerCode, deliveryWarehouse, description, warehouse, region, statCode, !headerWritten)
 
 		if result.err != nil {
-			orderRows = append(orderRows, OrderRow{
+			orderRows = append(orderRows, emitOrderRow(emit, OrderRow{
 				FileName: filepath.Base(filePath), Page: pageLabel, System: "BigC",
 				Status: fmt.Sprintf("%s - %v", StatusFailed, result.err), StatusKind: StatusKindFailed,
-			})
+			}))
 			continue
 		}
 
@@ -138,6 +145,7 @@ func (p *RealProcessor) processBigcDocument(filePath string, pageTexts []string)
 			result.mismatchDetails[i].ExcelRow += len(allRows)
 		}
 
+		excelStart := len(allRows)
 		allRows = append(allRows, result.rows...)
 		totalWeight += result.weightKg
 
@@ -147,7 +155,7 @@ func (p *RealProcessor) processBigcDocument(filePath string, pageTexts []string)
 			statusKind = StatusKindWarning
 			statusText = fmt.Sprintf("%s - Có %d mã sai giá", StatusWarning, result.saigia)
 		}
-		orderRows = append(orderRows, OrderRow{
+		finalRow := OrderRow{
 			FileName: filepath.Base(filePath), Page: pageLabel, System: "BigC", MaKhachHang: customerCode,
 			PO: poNumber, DonGia: fmt.Sprintf("%.0f", result.tongtien), Status: statusText, StatusKind: statusKind,
 			// ShipTo is this store's own delivery warehouse, not a
@@ -157,8 +165,19 @@ func (p *RealProcessor) processBigcDocument(filePath string, pageTexts []string)
 			// row this vendor writes), so 0 here is accurate, not a gap.
 			ShipTo: deliveryWarehouse, EntryDate: entryDate, CancelDate: cancelDate,
 			TotalWeightKg: coop.FormatWeightKg(result.weightKg),
-			PromoItems: result.promoItems,
-			SkuLog: result.skuLog, PriceMismatchCount: result.saigia, PriceMismatchDetails: result.mismatchDetails,
+			PromoItems:    result.promoItems,
+			SkuLog:        result.skuLog, PriceMismatchCount: result.saigia, PriceMismatchDetails: result.mismatchDetails,
+		}
+		provisional := finalRow
+		provisional.Status = StatusProcessing
+		provisional.StatusKind = StatusKindProcessing
+		provisional = emitOrderRow(emit, provisional)
+		finalRow.ResultKey = provisional.ResultKey
+		orderRows = append(orderRows, finalRow)
+		pending = append(pending, pendingBigcStore{
+			resultIndex: len(orderRows) - 1,
+			excelStart:  excelStart,
+			excelCount:  len(result.rows),
 		})
 	}
 
@@ -166,7 +185,14 @@ func (p *RealProcessor) processBigcDocument(filePath string, pageTexts []string)
 		headerDescription := fmt.Sprintf("%s (Tổng trọng lượng: %s)", description, coop.FormatWeightKg(totalWeight))
 		startRow, err := excelwriter.WriteOrderRows(p.ExcelPath, allRows, headerDescription)
 		if err != nil {
-			return nil, err
+			for _, store := range pending {
+				failed := orderRows[store.resultIndex]
+				failed.Status = fmt.Sprintf("%s - lỗi ghi dondathang.xlsx: %v", StatusFailed, err)
+				failed.StatusKind = StatusKindFailed
+				failed.ExcelRows = nil
+				orderRows[store.resultIndex] = emitOrderRow(emit, failed)
+			}
+			return orderRows, nil
 		}
 		for i := range orderRows {
 			for j := range orderRows[i].PriceMismatchDetails {
@@ -196,6 +222,14 @@ func (p *RealProcessor) processBigcDocument(filePath string, pageTexts []string)
 		for i := range orderRows {
 			orderRows[i].DriveURL = driveURL
 		}
+		for _, store := range pending {
+			finalRow := orderRows[store.resultIndex]
+			finalRow.ExcelRows = make([]int, store.excelCount)
+			for i := range finalRow.ExcelRows {
+				finalRow.ExcelRows[i] = startRow + store.excelStart + i
+			}
+			orderRows[store.resultIndex] = emitOrderRow(emit, finalRow)
+		}
 	}
 
 	return orderRows, nil
@@ -211,18 +245,20 @@ func (p *RealProcessor) processBigcDocument(filePath string, pageTexts []string)
 func (p *RealProcessor) processBigcStorePage(storePageText string, priceList []bigc.Product, priceIndex *pricing.Index,
 	orderNum, entryDate, cancelDate, customerCode, shipTo, description, warehouse, region, statCode string, isFirstSuccessful bool,
 ) storePageResult {
-	// The extracted store name itself is intentionally discarded here —
-	// only `ok` (whether extraction succeeded) is used. The name that
-	// actually ends up in this store's rows comes from a different,
-	// document-level source (customerCode/description, resolved once in
-	// processBigcDocument from page 0 and threaded through as
-	// parameters), not from this per-page extraction. This is not an
-	// oversight; ExtractStoreName is called here purely as a page-is-a-
-	// real-store-page sanity check.
-	_, ok := bigc.ExtractStoreName(storePageText)
+	// The extracted store name does NOT feed ShipTo/Description — those
+	// come from a different, document-level source (customerCode/
+	// description, resolved once in processBigcDocument from page 0 and
+	// threaded through as parameters). It DOES feed column AN: Python's
+	// write_to_dondathang_bigc receives this exact per-page name as its
+	// `congtrinh` parameter (xulydonhang.py:9552/9560: `tenstore =
+	// lay_ten_store(text)` then passed straight in) and looks it up via
+	// tim_gia_tri_congtrinh (see productdata.Store.GetSiteValue) to get
+	// the AN value written on every product/promo-bonus row below.
+	storeName, ok := bigc.ExtractStoreName(storePageText)
 	if !ok {
 		return storePageResult{err: fmt.Errorf("không tách được tên store")}
 	}
+	siteCode := p.Store.GetSiteValue(storeName)
 	// A page with ZERO extracted item lines is a legitimate, successful
 	// "store" page in Python, not an error: write_to_dondathang_bigc
 	// (xulydonhang.py:4605) just does `for item in items:` over
@@ -259,6 +295,11 @@ func (p *RealProcessor) processBigcStorePage(storePageText string, priceList []b
 			Status: "Chưa thực hiện", CancelDate: cancelDate, ShipTo: shipTo, CustomerCode: customerCode,
 			Description: description, Warehouse: warehouse, VATPercent: 8, RegionCode: region,
 			StatCode: statCode, IsNoteRow: true, ProductName: description,
+			// "BIGCANLAC" is a fixed literal on the header row regardless
+			// of which store this page belongs to (xulydonhang.py:4669) -
+			// NOT siteCode, which is per-store and only applies to the
+			// product/promo-bonus rows below.
+			SiteCode: "BIGCANLAC",
 		})
 	}
 
@@ -426,7 +467,7 @@ func (p *RealProcessor) processBigcStorePage(storePageText string, priceList []b
 			Description: description, SKU: barcode, Warehouse: warehouse, VATPercent: 8,
 			RegionCode: region, StatCode: statCode, Qty: qtyOrdPcs, UnitPrice: finalPrice,
 			ProductName: productInfo.Name, LineWeightKg: lineWeight, UseZFormula: true, PromoContent: khuyenmai,
-			PromoNote: promoNote, PromoBundleSku: promoBundleSku, NoCaseCount: true,
+			PromoNote: promoNote, PromoBundleSku: promoBundleSku, NoCaseCount: true, SiteCode: siteCode,
 		}
 		productRowIndex := len(rows)
 		if !matched {
@@ -454,7 +495,7 @@ func (p *RealProcessor) processBigcStorePage(storePageText string, priceList []b
 				Description: description, SKU: bonusBarcode, Warehouse: warehouse, VATPercent: 8,
 				RegionCode: region, StatCode: statCode, IsPromoItem: true, Qty: bonusQty,
 				ProductName: bonusInfo.Name, LineWeightKg: bonusWeight, UseZFormula: false,
-				PromoBundleSku: promoBundleSku, NoCaseCount: true,
+				PromoBundleSku: promoBundleSku, NoCaseCount: true, SiteCode: siteCode,
 			}
 			accumulatePromoItem(promoTotals, bonusRow.SKU, bonusRow.ProductName, bonusRow.Qty)
 			rows = append(rows, bonusRow)

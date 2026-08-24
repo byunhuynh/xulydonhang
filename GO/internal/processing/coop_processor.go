@@ -88,8 +88,7 @@ func (p *RealProcessor) process(ctx context.Context, filePath string, stt int, e
 	// specifically and, if it's BigC, hand the WHOLE file to
 	// processBigcDocument instead of entering the per-page loop below.
 	if len(pageTexts) > 0 && vendor.Identify(pageTexts[0]) == "BigC" {
-		rows, err := p.processBigcDocument(filePath, pageTexts)
-		emitRows(emit, rows)
+		rows, err := p.processBigcDocument(filePath, pageTexts, emit)
 		return rows, err
 	}
 
