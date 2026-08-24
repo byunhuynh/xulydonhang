@@ -49,18 +49,32 @@ func LoadFromSheets(gidMap map[string]string, client *http.Client) (*Store, erro
 }
 
 // fetchSheetRows fetches one tab (identified by sheetKey's gid in
-// gidMap) of productDataSpreadsheetID as CSV — mirroring
-// pricing.HTTPSource.FetchIndex's own URL construction and CSV parsing
-// exactly, just against a different spreadsheet ID and consumed as raw
-// [][]string rows (loadCustomerRows/loadProducts) instead of a
-// *pricing.Index.
+// gidMap) of productDataSpreadsheetID as CSV — consumed as raw
+// [][]string rows (loadCustomerRows/loadProducts).
+//
+// Deliberately uses the /export?format=csv endpoint, NOT
+// pricing.HTTPSource.FetchIndex's /gviz/tq?tqx=out:csv one: confirmed
+// live against the MAKH tab (gid 0) that gviz/tq silently corrupts this
+// specific sheet — hundreds of real LOTTE/BIGC/SATRA/BHX/Kingfood/Farmer/
+// SENDO rows come back concatenated (space-joined) into the single
+// header row instead of as separate records, e.g. only 3 of SATRA's 192
+// real rows survived as actual rows, the rest swallowed into row 0 and
+// silently dropped by loadCustomerRows' `if i == 0 { continue }` — this
+// was the root cause of Satra customer-code lookups returning "Không
+// xác định" for almost every order. /export?format=csv, fetched with
+// the identical http.Client/csv.Reader against the identical sheet at
+// the identical moment, returned the correct 954 rows matching the live
+// sheet exactly (verified cell-by-cell against the Sheets UI). Root
+// cause is presumably some gviz-specific quirk/cache bug tied to this
+// sheet's history, not a genuine flaw in loadCustomerRows' header-skip —
+// so the fix is the fetch URL, not the parsing.
 func fetchSheetRows(client *http.Client, gidMap map[string]string, sheetKey string) ([][]string, error) {
 	gid, ok := gidMap[sheetKey]
 	if !ok {
 		return nil, fmt.Errorf("productdata: no %s gid configured", sheetKey)
 	}
 
-	url := fmt.Sprintf("https://docs.google.com/spreadsheets/d/%s/gviz/tq?tqx=out:csv&gid=%s", productDataSpreadsheetID, gid)
+	url := fmt.Sprintf("https://docs.google.com/spreadsheets/d/%s/export?format=csv&gid=%s", productDataSpreadsheetID, gid)
 	resp, err := client.Get(url)
 	if err != nil {
 		return nil, fmt.Errorf("productdata: fetch %s: %w", url, err)
