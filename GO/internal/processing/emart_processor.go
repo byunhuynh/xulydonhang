@@ -111,7 +111,7 @@ func (p *RealProcessor) processEmartSegment(filePath string, realPageNum int, te
 	region, statCode, warehouse := emartRegionInfo(emartCustomerCode)
 	orderNum := emartOrderNumber(poNumber)
 	description := fmt.Sprintf("EMART PO%s", poNumber)
-	_, fullStoreName := emartStoreNames(storeName)
+	shortCode, fullStoreName := emartStoreNames(storeName)
 
 	var rows []excelwriter.Row
 	rows = append(rows, excelwriter.Row{
@@ -120,6 +120,13 @@ func (p *RealProcessor) processEmartSegment(filePath string, realPageNum int, te
 		Description: description, Warehouse: warehouse, VATPercent: 8, RegionCode: region,
 		StatCode: statCode, IsNoteRow: true, ProductName: description, StoreName: fullStoreName,
 		NoCaseCount: true,
+		// 'PVT' is a fixed literal on the header row regardless of which
+		// store this order is for (xulydonhang.py:5054) - NOT shortCode,
+		// which is per-store and only applies to the product/promo-bonus
+		// rows below. Preserved as-is even though it looks like it should
+		// probably be shortCode - same "port the bug faithfully" policy
+		// already applied to Store.GetCustomerCode.
+		SiteCode: "PVT",
 	})
 
 	saigia := 0
@@ -196,7 +203,7 @@ func (p *RealProcessor) processEmartSegment(filePath string, realPageNum int, te
 			Description: description, SKU: barcode, Warehouse: warehouse, VATPercent: 8,
 			RegionCode: region, StatCode: statCode, Qty: qty, UnitPrice: finalPrice,
 			ProductName: productInfo.Name, CaseCount: caseCount, LineWeightKg: lineWeight, UseZFormula: true,
-			PromoContent: lastExaminedPromo, NoCaseCount: true,
+			PromoContent: lastExaminedPromo, NoCaseCount: true, SiteCode: shortCode,
 		}
 		productRowIndex := len(rows)
 		if !matched {
@@ -241,6 +248,7 @@ func (p *RealProcessor) processEmartSegment(filePath string, realPageNum int, te
 				totalPackages += bonusRow.CaseCount
 				accumulatePromoItem(promoTotals, bonusRow.SKU, bonusRow.ProductName, bonusRow.Qty)
 				bonusRow.NoCaseCount = true
+				bonusRow.SiteCode = shortCode
 
 				// Emart's own no-{...}-brace fallback
 				// (xulydonhang.py:5230/:5240, "KM Rời - Không Che Barcode")

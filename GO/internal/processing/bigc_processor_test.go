@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/pdfcpu/pdfcpu/pkg/api"
@@ -93,16 +94,24 @@ func TestBigCStreamingEmitsProvisionalStoresBeforeCombinedWriteAndFinalizesSameK
 		t.Fatalf("emitted %d events, want processing/failed/processing/done/done: %+v", len(events), events)
 	}
 
-	base := filepath.Base(filePath)
 	po := "2631057733376"
-	firstKey := orderResultKey(base, "2/4", po)
-	failedKey := orderResultKey(base, "3/4", "")
-	lastKey := orderResultKey(base, "4/4", po)
+	sourceID := SourceIDForPath(filePath)
+	firstKey := orderResultKey(sourceID, "page:2", po)
+	failedKey := orderResultKey(sourceID, "page:3", "")
+	lastKey := orderResultKey(sourceID, "page:4", po)
 	wantKeys := []string{firstKey, failedKey, lastKey, firstKey, lastKey}
 	wantKinds := []string{StatusKindProcessing, StatusKindFailed, StatusKindProcessing, StatusKindDone, StatusKindDone}
 	for i := range events {
 		if events[i].ResultKey != wantKeys[i] || events[i].StatusKind != wantKinds[i] {
 			t.Errorf("event %d = key %q status %q, want key %q status %q", i, events[i].ResultKey, events[i].StatusKind, wantKeys[i], wantKinds[i])
+		}
+		if events[i].SourceID != sourceID {
+			t.Errorf("event %d SourceID = %q, want stable source %q across provisional/final updates", i, events[i].SourceID, sourceID)
+		}
+	}
+	for i, row := range rows {
+		if row.SourceID != sourceID {
+			t.Errorf("returned row %d SourceID = %q, want %q", i, row.SourceID, sourceID)
 		}
 	}
 
@@ -151,6 +160,41 @@ func TestBigCStreamingCombinedWriteFailureFinalizesEveryProvisionalKey(t *testin
 		}
 		if len(rows[i].ExcelRows) != 0 {
 			t.Errorf("failed returned row %d ExcelRows = %v, want none", i, rows[i].ExcelRows)
+		}
+	}
+}
+
+func TestBigCStreamingMalformedPagePlusCombinedWriteFailureHasOneTerminalParseFailure(t *testing.T) {
+	rp := newBigCStreamingProcessor(t, filepath.Join(t.TempDir(), "missing", "dondathang.xlsx"))
+	filePath := bigcStreamingFixture(t)
+
+	var events []OrderRow
+	rows, err := rp.ProcessStreaming(context.Background(), filePath, 1, func(row OrderRow) {
+		events = append(events, row)
+	})
+	if err != nil {
+		t.Fatalf("ProcessStreaming returned error: %v", err)
+	}
+	if len(rows) != 3 || len(events) != 5 {
+		t.Fatalf("returned %d rows and emitted %d events, want 3 terminal rows and 5 lifecycle events", len(rows), len(events))
+	}
+
+	parseFailureKey := rows[1].ResultKey
+	parseFailureEvents := 0
+	for _, event := range events {
+		if event.ResultKey == parseFailureKey {
+			parseFailureEvents++
+			if event.StatusKind != StatusKindFailed || !strings.Contains(event.Status, "không tách được tên store") {
+				t.Fatalf("parse-failure event = %+v, want the malformed-page terminal failure", event)
+			}
+		}
+	}
+	if parseFailureEvents != 1 {
+		t.Fatalf("malformed page emitted %d lifecycle events, want exactly one terminal parse failure", parseFailureEvents)
+	}
+	for i, row := range rows {
+		if row.StatusKind != StatusKindFailed {
+			t.Errorf("returned row %d status = %q, want failed after parse or combined-write failure", i, row.StatusKind)
 		}
 	}
 }

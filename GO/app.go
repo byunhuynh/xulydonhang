@@ -5,6 +5,9 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"reflect"
+	"sort"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -49,18 +52,25 @@ const zaloJobTimeout = 90 * time.Second
 
 // App struct
 type App struct {
-	ctx              context.Context
-	cfg              *config.Store
-	appSettingsStore *appsettings.Store
-	processor        processing.Processor
-	emitter          Emitter
-	orderDir         string
-	excelPath        string
-	resolvedRows     map[int]bool
-	resolvedMu       sync.Mutex
-	processing       atomic.Bool
-	zaloSender       zalosend.ZaloSender
-	sending          atomic.Bool
+	ctx                 context.Context
+	cfg                 *config.Store
+	appSettingsStore    *appsettings.Store
+	processor           processing.Processor
+	emitter             Emitter
+	orderDir            string
+	excelPath           string
+	resolvedRows        map[int]bool
+	resolvedMu          sync.Mutex
+	workbookAdmissionMu sync.Mutex
+	excelMu             sync.Mutex
+	processing          atomic.Bool
+	zaloSender          zalosend.ZaloSender
+	sending             atomic.Bool
+	zaloLoginMu         sync.Mutex
+	zaloLoginCancel     context.CancelFunc
+	initMu              sync.Mutex
+	dataLoader          func() (processing.Processor, error)
+	updateJITPeriodFn   func(string, []int, string, string, string) error
 }
 
 // resolveRepoFile looks for filename starting in the current working
@@ -125,22 +135,6 @@ func NewApp() (*App, error) {
 		return nil, fmt.Errorf("app: load app settings: %w", err)
 	}
 
-	// Customer/product data now comes from a live Google Sheet, not the
-	// local data.xlsx file — a prior update to just this one machine's
-	// data.xlsx never reached any OTHER machine running this app, the
-	// exact class of staleness pricing/promotion data already avoids via
-	// its own live fetch (pricing.HTTPSource). No offline fallback to
-	// data.xlsx: a network failure here fails NewApp entirely, matching
-	// this app's already-full dependency on the same network for live
-	// pricing lookups mid-processing — a deliberate choice, not an
-	// oversight (see productdata.LoadFromSheets' own doc comment).
-	// data.xlsx itself is left on disk, untouched; nothing reads it
-	// anymore.
-	store, err := productdata.LoadFromSheets(settings.Gid, productdata.NewHTTPClient())
-	if err != nil {
-		return nil, fmt.Errorf("app: load customer/product data from Google Sheets: %w", err)
-	}
-
 	excelPath := resolveRepoFile("dondathang.xlsx")
 
 	// orderDir must be resolved the same way excelPath/appSettingsPath
@@ -154,17 +148,9 @@ func NewApp() (*App, error) {
 	// file list would show nothing even though real order files exist.
 	orderDir := filepath.Join(resolveRepoDir("settings.ini"), orderFolderName)
 
-	processor := &processing.RealProcessor{
-		Store:       store,
-		Pricing:     pricing.NewHTTPSource(settings.Gid),
-		ExcelPath:   excelPath,
-		DriveClient: driveupload.NewHTTPClient(),
-	}
-
 	app := &App{
 		cfg:              config.NewStore(configFileName),
 		appSettingsStore: appSettingsStore,
-		processor:        processor,
 		orderDir:         orderDir,
 		excelPath:        excelPath,
 		zaloSender: &zalosend.ChromedpSender{
@@ -172,13 +158,43 @@ func NewApp() (*App, error) {
 		},
 	}
 
-	processor.LogFunc = func(msg string) {
-		if app.emitter != nil {
-			app.emitter.Emit("process:log", msg)
+	app.dataLoader = func() (processing.Processor, error) {
+		store, err := productdata.LoadFromSheets(settings.Gid, productdata.NewHTTPClient())
+		if err != nil {
+			return nil, fmt.Errorf("app: load customer/product data from Google Sheets: %w", err)
 		}
+		processor := &processing.RealProcessor{
+			Store:       store,
+			Pricing:     pricing.NewHTTPSource(settings.Gid),
+			ExcelPath:   excelPath,
+			DriveClient: driveupload.NewHTTPClient(),
+		}
+		processor.LogFunc = func(msg string) {
+			if app.emitter != nil {
+				app.emitter.Emit("process:log", msg)
+			}
+		}
+		return processor, nil
 	}
 
 	return app, nil
+}
+
+// InitializeApp tải dữ liệu mạng sau khi cửa sổ Wails đã hiển thị. Lỗi
+// được trả về frontend để hiện ngay trên màn hình; gọi lại hàm này là một
+// lần thử mới, nên người dùng không cần đóng/mở app khi mạng vừa hồi phục.
+func (a *App) InitializeApp() error {
+	a.initMu.Lock()
+	defer a.initMu.Unlock()
+	if a.processor != nil {
+		return nil
+	}
+	processor, err := a.dataLoader()
+	if err != nil {
+		return err
+	}
+	a.processor = processor
+	return nil
 }
 
 // startup is called when the app starts. The context is saved
@@ -251,13 +267,63 @@ func (a *App) GetAppSettings() (appsettings.Settings, error) {
 	return a.appSettingsStore.Load(resolveRepoFile("settings.ini"))
 }
 
-// SaveAppSettings ghi cấu hình mới. Thay đổi gid CHỈ có hiệu lực ở lần
-// khởi động app tiếp theo — Pricing/Store hiện tại (RealProcessor) đã
-// được tạo sẵn với gid map cũ lúc NewApp chạy, không tự động cập nhật
-// lại giữa phiên làm việc (quyết định rõ ràng của user, tránh phức tạp
-// reload).
+// SaveAppSettings ghi cấu hình mới và áp dụng ngay trong phiên làm việc
+// hiện tại — không cần khởi động lại app. Zalo/Reminder áp dụng tự nhiên
+// (đọc lại từ file mỗi lần dùng - xem SendZaloMessages). Gid là trường
+// hợp duy nhất cần xử lý riêng: Store/Pricing của RealProcessor được tạo
+// sẵn một lần lúc NewApp chạy, nên khi map gid đổi, phải gọi
+// reloadDataSources để dựng lại chúng - chỉ khi gid THỰC SỰ đổi (network
+// fetch không cần thiết cho các lần lưu chỉ đổi Zalo/Reminder).
+//
+// Ghi đĩa LUÔN thành công trước, độc lập với reload: nếu reloadDataSources
+// lỗi (mất mạng, hoặc đang có batch xử lý), cấu hình mới vẫn đã được lưu
+// - chỉ riêng việc áp dụng ngay bị hoãn, báo qua log panel thay vì chặn
+// người dùng lưu lại.
 func (a *App) SaveAppSettings(settings appsettings.Settings) error {
-	return a.appSettingsStore.Save(settings)
+	prev, err := a.appSettingsStore.Load(resolveRepoFile("settings.ini"))
+	if err != nil {
+		return err
+	}
+	if err := a.appSettingsStore.Save(settings); err != nil {
+		return err
+	}
+	if !reflect.DeepEqual(prev.Gid, settings.Gid) {
+		if err := a.reloadDataSources(settings.Gid); err != nil && a.emitter != nil {
+			a.emitter.Emit("process:log", fmt.Sprintf("⚠️ Đã lưu cấu hình GID nhưng chưa áp dụng ngay được (%v) — lưu lại hoặc khởi động lại app để áp dụng.", err))
+		}
+	}
+	return nil
+}
+
+// reloadDataSources dựng lại Store (customer/product) và Pricing
+// (price/promotion) của RealProcessor từ gid map mới, thay cho việc chờ
+// app khởi động lại. Dùng CHÍNH cờ a.processing mà ProcessFiles/runBatch
+// đã dùng để loại trừ lẫn nhau: RealProcessor.Store/.Pricing được
+// runBatch's goroutine đọc không qua khóa riêng trong lúc Process() chạy,
+// nên việc gán field mới ở đây chỉ an toàn khi CHẮC CHẮN không có batch
+// nào đang chạy - CompareAndSwap vừa ngăn hàm này chạy giữa lúc có batch,
+// vừa ngăn ProcessFiles khởi động batch mới giữa lúc reload (nó dùng
+// CompareAndSwap y hệt và sẽ thất bại cho tới khi defer bên dưới trả cờ
+// về false). Không làm gì (trả nil) nếu a.processor không phải
+// *RealProcessor - trường hợp test dùng processor giả, không có gì để
+// nạp lại.
+func (a *App) reloadDataSources(gid map[string]string) error {
+	rp, ok := a.processor.(*processing.RealProcessor)
+	if !ok {
+		return nil
+	}
+	if !a.processing.CompareAndSwap(false, true) {
+		return fmt.Errorf("đang xử lý đơn hàng, vui lòng thử lưu lại sau khi xử lý xong")
+	}
+	defer a.processing.Store(false)
+
+	store, err := productdata.LoadFromSheets(gid, productdata.NewHTTPClient())
+	if err != nil {
+		return err
+	}
+	rp.Store = store
+	rp.Pricing = pricing.NewHTTPSource(gid)
+	return nil
 }
 
 // ConfirmPrice ghi đè giá (cột Y) của một dòng sản phẩm đã bị đánh dấu
@@ -271,9 +337,10 @@ func (a *App) SaveAppSettings(settings appsettings.Settings) error {
 // dùng đổi ý giữa giá PO và giá hệ thống) bỏ qua kiểm tra đó, vì comment
 // đã bị xóa ngay từ lần xác nhận đầu tiên — xem excelwriter.SetPrice.
 func (a *App) ConfirmPrice(row int, price float64) error {
-	if a.processing.Load() {
-		return fmt.Errorf("đang xử lý đơn hàng, vui lòng đợi hoàn tất trước khi áp dụng giá")
+	if err := a.lockWorkbookMutation("đang xử lý đơn hàng, vui lòng đợi hoàn tất trước khi áp dụng giá"); err != nil {
+		return err
 	}
+	defer a.excelMu.Unlock()
 
 	a.resolvedMu.Lock()
 	alreadyResolved := a.resolvedRows[row]
@@ -296,14 +363,58 @@ func (a *App) ConfirmPrice(row int, price float64) error {
 	return nil
 }
 
-// ScanOrderFolder quét thư mục "đơn hàng/MM-YYYY" hiện tại (tự tạo nếu
-// thiếu) và trả về danh sách file hợp lệ.
+// UpdateJITPeriod applies one delivery period to every Excel row generated
+// from a selected JIT PDF. It shares the workbook lock with price updates and
+// is disabled while a processing batch is writing the same file.
+func (a *App) UpdateJITPeriod(rows []int, orderDate, warehouse, period string) error {
+	if err := a.lockWorkbookMutation("đang xử lý đơn hàng, vui lòng đợi hoàn tất trước khi đổi buổi JIT"); err != nil {
+		return err
+	}
+	defer a.excelMu.Unlock()
+	if a.updateJITPeriodFn != nil {
+		return a.updateJITPeriodFn(a.excelPath, rows, orderDate, warehouse, period)
+	}
+	return excelwriter.UpdateJITPeriod(a.excelPath, rows, orderDate, warehouse, period)
+}
+
+// lockWorkbookMutation admits a workbook mutation atomically with batch
+// reservation. The global lock order is workbookAdmissionMu -> excelMu.
+// A mutation releases the admission gate as soon as it owns excelMu; a batch
+// marks processing before it waits for excelMu. Batch completion releases
+// excelMu before touching the admission gate again, so no inverse order exists.
+func (a *App) lockWorkbookMutation(processingMessage string) error {
+	a.workbookAdmissionMu.Lock()
+	if a.processing.Load() {
+		a.workbookAdmissionMu.Unlock()
+		return fmt.Errorf("%s", processingMessage)
+	}
+	a.excelMu.Lock()
+	a.workbookAdmissionMu.Unlock()
+	return nil
+}
+
+func (a *App) reserveBatch() bool {
+	a.workbookAdmissionMu.Lock()
+	defer a.workbookAdmissionMu.Unlock()
+	return a.processing.CompareAndSwap(false, true)
+}
+
+func (a *App) releaseBatchReservation() {
+	a.workbookAdmissionMu.Lock()
+	a.processing.Store(false)
+	a.workbookAdmissionMu.Unlock()
+}
+
+// ScanOrderFolder quét trực tiếp thư mục "đơn hàng" (tự tạo nếu thiếu)
+// và trả về danh sách file hợp lệ — KHÔNG đi vào các thư mục con (vd
+// "MM-YYYY", "Code", "mẫu đơn hàng"): những thư mục đó là nơi lưu file
+// đã xử lý/backup, không phải việc cần làm, ListFiles vốn đã bỏ qua thư
+// mục con nên chỉ cần trỏ thẳng vào a.orderDir.
 func (a *App) ScanOrderFolder() ([]string, error) {
-	dir, err := fileset.EnsureMonthlyFolder(a.orderDir, time.Now())
-	if err != nil {
+	if err := os.MkdirAll(a.orderDir, 0o755); err != nil {
 		return nil, err
 	}
-	return fileset.ListFiles(dir)
+	return fileset.ListFiles(a.orderDir)
 }
 
 // SelectFiles mở dialog chọn nhiều file, lọc theo đuôi hợp lệ.
@@ -323,20 +434,30 @@ func (a *App) SelectFiles() ([]string, error) {
 // ProcessFiles chạy xử lý các file đã chọn trong nền, phát sự kiện
 // process:log / process:row / process:done về frontend.
 func (a *App) ProcessFiles(files []string, stt int) {
-	if !a.processing.CompareAndSwap(false, true) {
+	if !a.reserveBatch() {
 		a.emitter.Emit("process:log", "⚠️ Đã có một batch đang xử lý, vui lòng đợi hoàn tất.")
 		return
 	}
-	go a.runBatch(a.emitter, files, stt)
+	go a.runReservedBatch(a.emitter, files, stt)
 }
 
 func (a *App) runBatch(emitter Emitter, files []string, stt int) {
+	if !a.reserveBatch() {
+		emitter.Emit("process:log", "⚠️ Đã có một batch đang xử lý, vui lòng đợi hoàn tất.")
+		return
+	}
+	a.runReservedBatch(emitter, files, stt)
+}
+
+func (a *App) runReservedBatch(emitter Emitter, files []string, stt int) {
 	current := stt
+	a.excelMu.Lock()
 	defer func() {
 		if r := recover(); r != nil {
 			emitter.Emit("process:log", fmt.Sprintf("❌ Lỗi không mong muốn: %v", r))
 		}
-		a.processing.Store(false)
+		a.excelMu.Unlock()
+		a.releaseBatchReservation()
 		emitter.Emit("process:done", current)
 	}()
 
@@ -359,8 +480,10 @@ func (a *App) runBatch(emitter Emitter, files []string, stt int) {
 	for _, f := range files {
 		emitter.Emit("process:log", fmt.Sprintf("Đang xử lý %s...", filepath.Base(f)))
 		streamed := map[string]bool{}
+		loggedSkuKeys := map[string]bool{}
 		emitRow := func(row processing.OrderRow) {
-			row = emitProcessRow(emitter, row)
+			row = ensureResultIdentity(row, f)
+			row = emitProcessRowOncePerSkuKey(emitter, row, loggedSkuKeys)
 			isFirstAppearance := !streamed[row.ResultKey]
 			if row.ResultKey != "" {
 				streamed[row.ResultKey] = true
@@ -372,20 +495,20 @@ func (a *App) runBatch(emitter Emitter, files []string, stt int) {
 		rows, err := a.processOne(f, current, emitRow)
 		if err != nil {
 			emitter.Emit("process:log", fmt.Sprintf("❌ Lỗi xử lý %s: %v", filepath.Base(f), err))
-			emitProcessRow(emitter, processing.OrderRow{
+			emitProcessRow(emitter, ensureResultIdentity(processing.OrderRow{
 				FileName:   filepath.Base(f),
 				Status:     processing.StatusFailed,
 				StatusKind: processing.StatusKindFailed,
-			})
+			}, f))
 			current++
 			continue
 		}
 		for _, row := range rows {
-			row = ensureResultKey(row)
+			row = ensureResultIdentity(row, f)
 			if row.ResultKey != "" && streamed[row.ResultKey] {
 				continue
 			}
-			emitProcessRow(emitter, row)
+			emitProcessRowOncePerSkuKey(emitter, row, loggedSkuKeys)
 			current++
 		}
 	}
@@ -413,9 +536,32 @@ func emitProcessRow(emitter Emitter, row processing.OrderRow) processing.OrderRo
 	return row
 }
 
+func emitProcessRowOncePerSkuKey(emitter Emitter, row processing.OrderRow, logged map[string]bool) processing.OrderRow {
+	row = ensureResultKey(row)
+	if len(row.SkuLog) > 0 {
+		if logged[row.ResultKey] {
+			row.SkuLog = nil
+		} else {
+			logged[row.ResultKey] = true
+		}
+	}
+	return emitProcessRow(emitter, row)
+}
+
+func ensureResultIdentity(row processing.OrderRow, sourcePath string) processing.OrderRow {
+	if row.SourceID == "" {
+		row.SourceID = processing.SourceIDForPath(sourcePath)
+	}
+	return ensureResultKey(row)
+}
+
 func ensureResultKey(row processing.OrderRow) processing.OrderRow {
 	if row.ResultKey == "" {
-		row.ResultKey = fmt.Sprintf("legacy:%s:%s:%s:%s", row.FileName, row.Page, row.System, row.PO)
+		sourceID := row.SourceID
+		if sourceID == "" {
+			sourceID = row.FileName
+		}
+		row.ResultKey = fmt.Sprintf("legacy:%s:%s:%s:%s", sourceID, row.Page, row.System, row.PO)
 	}
 	return row
 }
@@ -423,11 +569,15 @@ func ensureResultKey(row processing.OrderRow) processing.OrderRow {
 // ZaloJob là 1 lần gửi cần thực hiện: nội dung tin nhắn ĐÃ được frontend
 // build sẵn bằng buildZaloMessageForPO (y hệt nội dung modal xem trước
 // đã hiển thị cho người dùng) — Go không build lại text, chỉ resolve
-// liên hệ (theo System) rồi gửi.
+// liên hệ (theo System + CustomerCode, xem zalosend.ResolveContact) rồi
+// gửi. CustomerCode là OrderRow.MaKhachHang của dòng đầu tiên thuộc PO
+// này — 2 ký tự đầu của nó là miền (MN/MB), cần để ghép đúng key Cài đặt
+// > Zalo (vd "MNBIGC") vì bản thân System ("BigC") không phân biệt miền.
 type ZaloJob struct {
-	PO      string `json:"po"`
-	System  string `json:"system"`
-	Message string `json:"message"`
+	PO           string `json:"po"`
+	System       string `json:"system"`
+	CustomerCode string `json:"customerCode"`
+	Message      string `json:"message"`
 }
 
 // SendZaloMessages gửi tuần tự từng job trong 1 goroutine nền, phát sự
@@ -459,10 +609,33 @@ func (a *App) runZaloBatch(emitter Emitter, jobs []ZaloJob) {
 		emitter.Emit("zalo:done", nil)
 	}()
 
+	// loginCtx huỷ được riêng cho bước đăng nhập (KHÔNG dùng cho phần gửi
+	// tin phía dưới, vốn tự đặt deadline riêng cho từng job) — cho phép
+	// người dùng bấm "Đóng" trên popup QR để dừng hẳn việc chờ đăng nhập
+	// thay vì phải đợi hết 120s. zaloLoginCancel được CancelZaloLogin gọi
+	// từ 1 goroutine khác (Wails tự điều phối lời gọi bound method), nên
+	// phải lưu dưới lock; xoá lại (defer) khi bước đăng nhập đã xong để
+	// CancelZaloLogin gọi muộn không huỷ nhầm context của lượt sau.
+	loginCtx, cancelLogin := context.WithCancel(context.Background())
+	a.zaloLoginMu.Lock()
+	a.zaloLoginCancel = cancelLogin
+	a.zaloLoginMu.Unlock()
+	defer func() {
+		cancelLogin()
+		a.zaloLoginMu.Lock()
+		a.zaloLoginCancel = nil
+		a.zaloLoginMu.Unlock()
+	}()
+
 	ctx := context.Background()
-	emitter.Emit("zalo:log", "🔐 Đang kiểm tra đăng nhập Zalo (quét QR trên cửa sổ trình duyệt nếu được yêu cầu)...")
-	if err := a.zaloSender.EnsureLoggedIn(ctx); err != nil {
-		emitter.Emit("zalo:log", fmt.Sprintf("❌ Không đăng nhập được Zalo: %v", err))
+	emitter.Emit("zalo:log", "🔐 Đang kiểm tra đăng nhập Zalo...")
+	onQR := func(svgMarkup string) { emitter.Emit("zalo:qr", svgMarkup) }
+	if err := a.zaloSender.EnsureLoggedIn(loginCtx, onQR); err != nil {
+		if loginCtx.Err() != nil {
+			emitter.Emit("zalo:log", "🚫 Đã huỷ đăng nhập Zalo.")
+		} else {
+			emitter.Emit("zalo:log", fmt.Sprintf("❌ Không đăng nhập được Zalo: %v", err))
+		}
 		return
 	}
 
@@ -472,27 +645,76 @@ func (a *App) runZaloBatch(emitter Emitter, jobs []ZaloJob) {
 		return
 	}
 
-	for _, job := range jobs {
-		contact, err := zalosend.ResolveContact(job.System, settings.Zalo)
-		if err != nil {
-			emitter.Emit("zalo:log", fmt.Sprintf("❌ %s: chưa cấu hình liên hệ Zalo cho %s (sửa ở Cài đặt > Zalo)", job.PO, job.System))
-			emitter.Emit("zalo:sent", map[string]any{"po": job.PO, "ok": false})
+	// Resolve TRƯỚC liên hệ của mọi job rồi SẮP XẾP ỔN ĐỊNH (stable sort)
+	// theo tên liên hệ — gộp các đơn CÙNG 1 nhóm Zalo đứng cạnh nhau,
+	// tránh trình duyệt phải tìm/mở lại hội thoại liên tục khi thứ tự
+	// người dùng chọn ban đầu xen kẽ giữa nhiều nhóm (vd Satra, BigC,
+	// Satra, BigC...). Sort ỔN ĐỊNH giữ nguyên thứ tự chọn ban đầu GIỮA
+	// các đơn cùng 1 liên hệ, chỉ đổi thứ tự TƯƠNG ĐỐI giữa các nhóm
+	// liên hệ khác nhau. Job resolve lỗi (contact rỗng) tự nhiên gộp về
+	// đầu danh sách (chuỗi rỗng sort trước mọi tên liên hệ thật) — vô
+	// hại, các job đó chỉ log lỗi rồi bỏ qua, không mở hội thoại nào.
+	type resolvedZaloJob struct {
+		job     ZaloJob
+		contact string
+		err     error
+	}
+	resolved := make([]resolvedZaloJob, len(jobs))
+	for i, job := range jobs {
+		contact, err := zalosend.ResolveContact(job.System, job.CustomerCode, settings.Zalo)
+		resolved[i] = resolvedZaloJob{job: job, contact: contact, err: err}
+	}
+	sort.SliceStable(resolved, func(i, j int) bool {
+		return resolved[i].contact < resolved[j].contact
+	})
+
+	for _, r := range resolved {
+		if r.err != nil {
+			// err bọc ErrNoContact kèm đúng key đã ghép (vd "MNBIGC") ở
+			// cuối chuỗi (xem ResolveContact) — cắt bỏ phần tiền tố lỗi kỹ
+			// thuật, chỉ hiện key đó cho người dùng biết CHÍNH XÁC dòng cần
+			// thêm trong Cài đặt > Zalo.
+			key := strings.TrimPrefix(r.err.Error(), zalosend.ErrNoContact.Error()+": ")
+			emitter.Emit("zalo:log", fmt.Sprintf("❌ %s: chưa cấu hình liên hệ Zalo cho %s (sửa ở Cài đặt > Zalo, thêm dòng khoá %q)", r.job.PO, r.job.System, key))
+			emitter.Emit("zalo:sent", map[string]any{"po": r.job.PO, "ok": false})
 			continue
 		}
-		emitter.Emit("zalo:log", fmt.Sprintf("📤 Đang gửi %s → %s...", job.PO, contact))
+		emitter.Emit("zalo:log", fmt.Sprintf("📤 Đang gửi %s → %s...", r.job.PO, r.contact))
 		// Deadline riêng cho từng job, giải phóng timer ngay khi job xong
 		// (không defer tới cuối vòng lặp) — batch dài không tích luỹ timer.
 		jobCtx, cancel := context.WithTimeout(ctx, zaloJobTimeout)
-		sendErr := a.zaloSender.SendMessage(jobCtx, contact, job.Message)
+		sendErr := a.zaloSender.SendMessage(jobCtx, r.contact, r.job.Message)
 		cancel()
 		if sendErr != nil {
-			emitter.Emit("zalo:log", fmt.Sprintf("❌ Gửi %s thất bại: %v", job.PO, sendErr))
-			emitter.Emit("zalo:sent", map[string]any{"po": job.PO, "ok": false})
+			emitter.Emit("zalo:log", fmt.Sprintf("❌ Gửi %s thất bại: %v", r.job.PO, sendErr))
+			emitter.Emit("zalo:sent", map[string]any{"po": r.job.PO, "ok": false})
 			continue
 		}
-		emitter.Emit("zalo:log", fmt.Sprintf("✅ Đã gửi %s", job.PO))
-		emitter.Emit("zalo:sent", map[string]any{"po": job.PO, "ok": true})
+		emitter.Emit("zalo:log", fmt.Sprintf("✅ Đã gửi %s", r.job.PO))
+		emitter.Emit("zalo:sent", map[string]any{"po": r.job.PO, "ok": true})
 	}
+}
+
+// CancelZaloLogin dừng hẳn việc chờ đăng nhập Zalo đang chạy (nếu có) —
+// frontend gọi khi người dùng bấm "Đóng" trên popup QR vì không còn
+// muốn đăng nhập nữa. Không làm gì nếu không có lượt đăng nhập nào đang
+// chờ (đã xong, hoặc chưa từng bắt đầu) — an toàn gọi bất cứ lúc nào.
+func (a *App) CancelZaloLogin() {
+	a.zaloLoginMu.Lock()
+	cancel := a.zaloLoginCancel
+	a.zaloLoginMu.Unlock()
+	if cancel != nil {
+		cancel()
+	}
+}
+
+// RefreshZaloQR bấm nút "Lấy mã mới" trên trang đăng nhập Zalo — frontend
+// gọi khi người dùng bấm "Làm mới mã QR" trong popup QR (xem zalo:qr).
+// An toàn gọi bất cứ lúc nào, kể cả trong lúc runZaloBatch vẫn đang chờ
+// ở EnsureLoggedIn trên goroutine khác (không làm gì nếu chưa mở trình
+// duyệt hoặc không có mã QR nào đang chờ).
+func (a *App) RefreshZaloQR() error {
+	return a.zaloSender.RefreshQR(context.Background())
 }
 
 // shutdown đóng trình duyệt Zalo (nếu đã mở) khi app thoát — tránh để

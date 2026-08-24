@@ -6,7 +6,9 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"sort"
 	"testing"
+	"time"
 
 	"github.com/xuri/excelize/v2"
 
@@ -42,10 +44,21 @@ func (s *stubProcessor) Process(ctx context.Context, filePath string, stt int) (
 }
 
 type streamingStubProcessor struct {
-	emitted []processing.OrderRow
-	returned []processing.OrderRow
-	streamCalls int
+	emitted      []processing.OrderRow
+	returned     []processing.OrderRow
+	streamCalls  int
 	processCalls int
+}
+
+type channelProcessor struct {
+	entered chan struct{}
+	release chan struct{}
+}
+
+func (p *channelProcessor) Process(context.Context, string, int) ([]processing.OrderRow, error) {
+	close(p.entered)
+	<-p.release
+	return nil, nil
 }
 
 var _ processing.StreamingProcessor = (*streamingStubProcessor)(nil)
@@ -57,8 +70,41 @@ func (s *streamingStubProcessor) Process(ctx context.Context, filePath string, s
 
 func (s *streamingStubProcessor) ProcessStreaming(ctx context.Context, filePath string, stt int, emit func(processing.OrderRow)) ([]processing.OrderRow, error) {
 	s.streamCalls++
-	for _, row := range s.emitted { emit(row) }
+	for _, row := range s.emitted {
+		emit(row)
+	}
 	return s.returned, nil
+}
+
+func TestApp_InitializeApp_AllowsRetryAfterLoadFailure(t *testing.T) {
+	attempts := 0
+	wantProcessor := &stubProcessor{}
+	a := &App{
+		dataLoader: func() (processing.Processor, error) {
+			attempts++
+			if attempts == 1 {
+				return nil, errors.New("network timeout")
+			}
+			return wantProcessor, nil
+		},
+	}
+
+	if err := a.InitializeApp(); err == nil || err.Error() != "network timeout" {
+		t.Fatalf("first InitializeApp error = %v, want network timeout", err)
+	}
+	if a.processor != nil {
+		t.Fatalf("processor = %#v after failed load, want nil", a.processor)
+	}
+
+	if err := a.InitializeApp(); err != nil {
+		t.Fatalf("retry InitializeApp returned error: %v", err)
+	}
+	if a.processor != wantProcessor {
+		t.Fatalf("processor = %#v, want retry result %#v", a.processor, wantProcessor)
+	}
+	if attempts != 2 {
+		t.Fatalf("loader attempts = %d, want 2", attempts)
+	}
 }
 
 // freshOrderWorkbook copies the empty (8-header-row, no data) test
@@ -155,40 +201,84 @@ func TestApp_RunBatchStreamsRowsWithoutDuplicates(t *testing.T) {
 
 	t.Run("streaming processor emits each row once", func(t *testing.T) {
 		processor := &streamingStubProcessor{
-			emitted: []processing.OrderRow{{ResultKey: "a", SkuLog: []string{"streamed sku"}}},
+			emitted: []processing.OrderRow{
+				{ResultKey: "a", StatusKind: processing.StatusKindProcessing, SkuLog: []string{"streamed sku"}},
+				{ResultKey: "a", StatusKind: processing.StatusKindDone, SkuLog: []string{"streamed sku"}},
+			},
 			returned: []processing.OrderRow{
 				{ResultKey: "a", SkuLog: []string{"streamed sku"}},
 				{ResultKey: "b", SkuLog: []string{"returned sku"}},
 			},
 		}
-		a := &App{cfg: config.NewStore(filepath.Join(t.TempDir(), "config.txt")), processor: processor, excelPath: freshOrderWorkbook(t)}
+		a := &App{
+			cfg:       config.NewStore(filepath.Join(t.TempDir(), "config.txt")),
+			processor: processor,
+			excelPath: freshOrderWorkbook(t),
+		}
 		emitter := &fakeEmitter{}
+
 		a.runBatch(emitter, []string{"a.pdf"}, 1)
+
 		if processor.streamCalls != 1 || processor.processCalls != 0 {
 			t.Fatalf("calls = streaming %d, regular %d; want streaming 1, regular 0", processor.streamCalls, processor.processCalls)
 		}
 		var keys []string
 		for _, event := range emitter.events {
-			if event.name == "process:row" {
-				row, ok := event.data[0].(processing.OrderRow)
-				if !ok { t.Fatalf("process:row data = %T, want processing.OrderRow", event.data[0]) }
-				keys = append(keys, row.ResultKey)
+			if event.name != "process:row" {
+				continue
+			}
+			row, ok := event.data[0].(processing.OrderRow)
+			if !ok {
+				t.Fatalf("process:row data = %T, want processing.OrderRow", event.data[0])
+			}
+			keys = append(keys, row.ResultKey)
+		}
+		if !reflect.DeepEqual(keys, []string{"a", "a", "b"}) {
+			t.Fatalf("streamed row keys = %#v, want processing/final a then returned b", keys)
+		}
+		var names []string
+		var logPayloads []string
+		for _, event := range emitter.events {
+			names = append(names, event.name)
+			if event.name == "process:log" {
+				logPayloads = append(logPayloads, event.data[0].(string))
 			}
 		}
-		if !reflect.DeepEqual(keys, []string{"a", "b"}) { t.Fatalf("streamed row keys = %#v, want []string{\"a\", \"b\"}", keys) }
-		var names []string
-		for _, event := range emitter.events { names = append(names, event.name) }
-		wantNames := []string{"process:log", "process:log", "process:row", "process:log", "process:row", "process:done"}
-		if !reflect.DeepEqual(names, wantNames) { t.Fatalf("event names = %#v, want %#v", names, wantNames) }
+		wantNames := []string{"process:log", "process:log", "process:row", "process:row", "process:log", "process:row", "process:done"}
+		if !reflect.DeepEqual(names, wantNames) {
+			t.Fatalf("event names = %#v, want %#v", names, wantNames)
+		}
+		wantLogs := []string{"Đang xử lý a.pdf...", "streamed sku", "returned sku"}
+		if !reflect.DeepEqual(logPayloads, wantLogs) {
+			t.Fatalf("process:log payloads = %#v, want each result key's SKU logs exactly once: %#v", logPayloads, wantLogs)
+		}
 	})
+
 	t.Run("non-streaming processor still emits returned rows", func(t *testing.T) {
-		a := &App{cfg: config.NewStore(filepath.Join(t.TempDir(), "config.txt")), processor: &stubProcessor{}, excelPath: freshOrderWorkbook(t)}
+		a := &App{
+			cfg:       config.NewStore(filepath.Join(t.TempDir(), "config.txt")),
+			processor: &stubProcessor{},
+			excelPath: freshOrderWorkbook(t),
+		}
 		emitter := &fakeEmitter{}
+
 		a.runBatch(emitter, []string{"legacy.pdf"}, 1)
+
 		var rows []processing.OrderRow
-		for _, event := range emitter.events { if event.name == "process:row" { rows = append(rows, event.data[0].(processing.OrderRow)) } }
-		if len(rows) != 1 { t.Fatalf("process:row count = %d, want 1", len(rows)) }
-		if rows[0].ResultKey != "legacy:legacy.pdf:::PO1" { t.Fatalf("legacy processor ResultKey = %q, want deterministic fallback", rows[0].ResultKey) }
+		for _, event := range emitter.events {
+			if event.name != "process:row" {
+				continue
+			}
+			rows = append(rows, event.data[0].(processing.OrderRow))
+		}
+		if len(rows) != 1 {
+			t.Fatalf("process:row count = %d, want 1", len(rows))
+		}
+		wantSourceID := processing.SourceIDForPath("legacy.pdf")
+		wantKey := "legacy:" + wantSourceID + ":::PO1"
+		if rows[0].SourceID != wantSourceID || rows[0].ResultKey != wantKey {
+			t.Fatalf("legacy processor identity = source %q key %q, want source %q key %q", rows[0].SourceID, rows[0].ResultKey, wantSourceID, wantKey)
+		}
 	})
 }
 
@@ -349,6 +439,82 @@ func TestApp_ConfirmPrice_DelegatesToExcelwriter(t *testing.T) {
 	}
 }
 
+func TestApp_UpdateJITPeriodUpdatesSelectedExcelRows(t *testing.T) {
+	path := freshOrderWorkbook(t)
+	if _, err := excelwriter.WriteOrderRows(path, []excelwriter.Row{
+		{OrderNumber: "old", Description: "old"},
+		{OrderNumber: "old", Description: "old"},
+	}, ""); err != nil {
+		t.Fatal(err)
+	}
+	a := &App{excelPath: path}
+	if err := a.UpdateJITPeriod([]int{9, 10}, "24/08/2026", "WH6_HN", "Chiều"); err != nil {
+		t.Fatal(err)
+	}
+	f, err := excelize.OpenFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer f.Close()
+	got, _ := f.GetCellValue("Don dat hang", "B10")
+	if got != "ĐĐHJIT-24/08/2026 (chiều)-WH6_HN" {
+		t.Fatalf("B10 = %q", got)
+	}
+}
+
+func TestApp_WorkbookMutationCannotOverlapNewBatch(t *testing.T) {
+	mutationEntered := make(chan struct{})
+	releaseMutation := make(chan struct{})
+	mutationDone := make(chan error, 1)
+	batchEntered := make(chan struct{})
+	releaseBatch := make(chan struct{})
+	batchDone := make(chan struct{})
+
+	a := &App{
+		cfg:       config.NewStore(filepath.Join(t.TempDir(), "config.txt")),
+		excelPath: freshOrderWorkbook(t),
+		processor: &channelProcessor{entered: batchEntered, release: releaseBatch},
+		updateJITPeriodFn: func(string, []int, string, string, string) error {
+			close(mutationEntered)
+			<-releaseMutation
+			return nil
+		},
+	}
+
+	go func() {
+		mutationDone <- a.UpdateJITPeriod([]int{9}, "24/08/2026", "WH6_HN", "Chiều")
+	}()
+	<-mutationEntered
+
+	go func() {
+		a.runBatch(&fakeEmitter{}, []string{"batch.pdf"}, 1)
+		close(batchDone)
+	}()
+
+	select {
+	case <-batchEntered:
+		t.Fatal("batch processor entered while UpdateJITPeriod still owned the workbook mutation critical section")
+	case <-time.After(150 * time.Millisecond):
+	}
+
+	close(releaseMutation)
+	if err := <-mutationDone; err != nil {
+		t.Fatalf("UpdateJITPeriod returned error: %v", err)
+	}
+
+	select {
+	case <-batchEntered:
+	case <-time.After(2 * time.Second):
+		t.Fatal("batch did not enter after workbook mutation completed")
+	}
+	close(releaseBatch)
+	select {
+	case <-batchDone:
+	case <-time.After(2 * time.Second):
+		t.Fatal("batch did not finish after processor was released")
+	}
+}
+
 func TestApp_ConfirmPrice_RejectsWhileProcessingBatch(t *testing.T) {
 	src := "internal/processing/excelwriter/testdata/dondathang.xlsx"
 	data, err := os.ReadFile(src)
@@ -435,14 +601,26 @@ func TestApp_ConfirmPrice_SecondCallForSameRowUsesSetPriceNotConfirmPrice(t *tes
 }
 
 type fakeZaloSender struct {
-	loginErr   error
-	sendErrs   map[string]error // key = contactQuery
-	loginCalls int
-	sentTo     []string
+	loginErr         error
+	sendErrs         map[string]error // key = contactQuery
+	qrFrames         []string         // svgMarkup values EnsureLoggedIn should feed to onQR, in order
+	blockUntilCancel bool             // simulate ChromedpSender's real login-wait loop honoring ctx cancellation
+	loginCalls       int
+	sentTo           []string
+	refreshQRCalls   int
 }
 
-func (f *fakeZaloSender) EnsureLoggedIn(ctx context.Context) error {
+func (f *fakeZaloSender) EnsureLoggedIn(ctx context.Context, onQR func(svgMarkup string)) error {
 	f.loginCalls++
+	if onQR != nil {
+		for _, frame := range f.qrFrames {
+			onQR(frame)
+		}
+	}
+	if f.blockUntilCancel {
+		<-ctx.Done()
+		return ctx.Err()
+	}
 	return f.loginErr
 }
 
@@ -453,6 +631,11 @@ func (f *fakeZaloSender) SendMessage(ctx context.Context, contactQuery, message 
 			return err
 		}
 	}
+	return nil
+}
+
+func (f *fakeZaloSender) RefreshQR(ctx context.Context) error {
+	f.refreshQRCalls++
 	return nil
 }
 
@@ -484,20 +667,25 @@ func sentEventsOf(t *testing.T, events []emittedEvent) []map[string]any {
 
 func TestRunZaloBatch_SendsEachJobAndEmitsEvents(t *testing.T) {
 	sender := &fakeZaloSender{}
-	a := newTestAppForZalo(t, sender, map[string]string{"COOP": "Nhom Coop", "BIGC": "Nhom BigC"})
+	a := newTestAppForZalo(t, sender, map[string]string{"MNCOOPMART": "Nhom Coop", "MNBIGC": "Nhom BigC"})
 	emitter := &fakeEmitter{}
 
 	a.runZaloBatch(emitter, []ZaloJob{
-		{PO: "PO1", System: "COOP", Message: "noi dung 1"},
-		{PO: "PO2", System: "BIGC", Message: "noi dung 2"},
+		{PO: "PO1", System: "COOP", CustomerCode: "MN0001", Message: "noi dung 1"},
+		{PO: "PO2", System: "BIGC", CustomerCode: "MN0002", Message: "noi dung 2"},
 	})
 
 	if sender.loginCalls != 1 {
 		t.Fatalf("loginCalls = %d, want 1", sender.loginCalls)
 	}
-	wantSentTo := []string{"Nhom Coop", "Nhom BigC"}
-	if !reflect.DeepEqual(sender.sentTo, wantSentTo) {
-		t.Fatalf("sentTo = %#v, want %#v", sender.sentTo, wantSentTo)
+	// Không khẳng định THỨ TỰ cụ thể ở đây — runZaloBatch cố ý sắp xếp
+	// lại theo liên hệ (xem TestRunZaloBatch_GroupsJobsByContact), test
+	// này chỉ quan tâm CẢ 2 job đều được gửi và đều báo thành công.
+	wantSentTo := []string{"Nhom BigC", "Nhom Coop"}
+	gotSentTo := append([]string{}, sender.sentTo...)
+	sort.Strings(gotSentTo)
+	if !reflect.DeepEqual(gotSentTo, wantSentTo) {
+		t.Fatalf("sentTo (sorted) = %#v, want %#v", gotSentTo, wantSentTo)
 	}
 
 	lastEvent := emitter.events[len(emitter.events)-1]
@@ -506,19 +694,67 @@ func TestRunZaloBatch_SendsEachJobAndEmitsEvents(t *testing.T) {
 	}
 
 	sent := sentEventsOf(t, emitter.events)
-	if len(sent) != 2 || sent[0]["po"] != "PO1" || sent[0]["ok"] != true || sent[1]["po"] != "PO2" || sent[1]["ok"] != true {
-		t.Fatalf("zalo:sent events = %#v", sent)
+	if len(sent) != 2 {
+		t.Fatalf("zalo:sent events = %#v, want 2", sent)
+	}
+	okByPO := map[string]any{sent[0]["po"].(string): sent[0]["ok"], sent[1]["po"].(string): sent[1]["ok"]}
+	if okByPO["PO1"] != true || okByPO["PO2"] != true {
+		t.Fatalf("zalo:sent events = %#v, want both PO1 and PO2 ok=true", sent)
+	}
+}
+
+// runZaloBatch resolves every job's contact FIRST, then stable-sorts by
+// contact name so jobs sharing one Zalo group land next to each other —
+// the browser shouldn't have to search/open the same conversation twice
+// in a row when the user's original selection interleaved groups (vd
+// Satra, BigC, Satra). Contacts here are chosen so sorting genuinely
+// reorders "S1"/"S3" (System) away from their original PO1/PO3
+// positions next to "S2" (a different contact) in between.
+func TestRunZaloBatch_GroupsJobsByContact(t *testing.T) {
+	sender := &fakeZaloSender{}
+	a := newTestAppForZalo(t, sender, map[string]string{
+		"MNAAA": "Nhom AAA",
+		"MNBBB": "Nhom BBB",
+	})
+	emitter := &fakeEmitter{}
+
+	// PO1/PO3 both resolve to "Nhom AAA", PO2 to "Nhom BBB" - selection
+	// order interleaves them (AAA, BBB, AAA); after grouping, both AAA
+	// sends must be adjacent (in either relative position vs BBB, but
+	// never split apart by BBB again).
+	a.runZaloBatch(emitter, []ZaloJob{
+		{PO: "PO1", System: "AAA", CustomerCode: "MN0001", Message: "x"},
+		{PO: "PO2", System: "BBB", CustomerCode: "MN0002", Message: "y"},
+		{PO: "PO3", System: "AAA", CustomerCode: "MN0003", Message: "z"},
+	})
+
+	if len(sender.sentTo) != 3 {
+		t.Fatalf("sentTo = %#v, want 3 sends", sender.sentTo)
+	}
+	// Find the two "Nhom AAA" sends and confirm they are ADJACENT in
+	// the actual send order (no "Nhom BBB" send landed between them).
+	aaaPositions := []int{}
+	for i, contact := range sender.sentTo {
+		if contact == "Nhom AAA" {
+			aaaPositions = append(aaaPositions, i)
+		}
+	}
+	if len(aaaPositions) != 2 {
+		t.Fatalf("sentTo = %#v, want exactly 2 sends to Nhom AAA", sender.sentTo)
+	}
+	if aaaPositions[1]-aaaPositions[0] != 1 {
+		t.Fatalf("sentTo = %#v, the two Nhom AAA sends are not adjacent (grouping failed)", sender.sentTo)
 	}
 }
 
 func TestRunZaloBatch_SkipsJobWithoutContact(t *testing.T) {
 	sender := &fakeZaloSender{}
-	a := newTestAppForZalo(t, sender, map[string]string{"COOP": "Nhom Coop"})
+	a := newTestAppForZalo(t, sender, map[string]string{"MNCOOPMART": "Nhom Coop"})
 	emitter := &fakeEmitter{}
 
 	a.runZaloBatch(emitter, []ZaloJob{
-		{PO: "PO1", System: "UNKNOWN", Message: "noi dung 1"},
-		{PO: "PO2", System: "COOP", Message: "noi dung 2"},
+		{PO: "PO1", System: "UNKNOWN", CustomerCode: "MN0001", Message: "noi dung 1"},
+		{PO: "PO2", System: "COOP", CustomerCode: "MN0002", Message: "noi dung 2"},
 	})
 
 	if !reflect.DeepEqual(sender.sentTo, []string{"Nhom Coop"}) {
@@ -533,19 +769,21 @@ func TestRunZaloBatch_SkipsJobWithoutContact(t *testing.T) {
 
 func TestRunZaloBatch_ContinuesAfterOneJobFails(t *testing.T) {
 	sender := &fakeZaloSender{sendErrs: map[string]error{"Nhom Loi": errors.New("boom")}}
-	a := newTestAppForZalo(t, sender, map[string]string{"LOI": "Nhom Loi", "COOP": "Nhom Coop"})
+	a := newTestAppForZalo(t, sender, map[string]string{"MNLOI": "Nhom Loi", "MNCOOPMART": "Nhom Coop"})
 	emitter := &fakeEmitter{}
 
 	a.runZaloBatch(emitter, []ZaloJob{
-		{PO: "PO1", System: "LOI", Message: "x"},
-		{PO: "PO2", System: "COOP", Message: "y"},
+		{PO: "PO1", System: "LOI", CustomerCode: "MN0001", Message: "x"},
+		{PO: "PO2", System: "COOP", CustomerCode: "MN0002", Message: "y"},
 	})
 
-	if !reflect.DeepEqual(sender.sentTo, []string{"Nhom Loi", "Nhom Coop"}) {
-		t.Fatalf("sentTo = %#v, want both contacts attempted despite the first failing", sender.sentTo)
+	// Sắp xếp theo tên liên hệ: "Nhom Coop" < "Nhom Loi" - COOP (PO2, gửi
+	// thành công) gửi trước, LOI (PO1, gửi lỗi) gửi sau.
+	if !reflect.DeepEqual(sender.sentTo, []string{"Nhom Coop", "Nhom Loi"}) {
+		t.Fatalf("sentTo = %#v, want both contacts attempted despite one failing", sender.sentTo)
 	}
 	sent := sentEventsOf(t, emitter.events)
-	if len(sent) != 2 || sent[0]["ok"] != false || sent[1]["ok"] != true {
+	if len(sent) != 2 || sent[0]["ok"] != true || sent[1]["ok"] != false {
 		t.Fatalf("zalo:sent events = %#v", sent)
 	}
 }
@@ -603,5 +841,101 @@ func TestApp_SendZaloMessages_IgnoresEmptyJobList(t *testing.T) {
 	}
 	if a.sending.Load() {
 		t.Fatal("sending flag left set by an empty batch")
+	}
+}
+
+// runZaloBatch's onQR closure must relay every QR frame EnsureLoggedIn
+// hands it straight through as a zalo:qr event, in order, so the
+// frontend's QR popup receives each new code as it's read from the page.
+func TestRunZaloBatch_RelaysQRFramesAsEvents(t *testing.T) {
+	sender := &fakeZaloSender{qrFrames: []string{"<svg>1</svg>", "<svg>2</svg>"}}
+	a := newTestAppForZalo(t, sender, map[string]string{"COOP": "Nhom Coop"})
+	emitter := &fakeEmitter{}
+
+	a.runZaloBatch(emitter, []ZaloJob{{PO: "PO1", System: "COOP", Message: "x"}})
+
+	var qrEvents []string
+	for _, e := range emitter.events {
+		if e.name == "zalo:qr" {
+			data, ok := e.data[0].(string)
+			if !ok {
+				t.Fatalf("zalo:qr data is not a string: %#v", e.data)
+			}
+			qrEvents = append(qrEvents, data)
+		}
+	}
+	want := []string{"<svg>1</svg>", "<svg>2</svg>"}
+	if !reflect.DeepEqual(qrEvents, want) {
+		t.Fatalf("zalo:qr events = %#v, want %#v", qrEvents, want)
+	}
+}
+
+// CancelZaloLogin must reach an EnsureLoggedIn call already in flight on
+// a different goroutine (exactly how runZaloBatch/SendZaloMessages
+// actually run in production) and cause runZaloBatch to abort the whole
+// batch without sending anything.
+func TestApp_CancelZaloLogin_AbortsInFlightLogin(t *testing.T) {
+	sender := &fakeZaloSender{blockUntilCancel: true}
+	a := newTestAppForZalo(t, sender, map[string]string{"COOP": "Nhom Coop"})
+	emitter := &fakeEmitter{}
+	a.emitter = emitter
+
+	done := make(chan struct{})
+	go func() {
+		a.runZaloBatch(emitter, []ZaloJob{{PO: "PO1", System: "COOP", Message: "x"}})
+		close(done)
+	}()
+
+	deadline := time.Now().Add(2 * time.Second)
+	for {
+		a.zaloLoginMu.Lock()
+		hasCancel := a.zaloLoginCancel != nil
+		a.zaloLoginMu.Unlock()
+		if hasCancel {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("timed out waiting for runZaloBatch to register a cancel func")
+		}
+		time.Sleep(time.Millisecond)
+	}
+
+	a.CancelZaloLogin()
+
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		t.Fatal("runZaloBatch did not return after CancelZaloLogin")
+	}
+
+	if len(sender.sentTo) != 0 {
+		t.Fatalf("sentTo = %#v, want no send attempted after a cancelled login", sender.sentTo)
+	}
+	a.zaloLoginMu.Lock()
+	leftoverCancel := a.zaloLoginCancel
+	a.zaloLoginMu.Unlock()
+	if leftoverCancel != nil {
+		t.Fatal("zaloLoginCancel not cleared after runZaloBatch returned")
+	}
+}
+
+// A CancelZaloLogin call with no login in flight (never started, or
+// already finished) must be a safe no-op.
+func TestApp_CancelZaloLogin_NoopWhenNothingInFlight(t *testing.T) {
+	sender := &fakeZaloSender{}
+	a := newTestAppForZalo(t, sender, map[string]string{"COOP": "Nhom Coop"})
+
+	a.CancelZaloLogin() // must not panic
+}
+
+func TestApp_RefreshZaloQR_DelegatesToSender(t *testing.T) {
+	sender := &fakeZaloSender{}
+	a := newTestAppForZalo(t, sender, map[string]string{"COOP": "Nhom Coop"})
+
+	if err := a.RefreshZaloQR(); err != nil {
+		t.Fatalf("RefreshZaloQR returned error: %v", err)
+	}
+	if sender.refreshQRCalls != 1 {
+		t.Fatalf("refreshQRCalls = %d, want 1", sender.refreshQRCalls)
 	}
 }

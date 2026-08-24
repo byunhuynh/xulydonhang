@@ -3,6 +3,7 @@ package processing
 import (
 	"context"
 	"errors"
+	"fmt"
 	"path/filepath"
 	"testing"
 
@@ -94,13 +95,80 @@ func TestRealProcessorStreamsEachCompletedSegment(t *testing.T) {
 		if emitted[i].ResultKey != row.ResultKey {
 			t.Errorf("emitted row %d ResultKey = %q, want returned row's %q", i, emitted[i].ResultKey, row.ResultKey)
 		}
-		wantKey := row.FileName + "|" + row.Page + "|" + row.PO
+		wantKey := orderResultKey(SourceIDForPath(fixturePath), fmt.Sprintf("page:%d:segment:1", i+1), row.PO)
 		if row.ResultKey != wantKey {
 			t.Errorf("returned row %d ResultKey = %q, want %q", i, row.ResultKey, wantKey)
 		}
 	}
 	if emitted[1].StatusKind != StatusKindFailed {
 		t.Fatalf("second emitted row StatusKind = %q, want %q", emitted[1].StatusKind, StatusKindFailed)
+	}
+}
+
+func TestRealProcessor_ResultIdentityDistinguishesDuplicateFailedSegments(t *testing.T) {
+	store, err := productdata.Load("productdata/testdata/data.xlsx")
+	if err != nil {
+		t.Fatalf("Load productdata failed: %v", err)
+	}
+	fixturePath := filepath.Join(t.TempDir(), "duplicate-failures.pdf")
+	if err := api.MergeCreateFile([]string{"testdata/sample_coop_order.pdf", "testdata/sample_coop_order.pdf"}, fixturePath, false, nil); err != nil {
+		t.Fatalf("build two-page fixture: %v", err)
+	}
+
+	rp := &RealProcessor{
+		Store: store,
+		Pricing: &failAfterFirstStreamPricingSource{
+			index: pricing.ParseIndex(nil),
+			fail:  true,
+		},
+		ExcelPath: copyTestWorkbookForProcessor(t),
+	}
+	rows, err := rp.Process(context.Background(), fixturePath, 1)
+	if err != nil {
+		t.Fatalf("Process returned error: %v", err)
+	}
+	if len(rows) != 2 {
+		t.Fatalf("Process returned %d rows, want two failed physical pages: %+v", len(rows), rows)
+	}
+	if rows[0].StatusKind != StatusKindFailed || rows[1].StatusKind != StatusKindFailed {
+		t.Fatalf("rows = %+v, want two failed rows", rows)
+	}
+	if rows[0].Page != "1/1" || rows[1].Page != "1/1" || rows[0].PO != "" || rows[1].PO != "" {
+		t.Fatalf("fixture no longer reproduces duplicate display identity: %+v", rows)
+	}
+	if rows[0].SourceID == "" || rows[0].SourceID != rows[1].SourceID {
+		t.Fatalf("SourceID values = %q, %q; want one stable non-empty source", rows[0].SourceID, rows[1].SourceID)
+	}
+	if rows[0].ResultKey == rows[1].ResultKey {
+		t.Fatalf("duplicate failed physical pages collapsed to ResultKey %q", rows[0].ResultKey)
+	}
+}
+
+func TestRealProcessor_SourceIdentityDistinguishesSameBasenamePaths(t *testing.T) {
+	left := filepath.Join(t.TempDir(), "same.pdf")
+	right := filepath.Join(t.TempDir(), "same.pdf")
+	rp := &RealProcessor{}
+
+	leftRows, err := rp.Process(context.Background(), left, 1)
+	if err != nil {
+		t.Fatalf("left Process returned error: %v", err)
+	}
+	rightRows, err := rp.Process(context.Background(), right, 1)
+	if err != nil {
+		t.Fatalf("right Process returned error: %v", err)
+	}
+	if len(leftRows) != 1 || len(rightRows) != 1 {
+		t.Fatalf("left/right rows = %d/%d, want one file-level failure each", len(leftRows), len(rightRows))
+	}
+	leftRow, rightRow := leftRows[0], rightRows[0]
+	if leftRow.FileName != "same.pdf" || rightRow.FileName != "same.pdf" {
+		t.Fatalf("display filenames changed: %q, %q", leftRow.FileName, rightRow.FileName)
+	}
+	if leftRow.SourceID == "" || rightRow.SourceID == "" || leftRow.SourceID == rightRow.SourceID {
+		t.Fatalf("SourceID values = %q, %q; want distinct non-empty source identities", leftRow.SourceID, rightRow.SourceID)
+	}
+	if leftRow.ResultKey == rightRow.ResultKey {
+		t.Fatalf("same-basename sources collapsed to ResultKey %q", leftRow.ResultKey)
 	}
 }
 

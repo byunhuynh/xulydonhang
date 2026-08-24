@@ -92,7 +92,7 @@ type pendingBigcStore struct {
 func (p *RealProcessor) processBigcDocument(filePath string, pageTexts []string, emit func(OrderRow)) ([]OrderRow, error) {
 	poNumber, entryDate, cancelDate, ok := bigc.ParseOrderInfo(pageTexts[0])
 	if !ok {
-		return []OrderRow{emitOrderRow(emit, OrderRow{
+		return []OrderRow{emitIdentifiedOrderRow(emit, filePath, "page:1", OrderRow{
 			FileName: filepath.Base(filePath), Page: fmt.Sprintf("1/%d", len(pageTexts)), System: "BigC",
 			Status: StatusFailed + " - không tách được số PO/ngày đặt hàng từ trang 0", StatusKind: StatusKindFailed,
 		})}, nil
@@ -105,7 +105,7 @@ func (p *RealProcessor) processBigcDocument(filePath string, pageTexts []string,
 
 	priceIndex, err := p.Pricing.FetchIndex("BIGC")
 	if err != nil {
-		return []OrderRow{emitOrderRow(emit, OrderRow{
+		return []OrderRow{emitIdentifiedOrderRow(emit, filePath, "page:1", OrderRow{
 			FileName: filepath.Base(filePath), Page: fmt.Sprintf("1/%d", len(pageTexts)), System: "BigC",
 			Status: fmt.Sprintf("%s - không tải được giá/khuyến mãi: %v", StatusFailed, err), StatusKind: StatusKindFailed,
 		})}, nil
@@ -123,7 +123,7 @@ func (p *RealProcessor) processBigcDocument(filePath string, pageTexts []string,
 			customerCode, deliveryWarehouse, description, warehouse, region, statCode, !headerWritten)
 
 		if result.err != nil {
-			orderRows = append(orderRows, emitOrderRow(emit, OrderRow{
+			orderRows = append(orderRows, emitIdentifiedOrderRow(emit, filePath, fmt.Sprintf("page:%d", pageIdx+1), OrderRow{
 				FileName: filepath.Base(filePath), Page: pageLabel, System: "BigC",
 				Status: fmt.Sprintf("%s - %v", StatusFailed, result.err), StatusKind: StatusKindFailed,
 			}))
@@ -171,7 +171,8 @@ func (p *RealProcessor) processBigcDocument(filePath string, pageTexts []string,
 		provisional := finalRow
 		provisional.Status = StatusProcessing
 		provisional.StatusKind = StatusKindProcessing
-		provisional = emitOrderRow(emit, provisional)
+		provisional = emitIdentifiedOrderRow(emit, filePath, fmt.Sprintf("page:%d", pageIdx+1), provisional)
+		finalRow.SourceID = provisional.SourceID
 		finalRow.ResultKey = provisional.ResultKey
 		orderRows = append(orderRows, finalRow)
 		pending = append(pending, pendingBigcStore{

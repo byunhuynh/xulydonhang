@@ -65,17 +65,20 @@ func TestJITStreamingBatchesWorkbookRowsAndFinalizesAbsoluteRows(t *testing.T) {
 		t.Fatalf("emitted %d events, want processing/processing/done/done: %+v", len(events), events)
 	}
 
-	base := filepath.Base(filePath)
+	sourceID := SourceIDForPath(filePath)
 	wantKeys := []string{
-		orderResultKey(base, "1/2", "2608246E2455ST"),
-		orderResultKey(base, "2/2", "2608246E2455ST"),
-		orderResultKey(base, "1/2", "2608246E2455ST"),
-		orderResultKey(base, "2/2", "2608246E2455ST"),
+		orderResultKey(sourceID, "page:1", "2608246E2455ST"),
+		orderResultKey(sourceID, "page:2", "2608246E2455ST"),
+		orderResultKey(sourceID, "page:1", "2608246E2455ST"),
+		orderResultKey(sourceID, "page:2", "2608246E2455ST"),
 	}
 	wantStatuses := []string{StatusKindProcessing, StatusKindProcessing, StatusKindDone, StatusKindDone}
 	for i := range events {
 		if events[i].ResultKey != wantKeys[i] || events[i].StatusKind != wantStatuses[i] {
 			t.Errorf("event %d = key %q status %q, want key %q status %q", i, events[i].ResultKey, events[i].StatusKind, wantKeys[i], wantStatuses[i])
+		}
+		if events[i].SourceID != sourceID {
+			t.Errorf("event %d SourceID = %q, want stable source %q across provisional/final updates", i, events[i].SourceID, sourceID)
 		}
 	}
 	for i, row := range rows {
@@ -85,6 +88,9 @@ func TestJITStreamingBatchesWorkbookRowsAndFinalizesAbsoluteRows(t *testing.T) {
 		}
 		if row.ResultKey != wantKeys[i] || row.StatusKind != StatusKindDone {
 			t.Errorf("returned page %d = key %q status %q, want key %q status done", i+1, row.ResultKey, row.StatusKind, wantKeys[i])
+		}
+		if row.SourceID != sourceID {
+			t.Errorf("returned page %d SourceID = %q, want %q", i+1, row.SourceID, sourceID)
 		}
 	}
 
@@ -130,10 +136,10 @@ func TestJITCombinedWriteFailureFinalizesEveryProvisionalKey(t *testing.T) {
 		t.Fatalf("returned %d rows and emitted %d events, want 2 final rows and 4 events: rows=%+v events=%+v", len(rows), len(events), rows, events)
 	}
 
-	base := filepath.Base(filePath)
+	sourceID := SourceIDForPath(filePath)
 	wantKeys := []string{
-		orderResultKey(base, "1/2", "2608246E2455ST"),
-		orderResultKey(base, "2/2", "2608246E2455ST"),
+		orderResultKey(sourceID, "page:1", "2608246E2455ST"),
+		orderResultKey(sourceID, "page:2", "2608246E2455ST"),
 	}
 	for i, key := range wantKeys {
 		if events[i].ResultKey != key || events[i].StatusKind != StatusKindProcessing {

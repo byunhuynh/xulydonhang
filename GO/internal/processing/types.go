@@ -64,6 +64,7 @@ type PromoItemSummary struct {
 // gốc: Tên file, Trang, Hệ thống, Mã khách hàng, PO, Đơn giá, Trạng thái.
 type OrderRow struct {
 	FileName    string `json:"fileName"`
+	SourceID    string `json:"sourceId"`
 	Page        string `json:"page"`
 	System      string `json:"system"`
 	MaKhachHang string `json:"maKhachHang"`

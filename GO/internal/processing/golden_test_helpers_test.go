@@ -133,7 +133,7 @@ func compareRowsAgainstFixture(t *testing.T, excelPath string, fixture fixtureDa
 		commentedCells[c.Cell] = true
 	}
 
-	textColumns := []string{"A", "B", "C", "D", "E", "G", "L", "Q", "S", "T", "U", "V", "AJ", "AM", "AO", "AP", "AQ"}
+	textColumns := []string{"A", "B", "C", "D", "E", "G", "L", "Q", "S", "T", "U", "V", "AJ", "AM", "AN", "AO", "AP", "AQ"}
 	floatColumns := []string{"X", "Y", "AT"}
 	intColumns := []string{"AE", "AU", "AV"}
 
@@ -152,6 +152,19 @@ func compareRowsAgainstFixture(t *testing.T, excelPath string, fixture fixtureDa
 		}
 
 		for _, col := range textColumns {
+			// AN (SiteCode) is a newer column: only Emart's/BigC's own
+			// generate_fixtures.py capture it (Emart's COLUMNS list has
+			// "AN"; older vendors' - and BigC's own, pending a fixture
+			// regen - do not). A fixture that never captured AN has no key
+			// at all in expectedRow, which must NOT be treated as "want
+			// empty" - that would flag every real (non-empty) AN value
+			// this port now writes as a mismatch against ground truth that
+			// was simply never recorded, not against a real Python "".
+			if col == "AN" {
+				if _, captured := expectedRow["AN"]; !captured {
+					continue
+				}
+			}
 			expected := stringify(expectedRow[col])
 			got := cell(col)
 			if isAllowed(i, col) {

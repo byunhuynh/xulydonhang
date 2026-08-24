@@ -3,9 +3,7 @@ package fileset
 import (
 	"os"
 	"path/filepath"
-	"strings"
 	"testing"
-	"time"
 )
 
 func TestFilterValid_KeepsOnlyAllowedExtensions(t *testing.T) {
@@ -20,24 +18,6 @@ func TestFilterValid_KeepsOnlyAllowedExtensions(t *testing.T) {
 		if got[i] != want[i] {
 			t.Fatalf("FilterValid(%v) = %v, want %v", input, got, want)
 		}
-	}
-}
-
-func TestEnsureMonthlyFolder_CreatesBaseAndMonthlyDir(t *testing.T) {
-	base := filepath.Join(t.TempDir(), "đơn hàng")
-	now := time.Date(2026, 8, 13, 0, 0, 0, 0, time.UTC)
-
-	got, err := EnsureMonthlyFolder(base, now)
-	if err != nil {
-		t.Fatalf("EnsureMonthlyFolder returned error: %v", err)
-	}
-
-	wantSuffix := filepath.Join("đơn hàng", "08-2026")
-	if !strings.HasSuffix(got, wantSuffix) {
-		t.Fatalf("EnsureMonthlyFolder = %q, want suffix %q", got, wantSuffix)
-	}
-	if info, err := os.Stat(got); err != nil || !info.IsDir() {
-		t.Fatalf("expected %q to be a directory, stat err: %v", got, err)
 	}
 }
 

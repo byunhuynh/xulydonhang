@@ -4,7 +4,6 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"time"
 )
 
 var allowedExtensions = map[string]bool{
@@ -27,19 +26,6 @@ func FilterValid(paths []string) []string {
 		}
 	}
 	return valid
-}
-
-// EnsureMonthlyFolder đảm bảo baseDir và baseDir/MM-YYYY (theo `now`) tồn
-// tại, tự tạo nếu thiếu, trả về đường dẫn tuyệt đối tới thư mục tháng-năm.
-func EnsureMonthlyFolder(baseDir string, now time.Time) (string, error) {
-	if err := os.MkdirAll(baseDir, 0o755); err != nil {
-		return "", err
-	}
-	monthly := filepath.Join(baseDir, now.Format("01-2006"))
-	if err := os.MkdirAll(monthly, 0o755); err != nil {
-		return "", err
-	}
-	return filepath.Abs(monthly)
 }
 
 // ListFiles trả về đường dẫn tuyệt đối các file (không gồm thư mục con)

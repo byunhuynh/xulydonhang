@@ -166,7 +166,7 @@ func (p *RealProcessor) processJITAirWaybillDocument(filePath, warehouseCode, or
 		pageLabel := fmt.Sprintf("%d/%d", pageIdx+1, len(texts))
 		if parseErr != nil {
 			p.emitJITLog(fmt.Sprintf("❌ JIT [%s] không đọc được đơn: %v", pageLabel, parseErr))
-			result[pageIdx] = emitOrderRow(emit, OrderRow{FileName: filepath.Base(filePath), Page: pageLabel, System: "JIT-CHOICE", Status: fmt.Sprintf("%s - %v", StatusFailed, parseErr), StatusKind: StatusKindFailed})
+			result[pageIdx] = emitIdentifiedOrderRow(emit, filePath, fmt.Sprintf("page:%d", pageIdx+1), OrderRow{FileName: filepath.Base(filePath), Page: pageLabel, System: "JIT-CHOICE", Status: fmt.Sprintf("%s - %v", StatusFailed, parseErr), StatusKind: StatusKindFailed})
 			continue
 		}
 		p.emitJITLog(fmt.Sprintf("🚀 JIT [%s] PO: %s | MVĐ: %s", pageLabel, po, tracking))
@@ -180,7 +180,7 @@ func (p *RealProcessor) processJITAirWaybillDocument(filePath, warehouseCode, or
 			sku, mapped := resolveJITProductSku(p.Store, product.Barcode)
 			if !mapped {
 				p.emitJITLog(fmt.Sprintf("❌ JIT [%s] PO: %s | không ánh xạ được sản phẩm %q", pageLabel, po, product.Barcode))
-				result[pageIdx] = emitOrderRow(emit, OrderRow{FileName: filepath.Base(filePath), Page: pageLabel, System: "JIT-CHOICE", PO: po, MaVanDon: tracking, Status: fmt.Sprintf("%s - không ánh xạ được sản phẩm %q", StatusFailed, product.Barcode), StatusKind: StatusKindFailed})
+				result[pageIdx] = emitIdentifiedOrderRow(emit, filePath, fmt.Sprintf("page:%d", pageIdx+1), OrderRow{FileName: filepath.Base(filePath), Page: pageLabel, System: "JIT-CHOICE", PO: po, MaVanDon: tracking, Status: fmt.Sprintf("%s - không ánh xạ được sản phẩm %q", StatusFailed, product.Barcode), StatusKind: StatusKindFailed})
 				excelRows = nil
 				break
 			}
@@ -189,7 +189,7 @@ func (p *RealProcessor) processJITAirWaybillDocument(filePath, warehouseCode, or
 			unitPrice, priceErr := strconv.ParseFloat(strings.ReplaceAll(priceText, ",", ""), 64)
 			if !foundPrice || priceErr != nil || unitPrice <= 0 {
 				p.emitJITLog(fmt.Sprintf("❌ JIT [%s] PO: %s | không tìm thấy đơn giá hợp lệ cho SKU %s", pageLabel, po, sku))
-				result[pageIdx] = emitOrderRow(emit, OrderRow{FileName: filepath.Base(filePath), Page: pageLabel, System: "JIT-CHOICE", PO: po, MaVanDon: tracking, Status: fmt.Sprintf("%s - không tìm thấy đơn giá JIT hợp lệ cho SKU %s", StatusFailed, sku), StatusKind: StatusKindFailed})
+				result[pageIdx] = emitIdentifiedOrderRow(emit, filePath, fmt.Sprintf("page:%d", pageIdx+1), OrderRow{FileName: filepath.Base(filePath), Page: pageLabel, System: "JIT-CHOICE", PO: po, MaVanDon: tracking, Status: fmt.Sprintf("%s - không tìm thấy đơn giá JIT hợp lệ cho SKU %s", StatusFailed, sku), StatusKind: StatusKindFailed})
 				excelRows = nil
 				break
 			}
@@ -226,7 +226,8 @@ func (p *RealProcessor) processJITAirWaybillDocument(filePath, warehouseCode, or
 		provisional := finalRow
 		provisional.Status = StatusProcessing
 		provisional.StatusKind = StatusKindProcessing
-		provisional = emitOrderRow(emit, provisional)
+		provisional = emitIdentifiedOrderRow(emit, filePath, fmt.Sprintf("page:%d", pageIdx+1), provisional)
+		finalRow.SourceID = provisional.SourceID
 		finalRow.ResultKey = provisional.ResultKey
 
 		pending = append(pending, jitAirWaybillPageResult{

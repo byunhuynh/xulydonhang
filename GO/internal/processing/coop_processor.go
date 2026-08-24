@@ -44,16 +44,16 @@ func (p *RealProcessor) Process(ctx context.Context, filePath string, stt int) (
 	return p.process(ctx, filePath, stt, nil)
 }
 
+// ProcessStreaming keeps Process's result while reporting each row at the
+// same return boundary. Vendor-loop timing is introduced separately.
 func (p *RealProcessor) ProcessStreaming(ctx context.Context, filePath string, stt int, emit func(OrderRow)) ([]OrderRow, error) {
 	return p.process(ctx, filePath, stt, emit)
 }
 
-func orderResultKey(fileName, page, po string) string {
-	return fileName + "|" + page + "|" + po
-}
-
 func emitOrderRow(emit func(OrderRow), row OrderRow) OrderRow {
-	row.ResultKey = orderResultKey(row.FileName, row.Page, row.PO)
+	if row.ResultKey == "" {
+		row.ResultKey = orderResultKey(row.SourceID, row.Page, row.PO)
+	}
 	if emit != nil {
 		emit(row)
 	}
@@ -63,7 +63,7 @@ func emitOrderRow(emit func(OrderRow), row OrderRow) OrderRow {
 func (p *RealProcessor) process(ctx context.Context, filePath string, stt int, emit func(OrderRow)) ([]OrderRow, error) {
 	pageTexts, pageNumbers, err := extractPageTexts(filePath)
 	if err != nil {
-		row := emitOrderRow(emit, OrderRow{
+		row := emitIdentifiedOrderRow(emit, filePath, "file", OrderRow{
 			FileName:   filepath.Base(filePath),
 			Status:     StatusFailed + " - không đọc được PDF: " + err.Error(),
 			StatusKind: StatusKindFailed,
@@ -74,7 +74,7 @@ func (p *RealProcessor) process(ctx context.Context, filePath string, stt int, e
 	if warehouse, orderDate, ok := parseJITAirWaybillFilename(filePath); ok {
 		rows, jitErr := p.processJITAirWaybillDocument(filePath, warehouse, orderDate, emit)
 		if jitErr != nil {
-			row := emitOrderRow(emit, OrderRow{FileName: filepath.Base(filePath), System: "JIT-CHOICE", Status: fmt.Sprintf("%s - %v", StatusFailed, jitErr), StatusKind: StatusKindFailed})
+			row := emitIdentifiedOrderRow(emit, filePath, "file", OrderRow{FileName: filepath.Base(filePath), System: "JIT-CHOICE", Status: fmt.Sprintf("%s - %v", StatusFailed, jitErr), StatusKind: StatusKindFailed})
 			rows = []OrderRow{row}
 		}
 		return rows, nil
@@ -95,13 +95,14 @@ func (p *RealProcessor) process(ctx context.Context, filePath string, stt int, e
 	var rows []OrderRow
 	for pageIdx, text := range pageTexts {
 		pageLabel := fmt.Sprintf("%d/%d", pageIdx+1, len(pageTexts))
+		physicalPage := pageNumbers[pageIdx]
 		v := vendor.Identify(text)
 
 		switch v {
 		case "Coop":
 			segments, ok := splitPageIntoPOs(text)
 			if !ok {
-				rows = append(rows, emitOrderRow(emit, OrderRow{
+				rows = append(rows, emitIdentifiedOrderRow(emit, filePath, fmt.Sprintf("page:%d:segment:0", physicalPage), OrderRow{
 					FileName: filepath.Base(filePath), Page: pageLabel, System: "Coop",
 					Status: StatusFailed + " - không đếm khớp số đơn trên trang", StatusKind: StatusKindFailed,
 				}))
@@ -111,58 +112,58 @@ func (p *RealProcessor) process(ctx context.Context, filePath string, stt int, e
 				segLabel := fmt.Sprintf("%d/%d", segIdx+1, len(segments))
 				row, err := p.processSegment(filePath, pageNumbers[pageIdx], segment, segLabel)
 				if err != nil {
-					rows = append(rows, emitOrderRow(emit, OrderRow{
+					rows = append(rows, emitIdentifiedOrderRow(emit, filePath, fmt.Sprintf("page:%d:segment:%d", physicalPage, segIdx+1), OrderRow{
 						FileName: filepath.Base(filePath), Page: segLabel, System: "Coop",
 						Status: fmt.Sprintf("%s - %v", StatusFailed, err), StatusKind: StatusKindFailed,
 					}))
 					continue
 				}
-				rows = append(rows, emitOrderRow(emit, row))
+				rows = append(rows, emitIdentifiedOrderRow(emit, filePath, fmt.Sprintf("page:%d:segment:%d", physicalPage, segIdx+1), row))
 			}
 
 		case "Lotte":
 			row, err := p.processLotteSegment(filePath, pageNumbers[pageIdx], text, pageLabel)
 			if err != nil {
-				rows = append(rows, emitOrderRow(emit, OrderRow{
+				rows = append(rows, emitIdentifiedOrderRow(emit, filePath, fmt.Sprintf("page:%d:segment:1", physicalPage), OrderRow{
 					FileName: filepath.Base(filePath), Page: pageLabel, System: "Lotte",
 					Status: fmt.Sprintf("%s - %v", StatusFailed, err), StatusKind: StatusKindFailed,
 				}))
 				continue
 			}
-			rows = append(rows, emitOrderRow(emit, row))
+			rows = append(rows, emitIdentifiedOrderRow(emit, filePath, fmt.Sprintf("page:%d:segment:1", physicalPage), row))
 
 		case "Satra":
 			row, err := p.processSatraSegment(filePath, pageNumbers[pageIdx], text, pageLabel)
 			if err != nil {
-				rows = append(rows, emitOrderRow(emit, OrderRow{
+				rows = append(rows, emitIdentifiedOrderRow(emit, filePath, fmt.Sprintf("page:%d:segment:1", physicalPage), OrderRow{
 					FileName: filepath.Base(filePath), Page: pageLabel, System: "Satra",
 					Status: fmt.Sprintf("%s - %v", StatusFailed, err), StatusKind: StatusKindFailed,
 				}))
 				continue
 			}
-			rows = append(rows, emitOrderRow(emit, row))
+			rows = append(rows, emitIdentifiedOrderRow(emit, filePath, fmt.Sprintf("page:%d:segment:1", physicalPage), row))
 
 		case "Emart":
 			row, err := p.processEmartSegment(filePath, pageNumbers[pageIdx], text, pageLabel)
 			if err != nil {
-				rows = append(rows, emitOrderRow(emit, OrderRow{
+				rows = append(rows, emitIdentifiedOrderRow(emit, filePath, fmt.Sprintf("page:%d:segment:1", physicalPage), OrderRow{
 					FileName: filepath.Base(filePath), Page: pageLabel, System: "Emart",
 					Status: fmt.Sprintf("%s - %v", StatusFailed, err), StatusKind: StatusKindFailed,
 				}))
 				continue
 			}
-			rows = append(rows, emitOrderRow(emit, row))
+			rows = append(rows, emitIdentifiedOrderRow(emit, filePath, fmt.Sprintf("page:%d:segment:1", physicalPage), row))
 
 		case "Kingfood":
 			row, err := p.processKingfoodSegment(filePath, pageNumbers[pageIdx], text, pageLabel)
 			if err != nil {
-				rows = append(rows, emitOrderRow(emit, OrderRow{
+				rows = append(rows, emitIdentifiedOrderRow(emit, filePath, fmt.Sprintf("page:%d:segment:1", physicalPage), OrderRow{
 					FileName: filepath.Base(filePath), Page: pageLabel, System: "Kingfood",
 					Status: fmt.Sprintf("%s - %v", StatusFailed, err), StatusKind: StatusKindFailed,
 				}))
 				continue
 			}
-			rows = append(rows, emitOrderRow(emit, row))
+			rows = append(rows, emitIdentifiedOrderRow(emit, filePath, fmt.Sprintf("page:%d:segment:1", physicalPage), row))
 
 		case "Winmart":
 			// Re-extract this page's text with extractWinmartPageText
@@ -182,42 +183,42 @@ func (p *RealProcessor) process(ctx context.Context, filePath string, stt int, e
 			}
 			row, err := p.processWinmartSegment(filePath, pageNumbers[pageIdx], winmartText, pageLabel)
 			if err != nil {
-				rows = append(rows, emitOrderRow(emit, OrderRow{
+				rows = append(rows, emitIdentifiedOrderRow(emit, filePath, fmt.Sprintf("page:%d:segment:1", physicalPage), OrderRow{
 					FileName: filepath.Base(filePath), Page: pageLabel, System: "Winmart",
 					Status: fmt.Sprintf("%s - %v", StatusFailed, err), StatusKind: StatusKindFailed,
 				}))
 				continue
 			}
-			rows = append(rows, emitOrderRow(emit, row))
+			rows = append(rows, emitIdentifiedOrderRow(emit, filePath, fmt.Sprintf("page:%d:segment:1", physicalPage), row))
 
 		case "FujiMart":
 			row, err := p.processFujimartSegment(filePath, pageNumbers[pageIdx], text, pageLabel)
 			if err != nil {
-				rows = append(rows, emitOrderRow(emit, OrderRow{
+				rows = append(rows, emitIdentifiedOrderRow(emit, filePath, fmt.Sprintf("page:%d:segment:1", physicalPage), OrderRow{
 					FileName: filepath.Base(filePath), Page: pageLabel, System: "FujiMart",
 					Status: fmt.Sprintf("%s - %v", StatusFailed, err), StatusKind: StatusKindFailed,
 				}))
 				continue
 			}
-			rows = append(rows, emitOrderRow(emit, row))
+			rows = append(rows, emitIdentifiedOrderRow(emit, filePath, fmt.Sprintf("page:%d:segment:1", physicalPage), row))
 
 		case "JMart":
 			row, err := p.processJMartSegment(filePath, pageNumbers[pageIdx], text, pageLabel)
 			if err != nil {
-				rows = append(rows, emitOrderRow(emit, OrderRow{
+				rows = append(rows, emitIdentifiedOrderRow(emit, filePath, fmt.Sprintf("page:%d:segment:1", physicalPage), OrderRow{
 					FileName: filepath.Base(filePath), Page: pageLabel, System: "JMart",
 					Status: fmt.Sprintf("%s - %v", StatusFailed, err), StatusKind: StatusKindFailed,
 				}))
 				continue
 			}
-			rows = append(rows, emitOrderRow(emit, row))
+			rows = append(rows, emitIdentifiedOrderRow(emit, filePath, fmt.Sprintf("page:%d:segment:1", physicalPage), row))
 
 		default:
 			reason := "không nhận diện được nhà cung cấp"
 			if v != "" {
 				reason = "nhà cung cấp " + v + " chưa được hỗ trợ"
 			}
-			rows = append(rows, emitOrderRow(emit, OrderRow{
+			rows = append(rows, emitIdentifiedOrderRow(emit, filePath, fmt.Sprintf("page:%d:segment:1", physicalPage), OrderRow{
 				FileName: filepath.Base(filePath), Page: pageLabel, System: v,
 				Status: StatusFailed + " - " + reason, StatusKind: StatusKindFailed,
 			}))
@@ -228,8 +229,12 @@ func (p *RealProcessor) process(ctx context.Context, filePath string, stt int, e
 }
 
 func emitRows(emit func(OrderRow), rows []OrderRow) {
-	if emit == nil { return }
-	for _, row := range rows { emit(row) }
+	if emit == nil {
+		return
+	}
+	for _, row := range rows {
+		emit(row)
+	}
 }
 
 func splitPageIntoPOs(text string) ([]string, bool) {
@@ -518,10 +523,10 @@ func (p *RealProcessor) processSegment(filePath string, realPageNum int, text, p
 		FileName: filepath.Base(filePath), Page: pageLabel, System: system, MaKhachHang: customerCode,
 		PO: info.PONumber, DonGia: fmt.Sprintf("%.0f", totalValue), Status: statusText, StatusKind: statusKind,
 		DriveURL: driveURL,
-		ShipTo: shipTo, EntryDate: entryDate, CancelDate: cancelDate,
+		ShipTo:   shipTo, EntryDate: entryDate, CancelDate: cancelDate,
 		TotalWeightKg: totalWeightFormatted, TotalPackages: totalPackages,
 		PromoItems: finalizePromoItems(promoTotals),
-		SkuLog: skuLog, PriceMismatchCount: saigia, PriceMismatchDetails: mismatchDetails,
+		SkuLog:     skuLog, PriceMismatchCount: saigia, PriceMismatchDetails: mismatchDetails,
 	}, nil
 }
 
