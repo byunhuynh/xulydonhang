@@ -74,10 +74,12 @@ export function buildPriceBasisForPO(
 }
 
 // buildZaloMessage's processedAt is the frontend's own "row just
-// arrived" timestamp (captured by the caller when the row first showed
-// up in the table) - a fair, honest stand-in for Python's real
-// server-side start_time, which this preview-only feature (no real
-// send integration yet) has no equivalent moment to record from.
+// arrived" timestamp (stamped into appStore.receivedAt when the row first
+// showed up in the table) - a fair, honest stand-in for Python's real
+// server-side start_time, which the Go pipeline has no equivalent moment
+// to record from. Both the preview modal and the real send read that one
+// stamped value, so the message the customer receives carries exactly the
+// timestamp the user reviewed.
 //
 // priceBasisBySku tells, for each mismatched SKU (keyed by its own
 // excelRow, matching ResultTable's own resolvedChoice key), which price

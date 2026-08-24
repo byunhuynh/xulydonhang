@@ -13,11 +13,15 @@ interface AppState {
   lockStatus: LockStatus
   selectedPOs: Set<string>
   resolvedChoice: Record<string, PriceBasis>
+  receivedAt: Record<number, string>
   togglePOSelection: (po: string) => void
   toggleAllPOs: (allPOs: string[], checked: boolean) => void
   clearSelection: () => void
+  deselectPO: (po: string) => void
   setResolvedChoice: (key: string, choice: PriceBasis) => void
   clearResolvedChoice: () => void
+  stampReceivedAt: (rowIndex: number, time: string) => void
+  clearReceivedAt: () => void
   setFiles: (files: string[]) => void
   addFiles: (files: string[]) => void
   removeFiles: (files: string[]) => void
@@ -44,6 +48,15 @@ export const useAppStore = create<AppState>((set) => ({
   lockStatus: 'checking',
   selectedPOs: new Set(),
   resolvedChoice: {},
+  // Wall-clock moment each row FIRST appeared in the results table, keyed
+  // by row index - the frontend's stand-in for a server-side "finished
+  // processing at" timestamp. Shared state (not a ResultTable ref) because
+  // TWO places must show the SAME instant for one PO: the "Xem nội dung
+  // Zalo" preview modal and the message ControlPanel actually sends. When
+  // ControlPanel stamped its own new Date() at send time, the customer
+  // received a different (and mislabelled - "processed at", but really
+  // "sent at") time than the one the user reviewed in the preview.
+  receivedAt: {},
   setFiles: (files) => set({ files }),
   addFiles: (newFiles) =>
     set((state) => ({
@@ -93,7 +106,27 @@ export const useAppStore = create<AppState>((set) => ({
     }),
   toggleAllPOs: (allPOs, checked) => set({ selectedPOs: checked ? new Set(allPOs) : new Set() }),
   clearSelection: () => set({ selectedPOs: new Set() }),
+  // Unconditional removal of exactly one PO, unlike togglePOSelection.
+  // Driven by the backend's zalo:sent event for POs that ACTUALLY sent, so
+  // the ones that failed stay ticked and can be retried without re-sending
+  // to the groups that already received the message.
+  deselectPO: (po) =>
+    set((state) => {
+      if (!state.selectedPOs.has(po)) return state
+      const next = new Set(state.selectedPOs)
+      next.delete(po)
+      return { selectedPOs: next }
+    }),
   setResolvedChoice: (key, choice) =>
     set((state) => ({ resolvedChoice: { ...state.resolvedChoice, [key]: choice } })),
   clearResolvedChoice: () => set({ resolvedChoice: {} }),
+  // Stamp-once semantics: the first sighting of a row index wins and later
+  // calls are a no-op, so a row's timestamp never drifts on re-render.
+  // Returning the untouched state (not a fresh object) means zustand skips
+  // notifying subscribers at all for those no-op calls.
+  stampReceivedAt: (rowIndex, time) =>
+    set((state) =>
+      state.receivedAt[rowIndex] ? state : { receivedAt: { ...state.receivedAt, [rowIndex]: time } },
+    ),
+  clearReceivedAt: () => set({ receivedAt: {} }),
 }))

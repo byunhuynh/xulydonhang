@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useRef, useState } from 'react'
+import { Fragment, useEffect, useState } from 'react'
 import {
   FaCircle,
   FaCheck,
@@ -101,19 +101,21 @@ export function ResultTable() {
   const appendLog = useAppStore((s) => s.appendLog)
 
   // Stamps the wall-clock moment each row FIRST appears in the table -
-  // the honest stand-in this preview-only feature (no real Zalo send
-  // integration exists yet) has for Python's server-side start_time,
-  // which was recorded at the moment that PO's processing actually
-  // finished. A ref (not state) since it's read-only content for the
-  // popup, never something a re-render needs to react to.
-  const receivedAtRef = useRef<Record<number, string>>({})
+  // the honest stand-in this feature has for Python's server-side
+  // start_time, which was recorded at the moment that PO's processing
+  // actually finished. Lives in appStore rather than a local ref because
+  // ControlPanel must send the message with the exact timestamp the
+  // preview modal here showed the user - see the store's own doc comment.
+  const receivedAt = useAppStore((s) => s.receivedAt)
+  const stampReceivedAt = useAppStore((s) => s.stampReceivedAt)
+  const clearReceivedAt = useAppStore((s) => s.clearReceivedAt)
   useEffect(() => {
     rows.forEach((_, i) => {
-      if (!receivedAtRef.current[i]) {
-        receivedAtRef.current[i] = new Date().toLocaleTimeString('vi-VN', { hour12: false })
-      }
+      // Stamp-once is enforced by the store action, so re-running this on
+      // every rows change only ever stamps the newly arrived rows.
+      stampReceivedAt(i, new Date().toLocaleTimeString('vi-VN', { hour12: false }))
     })
-  }, [rows])
+  }, [rows, stampReceivedAt])
 
   // A new batch calls resetRows() (see ControlPanel), which empties this
   // array before new rows stream in — that's the right moment to clear
@@ -126,9 +128,9 @@ export function ResultTable() {
       clearResolvedChoice()
       setContentModalGroups(null)
       clearSelection()
-      receivedAtRef.current = {}
+      clearReceivedAt()
     }
-  }, [rows.length, clearResolvedChoice, clearSelection])
+  }, [rows.length, clearResolvedChoice, clearSelection, clearReceivedAt])
 
   function handleCopy(key: string, value: string) {
     navigator.clipboard.writeText(value).catch(() => {})
@@ -456,7 +458,7 @@ export function ResultTable() {
         return (
           <OrderContentModal
             groups={contentModalGroups}
-            processedAt={receivedAtRef.current[firstRowIndex] ?? ''}
+            processedAt={receivedAt[firstRowIndex] ?? ''}
             priceBasisBySku={combinedPriceBasis}
             onClose={() => setContentModalGroups(null)}
           />

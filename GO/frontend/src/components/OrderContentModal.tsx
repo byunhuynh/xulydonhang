@@ -50,7 +50,7 @@ export function OrderContentModal({
             <h3 className="text-sm font-bold text-ink">
               {isSingle ? `Nội dung tin nhắn — ${groups[0].po || groups[0].rows[0]?.fileName}` : `Nội dung tin nhắn — ${groups.length} đơn đã chọn`}
             </h3>
-            <p className="text-[11px] text-muted">Xem trước tin nhắn Zalo sẽ gửi cho khách (chưa gửi thật)</p>
+            <p className="text-[11px] text-muted">Xem trước tin nhắn Zalo sẽ gửi cho khách</p>
           </div>
           <button
             onClick={onClose}

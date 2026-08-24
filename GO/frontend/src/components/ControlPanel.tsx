@@ -15,6 +15,7 @@ export function ControlPanel() {
   const rows = useAppStore((s) => s.rows)
   const selectedPOs = useAppStore((s) => s.selectedPOs)
   const resolvedChoice = useAppStore((s) => s.resolvedChoice)
+  const receivedAt = useAppStore((s) => s.receivedAt)
 
   useEffect(() => {
     GetSTT()
@@ -55,7 +56,13 @@ export function ControlPanel() {
       const indices = rowsForPO(po)
       const poRows = indices.map((idx) => rows[idx])
       const priceBasis = buildPriceBasisForPO(rows, indices, resolvedChoice)
-      const processedAt = new Date().toLocaleTimeString('vi-VN', { hour12: false })
+      // Đúng mốc giờ đã được đóng dấu lúc dòng đầu tiên của PO này xuất
+      // hiện trên bảng - CÙNG giá trị OrderContentModal dùng cho bản xem
+      // trước (nó cũng lấy theo dòng đầu của PO). Không được tính
+      // new Date() mới ở đây: tin khách nhận sẽ lệch giờ so với tin người
+      // dùng vừa duyệt, và dòng "Xử lý lúc" sẽ thành giờ GỬI chứ không
+      // phải giờ xử lý.
+      const processedAt = receivedAt[indices[0]] ?? ''
       return {
         po,
         system: poRows[0]?.system ?? '',
