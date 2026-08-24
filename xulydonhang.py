@@ -1063,6 +1063,13 @@ class ProcessHandler(QObject):
 
 
             giathuctegoc = ProcessHandler.find_price_by_sku(product["Barcode"])
+            if isinstance(giathuctegoc, str):
+                _giathuctegoc_clean = giathuctegoc.replace(",", "").strip()
+                try:
+                    float(_giathuctegoc_clean) if _giathuctegoc_clean else 0
+                except ValueError:
+                    giathuctegoc = "0"
+                    self.log_signal.emit(f"⚠️ Không tìm thấy giá cho mã {product['Barcode']} - tạm để giá 0, cần rà soát lại")
             giathucte = giathuctegoc
             # 🔍 **Tìm giá trị trong CTKM.xlsx theo SKU & thời gian**
             
@@ -1355,7 +1362,7 @@ class ProcessHandler(QObject):
         
 
 
-        if shipto == "WH6_HN":
+        if shipto in ("WH6_HN", "WH6_HTLA"):
             khuvuc = "TMĐT_MB"
             kho = "TP_HN_12"
             mien = "HN"
@@ -1397,8 +1404,12 @@ class ProcessHandler(QObject):
             # ✅ Xử lý "Extended Cost"
             giathuctegoc = ProcessHandler.find_price_by_sku(product["Barcode"],vendor)
             if isinstance(giathuctegoc, str):
-                            giathucte = giathuctegoc.replace(",", "").strip()
-                            giathucte = float(giathucte) if giathucte else 0
+                            giathucte_str = giathuctegoc.replace(",", "").strip()
+                            try:
+                                giathucte = float(giathucte_str) if giathucte_str else 0
+                            except ValueError:
+                                giathucte = 0
+                                self.log_signal.emit(f"⚠️ Không tìm thấy giá cho mã {product['Barcode']} ({product.get('product_name','')}) - tạm để giá 0, cần rà soát lại")
 
 
             sheet[f"y{current_row}"] = giathucte
@@ -1508,8 +1519,12 @@ class ProcessHandler(QObject):
             # ✅ Xử lý "Extended Cost"
             giathuctegoc = ProcessHandler.find_price_by_sku(product["Barcode"],vendor)
             if isinstance(giathuctegoc, str):
-                            giathucte = giathuctegoc.replace(",", "").strip()
-                            giathucte = float(giathucte) if giathucte else 0
+                            giathucte_str = giathuctegoc.replace(",", "").strip()
+                            try:
+                                giathucte = float(giathucte_str) if giathucte_str else 0
+                            except ValueError:
+                                giathucte = 0
+                                self.log_signal.emit(f"⚠️ Không tìm thấy giá cho mã {product['Barcode']} ({product.get('product_name','')}) - tạm để giá 0, cần rà soát lại")
 
 
             sheet[f"y{current_row}"] = giathucte
@@ -1673,7 +1688,7 @@ class ProcessHandler(QObject):
         
 
 
-        if shipto == "WH6_HN":
+        if shipto in ("WH6_HN", "WH6_HTLA"):
             khuvuc = "TMĐT_MB"
             kho = "TP_HN_12"
             mien = "HN"
@@ -1681,7 +1696,7 @@ class ProcessHandler(QObject):
             kho = "LA_KHOTMDT"
             khuvuc = "TMĐT_MN"
             mien = "LA"
-            
+
 
 
 
@@ -1713,8 +1728,12 @@ class ProcessHandler(QObject):
             # ✅ Xử lý "Extended Cost"
             giathuctegoc = ProcessHandler.find_price_by_sku(product["Barcode"],vendor)
             if isinstance(giathuctegoc, str):
-                            giathucte = giathuctegoc.replace(",", "").strip()
-                            giathucte = float(giathucte) if giathucte else 0
+                            giathucte_str = giathuctegoc.replace(",", "").strip()
+                            try:
+                                giathucte = float(giathucte_str) if giathucte_str else 0
+                            except ValueError:
+                                giathucte = 0
+                                self.log_signal.emit(f"⚠️ Không tìm thấy giá cho mã {product['Barcode']} ({product.get('product_name','')}) - tạm để giá 0, cần rà soát lại")
 
 
             sheet[f"y{current_row}"] = giathucte
@@ -1741,6 +1760,25 @@ class ProcessHandler(QObject):
 
 
 
+
+    @staticmethod
+    def build_tmdt_description(channel, shop, order_number, entry_date, region):
+        """Tạo diễn giải TMĐT với đúng một hệ thống bán hàng."""
+        channel_normalized = re.sub(r"[\s_-]+", "", str(channel or "")).casefold()
+        order_number = str(order_number or "")
+
+        if "tiktok" in channel_normalized:
+            system = "TMĐT-TikTok"
+        elif "shopee" in channel_normalized:
+            system = "TMĐT-Shopee"
+        else:
+            system = "TMĐT-TikTok" if order_number.startswith("HDTTS") else "TMĐT-Shopee"
+
+        shop_text = f" - {shop}" if shop else ""
+        return (
+            f"{system}{shop_text} - {order_number} "
+            f"- Ngày đổ {entry_date} - {region}"
+        )
 
     def write_to_dondathang_TMDT(self, products, makhachhang, entry_date, cancle_date):
         """
@@ -1783,12 +1821,10 @@ class ProcessHandler(QObject):
             ma_vandon = hoa_don.get("ma_vandon", "")
             trang_thai = hoa_don.get("trang_thai", "")
 
-            hethong = "TMĐT-TikTok" if ma_donhang.startswith("HDTTS") else "TMĐT-Shopee"
-            thong_tin_shop = f" - {shop}" if shop else ""
-            diengiai = (
-                f"{hethong}-{kenh_ban}{thong_tin_shop} - {ma_donhang} "
-                f"- Ngày đổ {entry_date} - {mien}"
+            diengiai = ProcessHandler.build_tmdt_description(
+                kenh_ban, shop, ma_donhang, entry_date, mien
             )
+            hethong = diengiai.split(" - ", 1)[0]
 
             self.log_signal.emit(
                 f'Bắt đầu xử lý đơn <b><span style="color: green;">{ma_donhang}</span></b>'
@@ -2068,6 +2104,13 @@ class ProcessHandler(QObject):
 
            
             giathuctegoc = ProcessHandler.find_price_by_sku(product["Barcode"],vendor)
+            if isinstance(giathuctegoc, str):
+                _giathuctegoc_clean = giathuctegoc.replace(",", "").strip()
+                try:
+                    float(_giathuctegoc_clean) if _giathuctegoc_clean else 0
+                except ValueError:
+                    giathuctegoc = "0"
+                    self.log_signal.emit(f"⚠️ Không tìm thấy giá cho mã {product['Barcode']} - tạm để giá 0, cần rà soát lại")
             giathucte = giathuctegoc
             # 🔍 **Tìm giá trị trong CTKM.xlsx theo SKU & thời gian**
             
@@ -2432,8 +2475,15 @@ class ProcessHandler(QObject):
 
 
             giathuctegoc = ProcessHandler.find_price_by_sku(product["Barcode"],vendor)
+            if isinstance(giathuctegoc, str):
+                _giathuctegoc_clean = giathuctegoc.replace(",", "").strip()
+                try:
+                    float(_giathuctegoc_clean) if _giathuctegoc_clean else 0
+                except ValueError:
+                    giathuctegoc = "0"
+                    self.log_signal.emit(f"⚠️ Không tìm thấy giá cho mã {product['Barcode']} - tạm để giá 0, cần rà soát lại")
             giathucte = giathuctegoc
-            
+
             # 🔍 **Tìm giá trị trong CTKM.xlsx theo SKU & thời gian**
             
             results = ProcessHandler.find_all_promotions_by_sku_and_time(product["Barcode"], entry_date,vendor)
@@ -2793,6 +2843,13 @@ class ProcessHandler(QObject):
             giahoadon = dongia / qty_ord_pcs
             
             giathuctegoc = ProcessHandler.find_price_by_sku(product["Barcode"],vendor)
+            if isinstance(giathuctegoc, str):
+                _giathuctegoc_clean = giathuctegoc.replace(",", "").strip()
+                try:
+                    float(_giathuctegoc_clean) if _giathuctegoc_clean else 0
+                except ValueError:
+                    giathuctegoc = "0"
+                    self.log_signal.emit(f"⚠️ Không tìm thấy giá cho mã {product['Barcode']} - tạm để giá 0, cần rà soát lại")
             giathucte = giathuctegoc
             # 🔍 **Tìm giá trị trong CTKM.xlsx theo SKU & thời gian**
             
@@ -3228,6 +3285,13 @@ class ProcessHandler(QObject):
             giahoadon = dongia / qty_ord_pcs
             
             giathuctegoc = ProcessHandler.find_price_by_sku(product["Barcode"],vendor)
+            if isinstance(giathuctegoc, str):
+                _giathuctegoc_clean = giathuctegoc.replace(",", "").strip()
+                try:
+                    float(_giathuctegoc_clean) if _giathuctegoc_clean else 0
+                except ValueError:
+                    giathuctegoc = "0"
+                    self.log_signal.emit(f"⚠️ Không tìm thấy giá cho mã {product['Barcode']} - tạm để giá 0, cần rà soát lại")
             giathucte = giathuctegoc
             # 🔍 **Tìm giá trị trong CTKM.xlsx theo SKU & thời gian**
             
@@ -3556,6 +3620,13 @@ class ProcessHandler(QObject):
             giahoadon = dongia / qty_ord_pcs
             
             giathuctegoc = ProcessHandler.find_price_by_sku(product["Barcode"],vendor)
+            if isinstance(giathuctegoc, str):
+                _giathuctegoc_clean = giathuctegoc.replace(",", "").strip()
+                try:
+                    float(_giathuctegoc_clean) if _giathuctegoc_clean else 0
+                except ValueError:
+                    giathuctegoc = "0"
+                    self.log_signal.emit(f"⚠️ Không tìm thấy giá cho mã {product['Barcode']} - tạm để giá 0, cần rà soát lại")
             giathucte = giathuctegoc
             # 🔍 **Tìm giá trị trong CTKM.xlsx theo SKU & thời gian**
             
@@ -3898,6 +3969,13 @@ class ProcessHandler(QObject):
             # ✅ Tính giá hóa đơn
             giahoadon = dongia
             giathuctegoc = ProcessHandler.find_price_by_sku(product["Barcode"],vendor)
+            if isinstance(giathuctegoc, str):
+                _giathuctegoc_clean = giathuctegoc.replace(",", "").strip()
+                try:
+                    float(_giathuctegoc_clean) if _giathuctegoc_clean else 0
+                except ValueError:
+                    giathuctegoc = "0"
+                    self.log_signal.emit(f"⚠️ Không tìm thấy giá cho mã {product['Barcode']} - tạm để giá 0, cần rà soát lại")
             giathucte = giathuctegoc
             # 🔍 **Tìm giá trị trong CTKM.xlsx theo SKU & thời gian**
             
@@ -4274,6 +4352,13 @@ class ProcessHandler(QObject):
             
             
             giathuctegoc = ProcessHandler.find_price_by_sku(product["Barcode"],vendor)
+            if isinstance(giathuctegoc, str):
+                _giathuctegoc_clean = giathuctegoc.replace(",", "").strip()
+                try:
+                    float(_giathuctegoc_clean) if _giathuctegoc_clean else 0
+                except ValueError:
+                    giathuctegoc = "0"
+                    self.log_signal.emit(f"⚠️ Không tìm thấy giá cho mã {product['Barcode']} - tạm để giá 0, cần rà soát lại")
             giathucte = giathuctegoc
             # 🔍 **Tìm giá trị trong CTKM.xlsx theo SKU & thời gian**
             
@@ -4635,6 +4720,13 @@ class ProcessHandler(QObject):
             giahoadon = float(item["Total Price"])
 
             giathuctegoc = ProcessHandler.find_price_by_sku(item["Barcode"],vendor)
+            if isinstance(giathuctegoc, str):
+                _giathuctegoc_clean = giathuctegoc.replace(",", "").strip()
+                try:
+                    float(_giathuctegoc_clean) if _giathuctegoc_clean else 0
+                except ValueError:
+                    giathuctegoc = "0"
+                    self.log_signal.emit(f"⚠️ Không tìm thấy giá cho mã {item['Barcode']} - tạm để giá 0, cần rà soát lại")
             giathucte = giathuctegoc
             # 🔍 **Tìm giá trị trong CTKM.xlsx theo SKU & thời gian**
             
@@ -5003,6 +5095,13 @@ f'đã thêm hàng khuyến mãi <b><span style="color: green;">{kiemtra}</span>
             giahoadon = float(item["Total Price"])
 
             giathuctegoc = ProcessHandler.find_price_by_sku(item["Barcode"],vendor)
+            if isinstance(giathuctegoc, str):
+                _giathuctegoc_clean = giathuctegoc.replace(",", "").strip()
+                try:
+                    float(_giathuctegoc_clean) if _giathuctegoc_clean else 0
+                except ValueError:
+                    giathuctegoc = "0"
+                    self.log_signal.emit(f"⚠️ Không tìm thấy giá cho mã {item['Barcode']} - tạm để giá 0, cần rà soát lại")
             giathucte = giathuctegoc
             # 🔍 **Tìm giá trị trong CTKM.xlsx theo SKU & thời gian**
             
@@ -9826,6 +9925,7 @@ f'đã thêm hàng khuyến mãi <b><span style="color: green;">{kiemtra}</span>
                 required_headers = [
                     "Mã đơn hàng", "Kho bán", "Kênh bán hàng",
                     "Thời gian Đặt", "Shop", "Mã misa", "Giá sản phẩm",
+                    "Số lượng sản phẩm",
                     "MÃ TP 1", "SLTP1", "MÃ TP 2", "SLTP2",
                     "MÃ TP 3", "SLTP3", "MÃ TP 4", "SLTP4",
                 ]
@@ -9907,7 +10007,8 @@ f'đã thêm hàng khuyến mãi <b><span style="color: green;">{kiemtra}</span>
                         )
                         continue
 
-                    # Mỗi cặp MÃ TP/SLTP là một dòng chi tiết riêng.
+                    # Thu thập các cặp MÃ TP/SLTP của dòng (1 dòng có thể là combo nhiều mã).
+                    tp_pairs = []
                     for index in range(1, 5):
                         ma_tp = clean_excel_value(
                             cell_value(row_number, f"MÃ TP {index}")
@@ -9931,11 +10032,29 @@ f'đã thêm hàng khuyến mãi <b><span style="color: green;">{kiemtra}</span>
                         if sl_tp <= 0:
                             continue
 
-                        order["dong_chi_tiet"].append({
-                            # Hàm ghi nhận thành tiền và tự chia lại cho số lượng.
-                            "thanh_tien": gia_san_pham * sl_tp,
-                            "san_pham": [{"ma_tp": ma_tp, "sl_tp": sl_tp}],
-                        })
+                        tp_pairs.append((ma_tp, sl_tp))
+
+                    # "Giá sản phẩm" là giá của 1 combo; "Số lượng sản phẩm" là số lần
+                    # mua combo đó trong dòng (thường =1, nhưng có thể >1).
+                    so_luong_sp_raw = cell_value(row_number, "Số lượng sản phẩm")
+                    try:
+                        so_luong_sp = float(so_luong_sp_raw)
+                        if so_luong_sp.is_integer():
+                            so_luong_sp = int(so_luong_sp)
+                    except (TypeError, ValueError):
+                        so_luong_sp = 1
+                    if so_luong_sp <= 0:
+                        so_luong_sp = 1
+
+                    # Chia đều giá combo theo tỷ trọng số lượng giữa các mã thành phần,
+                    # nhân thêm số lần mua combo để ra đúng cả số lượng lẫn thành tiền thực nhận.
+                    tong_sl_dong_excel = sum(sl for _, sl in tp_pairs)
+                    if tong_sl_dong_excel > 0:
+                        for ma_tp, sl_tp in tp_pairs:
+                            order["dong_chi_tiet"].append({
+                                "thanh_tien": gia_san_pham * so_luong_sp * sl_tp / tong_sl_dong_excel,
+                                "san_pham": [{"ma_tp": ma_tp, "sl_tp": sl_tp * so_luong_sp}],
+                            })
 
                 for (ma_misa, kho_ban, thoi_gian_dat), orders in grouped_orders.items():
                     hoa_don_list = [

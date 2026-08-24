@@ -17,7 +17,7 @@ chromedriver_path = r"chromedriver.exe"
 chrome_options = Options()
 chrome_options.add_argument("--window-size=1920,1080")
 chrome_options.add_argument("--disable-gpu")
-chrome_options.add_argument("--headless=new")  # bật nếu cần chạy ẩn
+#chrome_options.add_argument("--headless=new")  # bật nếu cần chạy ẩn
 chrome_options.add_experimental_option("excludeSwitches", ["enable-automation"])
 chrome_options.add_experimental_option('useAutomationExtension', False)
 
@@ -107,7 +107,7 @@ def baocaocuoingay():
            
             input_element.send_keys("mt")  # Gửi giá trị nếu tìm thấy
         except:
-            print("⛔ Không tìm thấy ô input trong thời gian chờ.")
+            print("⛔ Không tìm thấy ô nhập Mã Khách hàng.")
 
         try:
             button_element = WebDriverWait(driver, 15).until(
@@ -116,7 +116,7 @@ def baocaocuoingay():
             driver.execute_script("arguments[0].click();", button_element)
             print("✅ Đã click Lọc Thời gian")
         except:
-            print("⛔ Không tìm thấy ô input trong thời gian chờ.")
+            print("⛔ Không tìm thấy Nút Lọc.")
 
 
         
@@ -140,7 +140,7 @@ def baocaocuoingay():
             )
             input_element.send_keys("24/04/2025")  # Gửi giá trị nếu tìm thấy
         except:
-            print("⛔ Không tìm thấy ô input trong thời gian chờ.")
+            print("⛔ Không tìm thấy ô nhập ngày.")
 
         try:
             button_element = WebDriverWait(driver, 15).until(
