@@ -40,6 +40,13 @@ func (e *wailsEmitter) Emit(eventName string, data ...interface{}) {
 const orderFolderName = "đơn hàng"
 const configFileName = "config.txt"
 
+// zaloJobTimeout là hạn giờ cho MỘT job gửi Zalo (tìm hội thoại + dán +
+// chờ Zalo xác nhận đã gửi). Không có nó, 1 lời gọi chromedp treo vì DOM
+// Zalo đổi selector sẽ khoá cờ a.sending mãi mãi và nút gửi chết cho tới
+// khi khởi động lại app. Mỗi job có deadline RIÊNG — job chậm không ăn
+// mất thời gian của job sau.
+const zaloJobTimeout = 90 * time.Second
+
 // App struct
 type App struct {
 	ctx              context.Context
@@ -398,6 +405,13 @@ type ZaloJob struct {
 // a.processing) — không cho 2 batch gửi chồng lên nhau trên cùng 1
 // trình duyệt.
 func (a *App) SendZaloMessages(jobs []ZaloJob) {
+	// Không có job nào thì không làm gì cả — nếu vẫn chạy tiếp, batch rỗng
+	// sẽ bật cờ sending, mở trình duyệt và có thể đứng chờ quét QR tới 120
+	// giây để rồi không gửi được tin nào. UI hiện chỉ hiện nút gửi khi đã
+	// chọn ít nhất 1 PO, nhưng đây là method frontend gọi trực tiếp được.
+	if len(jobs) == 0 {
+		return
+	}
 	if !a.sending.CompareAndSwap(false, true) {
 		a.emitter.Emit("zalo:log", "⚠️ Đã có một lượt gửi Zalo đang chạy, vui lòng đợi hoàn tất.")
 		return
@@ -435,8 +449,13 @@ func (a *App) runZaloBatch(emitter Emitter, jobs []ZaloJob) {
 			continue
 		}
 		emitter.Emit("zalo:log", fmt.Sprintf("📤 Đang gửi %s → %s...", job.PO, contact))
-		if err := a.zaloSender.SendMessage(ctx, contact, job.Message); err != nil {
-			emitter.Emit("zalo:log", fmt.Sprintf("❌ Gửi %s thất bại: %v", job.PO, err))
+		// Deadline riêng cho từng job, giải phóng timer ngay khi job xong
+		// (không defer tới cuối vòng lặp) — batch dài không tích luỹ timer.
+		jobCtx, cancel := context.WithTimeout(ctx, zaloJobTimeout)
+		sendErr := a.zaloSender.SendMessage(jobCtx, contact, job.Message)
+		cancel()
+		if sendErr != nil {
+			emitter.Emit("zalo:log", fmt.Sprintf("❌ Gửi %s thất bại: %v", job.PO, sendErr))
 			emitter.Emit("zalo:sent", map[string]any{"po": job.PO, "ok": false})
 			continue
 		}

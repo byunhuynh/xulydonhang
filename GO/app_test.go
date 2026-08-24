@@ -486,3 +486,26 @@ func TestApp_SendZaloMessages_RejectsWhileAlreadySending(t *testing.T) {
 		t.Fatalf("loginCalls = %d, want 0 (must not start a new batch while one is running)", sender.loginCalls)
 	}
 }
+
+// An empty job list must be a complete no-op: without the guard it would
+// claim the sending flag, open a real browser and potentially sit waiting
+// up to 120s for a QR scan just to send nothing at all.
+func TestApp_SendZaloMessages_IgnoresEmptyJobList(t *testing.T) {
+	sender := &fakeZaloSender{}
+	a := newTestAppForZalo(t, sender, map[string]string{"COOP": "Nhom Coop"})
+	emitter := &fakeEmitter{}
+	a.emitter = emitter
+
+	a.SendZaloMessages(nil)
+	a.SendZaloMessages([]ZaloJob{})
+
+	if sender.loginCalls != 0 {
+		t.Fatalf("loginCalls = %d, want 0 (must not open a browser for an empty batch)", sender.loginCalls)
+	}
+	if len(emitter.events) != 0 {
+		t.Fatalf("events = %#v, want none emitted for an empty batch", emitter.events)
+	}
+	if a.sending.Load() {
+		t.Fatal("sending flag left set by an empty batch")
+	}
+}
