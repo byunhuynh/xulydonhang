@@ -2,6 +2,7 @@ package excelwriter
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/xuri/excelize/v2"
 )
@@ -56,6 +57,13 @@ type Row struct {
 	// functionally identical to Python's conditional "don't touch K at
 	// all" for those cases, since both read back as blank.
 	StoreName string
+	// SiteCode writes to column AN ("mã/giá trị công trình") — ONLY
+	// write_to_dondathang_bigc and write_to_dondathang_emart ever touch
+	// this cell in xulydonhang.py (grep confirms: no other vendor's write
+	// function references "AN" at all). Every other vendor leaves this at
+	// its zero value (""), which writes an empty AN cell — same as
+	// Python's Coop/Lotte/Satra/Winmart rows never assigning to AN.
+	SiteCode string
 }
 
 // WriteOrderRows appends rows to the "Don dat hang" sheet, mirroring
@@ -119,22 +127,75 @@ func ClearOrderRows(path string) error {
 	}
 	defer f.Close()
 
+	// Comments are stored separately from worksheet cell values. Clearing a
+	// cell therefore does not remove its mismatch warning, and GetRows may not
+	// even include a row whose only remaining content is a comment. Delete all
+	// data-area comments first so rows can safely be reused by AddComment.
+	comments, err := f.GetComments(sheetName)
+	if err != nil {
+		return fmt.Errorf("excelwriter: read comments from %s: %w", sheetName, err)
+	}
+	commentsDeleted := false
+	for _, comment := range comments {
+		_, row, coordErr := excelize.CellNameToCoordinates(comment.Cell)
+		if coordErr != nil {
+			return fmt.Errorf("excelwriter: parse comment cell %s: %w", comment.Cell, coordErr)
+		}
+		if row < 9 {
+			continue
+		}
+		if err := f.DeleteComment(sheetName, comment.Cell); err != nil {
+			return fmt.Errorf("excelwriter: delete comment at %s: %w", comment.Cell, err)
+		}
+		commentsDeleted = true
+	}
+
 	rows, err := f.GetRows(sheetName)
 	if err != nil {
 		return fmt.Errorf("excelwriter: read %s: %w", sheetName, err)
 	}
 	maxRow := len(rows)
 	if maxRow < 9 {
+		if commentsDeleted {
+			if err := f.Save(); err != nil {
+				return fmt.Errorf("excelwriter: save %s: %w", path, err)
+			}
+		}
 		return nil
 	}
 
-	// excelize removes and shifts up one row at a time - repeatedly
-	// removing row 9 itself (not incrementing the target) correctly
-	// deletes every data row down to just the header, matching
-	// Python's single bulk delete_rows(9, count) call.
-	for i := 9; i <= maxRow; i++ {
-		if err := f.RemoveRow(sheetName, 9); err != nil {
-			return fmt.Errorf("excelwriter: remove row 9 of %s: %w", sheetName, err)
+	// KHÔNG dùng f.RemoveRow lặp (bản cũ) nữa - RemoveRow quét TOÀN BỘ
+	// ws.SheetData.Row còn lại ở MỖI lần gọi bất kể xoá dòng nào (đọc
+	// thẳng mã nguồn excelize xác nhận: 2 vòng lặp "remove formula" và
+	// "keep" bên trong RemoveRow đều duyệt hết slice hiện tại, không phụ
+	// thuộc vị trí dòng xoá) - gọi N lần thành O(N²). Với file thật đã
+	// tích luỹ 12.367 dòng (chưa từng được dọn đúng cách trước đây), thử
+	// nghiệm thực tế xác nhận cách cũ KHÔNG XONG NỔI trong 90 giây - đúng
+	// nguyên nhân nút "Xử lý" quay vô hạn không báo lỗi (không phải treo,
+	// chỉ đang làm một khối lượng việc khổng lồ không cần thiết).
+	//
+	// Xoá GIÁ TRỊ + KIỂU DÁNG từng ô (không dùng RemoveRow dịch chuyển
+	// dòng) thay vì xoá hẳn dòng - dữ liệu bên dưới dòng cuối không cần
+	// dịch lên vì vốn không còn gì để dịch (đang xoá tới hết file). Mỗi
+	// SetCellValue/SetCellStyle chỉ động tới đúng 1 ô nên là O(1) - tổng
+	// cả vòng lặp O(số dòng × số cột), thử nghiệm thực tế trên đúng file
+	// 12.367 dòng chỉ mất ~1.8s (so với RemoveRow không xong nổi trong
+	// 90s). SetCellStyle về 0 (mặc định) để không để lại màu tô/viền cũ
+	// (vd đỏ cảnh báo sai giá) trên các dòng nay đã trống - WriteOrderRows
+	// (bên trên) cũng tự SetCellStyle(...,0) trước khi ghi dòng mới nên 2
+	// bên nhất quán với nhau.
+	for r := 9; r <= maxRow; r++ {
+		for c := range rows[r-1] {
+			cellRef, err := excelize.CoordinatesToCellName(c+1, r)
+			if err != nil {
+				return fmt.Errorf("excelwriter: tính ô tại dòng %d cột %d của %s: %w", r, c+1, sheetName, err)
+			}
+			if err := f.SetCellValue(sheetName, cellRef, nil); err != nil {
+				return fmt.Errorf("excelwriter: xoá giá trị ô %s của %s: %w", cellRef, sheetName, err)
+			}
+			if err := f.SetCellStyle(sheetName, cellRef, cellRef, 0); err != nil {
+				return fmt.Errorf("excelwriter: xoá kiểu dáng ô %s của %s: %w", cellRef, sheetName, err)
+			}
 		}
 	}
 
@@ -238,6 +299,50 @@ func SetPrice(path string, row int, price float64) error {
 	return nil
 }
 
+// UpdateJITPeriod changes the period embedded in columns B and L for every
+// Excel row produced from one JIT airway PDF. The caller supplies the exact
+// row set captured during processing, so other JIT files in the same batch
+// remain untouched.
+func UpdateJITPeriod(path string, rows []int, orderDate, warehouse, period string) error {
+	period = strings.ToLower(strings.TrimSpace(period))
+	switch period {
+	case "sáng", "chiều", "tối":
+	default:
+		return fmt.Errorf("excelwriter: ca JIT không hợp lệ %q", period)
+	}
+	if len(rows) == 0 {
+		return fmt.Errorf("excelwriter: không có dòng JIT nào để cập nhật")
+	}
+	if strings.TrimSpace(orderDate) == "" || strings.TrimSpace(warehouse) == "" {
+		return fmt.Errorf("excelwriter: thiếu ngày đơn hoặc kho JIT")
+	}
+
+	f, err := excelize.OpenFile(path)
+	if err != nil {
+		return fmt.Errorf("excelwriter: open %s: %w", path, err)
+	}
+	defer f.Close()
+
+	dateDescription := fmt.Sprintf("%s (%s)", orderDate, period)
+	orderNumber := fmt.Sprintf("ĐĐHJIT-%s-%s", dateDescription, warehouse)
+	description := fmt.Sprintf("JIT-CHOICE Ngày đổ %s %s", dateDescription, warehouse)
+	for _, row := range rows {
+		if row < 9 {
+			return fmt.Errorf("excelwriter: dòng JIT không hợp lệ %d", row)
+		}
+		if err := f.SetCellValue(sheetName, fmt.Sprintf("B%d", row), orderNumber); err != nil {
+			return fmt.Errorf("excelwriter: cập nhật B%d: %w", row, err)
+		}
+		if err := f.SetCellValue(sheetName, fmt.Sprintf("L%d", row), description); err != nil {
+			return fmt.Errorf("excelwriter: cập nhật L%d: %w", row, err)
+		}
+	}
+	if err := f.Save(); err != nil {
+		return fmt.Errorf("excelwriter: save %s: %w", path, err)
+	}
+	return nil
+}
+
 func writeRow(f *excelize.File, rowNum int, row Row, redFillStyle int) error {
 	set := func(col string, value interface{}) error {
 		return f.SetCellValue(sheetName, fmt.Sprintf("%s%d", col, rowNum), value)
@@ -271,6 +376,7 @@ func writeRow(f *excelize.File, rowNum int, row Row, redFillStyle int) error {
 		{"T", yesNo(row.IsNoteRow)},
 		{"X", row.Qty},
 		{"S", row.ProductName},
+		{"AN", row.SiteCode},
 		{"AO", row.PromoNote},
 		{"AP", row.PromoBundleSku},
 		{"AQ", row.PromoContent},

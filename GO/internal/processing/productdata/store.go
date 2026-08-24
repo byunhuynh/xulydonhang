@@ -281,6 +281,63 @@ func (s *Store) GetCoopfoodAddress(customerCode string) string {
 	return ""
 }
 
+// GetSiteValue mirrors tim_gia_tri_congtrinh (xulydonhang.py:4586-4603):
+// scans MaKH's column B (mã công trình, row[1]) for the row whose value
+// equals code exactly (no trim on either side, matching Python's bare
+// `==`), returning that row's column C (row[2], giá trị công trình) —
+// this is BigC's per-product/promo-bonus AN column value
+// (write_to_dondathang_bigc's `congtrinh` after the lookup).
+//
+// Exact match is the ONLY comparison Python performs, because PyMuPDF's
+// text extraction always hands it a clean, single-line store name.
+// Confirmed empirically (direct PyMuPDF extraction of a real fixture,
+// 2632058001987.pdf page 2) that this port's own PDF text extraction
+// does NOT always give the same guarantee: some real BigC pages have
+// the store-name line and its immediately-following address line
+// extracted with no line break between them (PyMuPDF: "GO! AN
+// LAC\nSO 1231 KP 5, ..."; this port: "GO! AN LACSO 1231 KP 5, ..." as
+// one run-together string) — a gap in the underlying PDF library's line
+// detection (see bigc.ExtractStoreName's caller in bigc_processor.go),
+// not something exact-match alone can route around. So when no row's
+// column B equals code exactly, this ALSO tries the LONGEST column B
+// value that code merely STARTS WITH — a Go-only addition (Python has
+// no equivalent) that recovers the correct site value from that glued
+// text without needing the PDF extraction itself fixed. "Longest", not
+// "first": real MaKH data has both "GO! VINH" and "GO! VINH PHUC" as
+// distinct stores, the former a genuine prefix of the latter — matching
+// on the first (shortest) hit would silently misattribute every
+// "GO! VINH PHUC..." page to "GO! VINH"'s site value instead.
+//
+// Only once BOTH checks fail does this fall back to code with every
+// space character stripped (not trimmed - matches Python's
+// `congtrinh.replace(" ", "")`, which removes spaces anywhere in the
+// string, not just leading/trailing).
+func (s *Store) GetSiteValue(code string) string {
+	for _, row := range s.customerRows {
+		if row[1] == code {
+			return row[2]
+		}
+	}
+
+	bestLen := -1
+	bestValue := ""
+	for _, row := range s.customerRows {
+		name := row[1]
+		if name == "" {
+			continue
+		}
+		if len(name) > bestLen && strings.HasPrefix(code, name) {
+			bestLen = len(name)
+			bestValue = row[2]
+		}
+	}
+	if bestLen >= 0 {
+		return bestValue
+	}
+
+	return strings.ReplaceAll(code, " ", "")
+}
+
 // GetProductInfo merges timten_sanpham/timtrongluong_sanpham/
 // timquycach_sanpham (three separate linear scans + file re-opens in
 // Python) into one lookup against the Store loaded once at startup.

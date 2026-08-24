@@ -1,6 +1,7 @@
 package excelwriter
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -101,6 +102,80 @@ func TestClearOrderRows_DeletesDataRowsKeepsHeader(t *testing.T) {
 	header, _ := f.GetCellValue("Don dat hang", "A8")
 	if header != "STT" {
 		t.Fatalf("A8 (header row) = %q, want the header text to survive the clear untouched", header)
+	}
+}
+
+func TestClearOrderRowsDeletesCommentsSoSameRowsCanBeReused(t *testing.T) {
+	path := copyTestWorkbook(t)
+	mismatch := []Row{{
+		SKU: "TP30671", Qty: 1, UnitPrice: 24537, InvoicePrice: 25000,
+		PriceMismatch: true, UseZFormula: true,
+	}}
+	if _, err := WriteOrderRows(path, mismatch, ""); err != nil {
+		t.Fatalf("first WriteOrderRows returned error: %v", err)
+	}
+	if err := ClearOrderRows(path); err != nil {
+		t.Fatalf("ClearOrderRows returned error: %v", err)
+	}
+
+	f, err := excelize.OpenFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	comments, err := f.GetComments("Don dat hang")
+	f.Close()
+	if err != nil {
+		t.Fatalf("GetComments returned error: %v", err)
+	}
+	if len(comments) != 0 {
+		t.Fatalf("comments after clear = %+v, want none", comments)
+	}
+
+	if _, err := WriteOrderRows(path, mismatch, ""); err != nil {
+		t.Fatalf("second WriteOrderRows must reuse Y9 without an existing-comment error: %v", err)
+	}
+}
+
+func TestUpdateJITPeriodUpdatesOnlyRowsBelongingToSelectedPDF(t *testing.T) {
+	path := copyTestWorkbook(t)
+	rows := []Row{
+		{OrderNumber: "old-jit-1", Description: "old-description-1"},
+		{OrderNumber: "old-jit-2", Description: "old-description-2"},
+		{OrderNumber: "other-file", Description: "other-description"},
+	}
+	if _, err := WriteOrderRows(path, rows, ""); err != nil {
+		t.Fatal(err)
+	}
+	if err := UpdateJITPeriod(path, []int{9, 10}, "24/08/2026", "WH6_HN", "Tối"); err != nil {
+		t.Fatal(err)
+	}
+
+	f, err := excelize.OpenFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer f.Close()
+	for _, row := range []int{9, 10} {
+		orderNumber, _ := f.GetCellValue("Don dat hang", fmt.Sprintf("B%d", row))
+		description, _ := f.GetCellValue("Don dat hang", fmt.Sprintf("L%d", row))
+		if orderNumber != "ĐĐHJIT-24/08/2026 (tối)-WH6_HN" {
+			t.Errorf("B%d = %q", row, orderNumber)
+		}
+		if description != "JIT-CHOICE Ngày đổ 24/08/2026 (tối) WH6_HN" {
+			t.Errorf("L%d = %q", row, description)
+		}
+	}
+	otherOrder, _ := f.GetCellValue("Don dat hang", "B11")
+	otherDescription, _ := f.GetCellValue("Don dat hang", "L11")
+	if otherOrder != "other-file" || otherDescription != "other-description" {
+		t.Fatalf("unselected row changed: B11=%q L11=%q", otherOrder, otherDescription)
+	}
+}
+
+func TestUpdateJITPeriodRejectsUnknownPeriod(t *testing.T) {
+	path := copyTestWorkbook(t)
+	if err := UpdateJITPeriod(path, []int{9}, "24/08/2026", "WH6_HN", "Khuya"); err == nil {
+		t.Fatal("UpdateJITPeriod returned nil for an unsupported period")
 	}
 }
 

@@ -187,3 +187,43 @@ func TestGetCustomerCodeBySuffix_MatchesLotteBySystemAndSuffix(t *testing.T) {
 		t.Fatalf("GetCustomerCodeBySuffix(LOTTE, 999) = %q, want empty (no matching suffix)", got)
 	}
 }
+
+// TestGetSiteValue uses synthetic customerRows (via newStore) rather than
+// the shared testDataPath fixture, mirroring real MaKH data confirmed live
+// (BIGC rows "GO! AN LAC" -> "BIGCANLAC", "GO! VINH" -> "BIGCVINH", and
+// "GO! VINH PHUC" -> "BIGCVP" — the last pair is the real prefix-collision
+// case GetSiteValue's longest-match rule exists for).
+func TestGetSiteValue(t *testing.T) {
+	customerRows := [][]string{
+		{"header row, skipped"},
+		{"BIGC", "GO! AN LAC", "BIGCANLAC", ""},
+		{"BIGC", "GO! VINH", "BIGCVINH", ""},
+		{"BIGC", "GO! VINH PHUC", "BIGCVP", ""},
+	}
+	store := newStore(customerRows, nil)
+
+	if got := store.GetSiteValue("GO! AN LAC"); got != "BIGCANLAC" {
+		t.Fatalf("GetSiteValue(clean exact match) = %q, want BIGCANLAC", got)
+	}
+
+	// Real captured shape (2632058001987.pdf page 2): this port's own PDF
+	// extraction glues the store-name line directly onto its own address
+	// line with no separator, unlike PyMuPDF's clean split — GetSiteValue
+	// must still recover the right site value from that glued text.
+	if got := store.GetSiteValue("GO! AN LACSO 1231 KP 5, DUONG QUOC LO 1A"); got != "BIGCANLAC" {
+		t.Fatalf("GetSiteValue(glued store name + address) = %q, want BIGCANLAC", got)
+	}
+
+	// "GO! VINH" is a genuine prefix of "GO! VINH PHUC" — glued text for
+	// the Vinh Phuc store must resolve to Vinh Phuc's OWN site value, not
+	// fall through to the shorter Vinh match.
+	if got := store.GetSiteValue("GO! VINH PHUCKM6+600, DUONG QUOC LO 2"); got != "BIGCVP" {
+		t.Fatalf("GetSiteValue(glued Vinh Phuc) = %q, want BIGCVP (longest prefix, not GO! VINH's BIGCVINH)", got)
+	}
+
+	// No exact or prefix match at all: falls back to Python's own
+	// `congtrinh.replace(" ", "")` — every space removed, not trimmed.
+	if got := store.GetSiteValue("Unknown Store Name"); got != "UnknownStoreName" {
+		t.Fatalf("GetSiteValue(no match) = %q, want UnknownStoreName", got)
+	}
+}
