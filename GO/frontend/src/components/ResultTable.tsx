@@ -13,7 +13,7 @@ import {
 import { useAppStore } from '../store/appStore'
 import type { OrderRow, PriceMismatchDetail } from '../types'
 import { SectionHeader } from './SectionHeader'
-import { ConfirmPrice } from '../../wailsjs/go/main/App'
+import { ConfirmPrice, UpdateJITPeriod } from '../../wailsjs/go/main/App'
 import { OrderContentModal, type POContentGroup } from './OrderContentModal'
 import {
   resolveEffectivePrice,
@@ -21,6 +21,8 @@ import {
   buildPriceBasisForPO,
   type PriceBasis,
 } from '../lib/zaloMessage'
+import { groupJITFiles, skipsPriceReconciliation } from '../lib/jitFileGroups'
+import { JITPeriodMenu } from './JITPeriodMenu'
 
 const columns: {
   key: Exclude<
@@ -59,6 +61,9 @@ function statusMeta(row: OrderRow): { classes: string; label: string } {
 // this makes that fact visible as its own column instead of only living
 // inside the Trạng thái text.
 function priceMeta(row: OrderRow): { classes: string; label: string; icon: 'ok' | 'warn' | 'none' } {
+  if (skipsPriceReconciliation(row)) {
+    return { classes: 'bg-white/5 text-muted', label: 'Không đối soát', icon: 'none' }
+  }
   if (row.statusKind === 'failed') {
     return { classes: 'bg-white/5 text-muted', label: '—', icon: 'none' }
   }
@@ -94,6 +99,8 @@ export function ResultTable() {
   const toggleAllPOs = useAppStore((s) => s.toggleAllPOs)
   const clearSelection = useAppStore((s) => s.clearSelection)
   const resolvedChoice = useAppStore((s) => s.resolvedChoice)
+  const [jitPeriodByFile, setJITPeriodByFile] = useState<Record<string, string>>({})
+  const [updatingJITFile, setUpdatingJITFile] = useState<string | null>(null)
   const setResolvedChoiceKey = useAppStore((s) => s.setResolvedChoice)
   const clearResolvedChoice = useAppStore((s) => s.clearResolvedChoice)
   const [flashCount, setFlashCount] = useState<Record<number, number>>({})
@@ -198,10 +205,46 @@ export function ResultTable() {
   }
 
   const selectedCount = selectedPOs.size
+  const jitFiles = groupJITFiles(rows)
+
+  async function handleJITPeriodChange(fileName: string, period: string) {
+    const group = jitFiles.find((item) => item.fileName === fileName)
+    if (!group) return
+    setUpdatingJITFile(fileName)
+    try {
+      await UpdateJITPeriod(group.excelRows, group.orderDate, group.warehouse, period)
+      setJITPeriodByFile((current) => ({ ...current, [fileName]: period }))
+      appendLog(`✅ JIT ${fileName}: đã đổi toàn bộ ${group.orderCount} đơn sang buổi ${period}`)
+    } catch (err) {
+      appendLog(`❌ Không đổi được buổi JIT cho ${fileName}: ${String(err)}`)
+    } finally {
+      setUpdatingJITFile(null)
+    }
+  }
 
   return (
     <section className="flex h-full flex-col rounded-xl border border-border bg-panel p-3.5">
       <SectionHeader index="04" title="Kết quả xử lý chi tiết" />
+      {jitFiles.length > 0 && (
+        <div className="mb-2 space-y-1.5 rounded-lg border border-accent/25 bg-accent/[0.05] p-2.5">
+          <div className="font-sans text-[10px] font-bold uppercase tracking-wider text-muted">Buổi giao đơn JIT theo file PDF</div>
+          {jitFiles.map((group) => {
+            const value = jitPeriodByFile[group.fileName] ?? group.period
+            return (
+              <div key={group.fileName} className="flex items-center gap-3 rounded-md bg-bg/70 px-3 py-2">
+                <span className="min-w-0 flex-1 truncate font-mono text-xs text-ink" title={group.fileName}>{group.fileName}</span>
+                <span className="whitespace-nowrap font-sans text-[11px] text-muted">Áp dụng {group.orderCount} đơn</span>
+                <JITPeriodMenu
+                  value={value}
+                  disabled={isProcessing || updatingJITFile === group.fileName}
+                  onChange={(period) => handleJITPeriodChange(group.fileName, period)}
+                  ariaLabel={`Buổi giao cho ${group.fileName}`}
+                />
+              </div>
+            )
+          })}
+        </div>
+      )}
       {selectedCount > 0 && (
         <div className="mb-2 flex items-center gap-3 rounded-lg border border-accent/35 bg-accent/[0.08] px-3.5 py-2">
           <span className="font-sans text-xs font-semibold text-accent">

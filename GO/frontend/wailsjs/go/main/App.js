@@ -37,3 +37,7 @@ export function SendZaloMessages(arg1) {
 export function SetSTT(arg1) {
   return window['go']['main']['App']['SetSTT'](arg1);
 }
+
+export function UpdateJITPeriod(arg1, arg2, arg3, arg4) {
+  return window['go']['main']['App']['UpdateJITPeriod'](arg1, arg2, arg3, arg4);
+}

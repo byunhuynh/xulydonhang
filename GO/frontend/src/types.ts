@@ -25,6 +25,8 @@ export interface OrderRow {
   donGia: string
   status: string
   statusKind: string
+  excelRows: number[]
+  jitPeriod: string
   driveUrl: string
   priceMismatchCount: number
   priceMismatchDetails: PriceMismatchDetail[]
