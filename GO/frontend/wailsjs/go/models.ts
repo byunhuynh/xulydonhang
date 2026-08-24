@@ -26,6 +26,7 @@ export namespace main {
 	    system: string;
 	    customerCode: string;
 	    message: string;
+	    displayLabel: string;
 	
 	    static createFrom(source: any = {}) {
 	        return new ZaloJob(source);
@@ -37,6 +38,7 @@ export namespace main {
 	        this.system = source["system"];
 	        this.customerCode = source["customerCode"];
 	        this.message = source["message"];
+	        this.displayLabel = source["displayLabel"];
 	    }
 	}
 

@@ -2,17 +2,24 @@ import { useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { FaXmark, FaCopy, FaCheck, FaPaperPlane } from 'react-icons/fa6'
 import type { OrderRow } from '../types'
-import { buildZaloMessageForPO, type PriceBasis } from '../lib/zaloMessage'
+import { buildZaloMessageForPO, buildZaloMessageForJITFile, type PriceBasis } from '../lib/zaloMessage'
 import { markupToHtml } from '../lib/richtext'
 import { useModalEntrance } from '../lib/useModalEntrance'
 
 // A PO group is every OrderRow sharing one PO number - always length 1
 // for every vendor except BigC, where one PDF can produce several rows
 // (one per store page) that the real app still notifies as a single
-// message (see buildZaloMessageForPO's own doc comment for why).
+// message (see buildZaloMessageForPO's own doc comment for why). JIT
+// groups instead share one sourceId (one PDF, many DIFFERENT po per
+// page) - `po` then holds the group's display label (the PDF's
+// fileName, not a real po) and `period` carries the delivery period the
+// user currently has selected for that file (see
+// buildZaloMessageForJITFile's own doc comment for why this can't just
+// read row.jitPeriod).
 export interface POContentGroup {
   po: string
   rows: OrderRow[]
+  period?: string
 }
 
 export function OrderContentModal({
@@ -30,7 +37,13 @@ export function OrderContentModal({
   const backdropRef = useRef<HTMLDivElement>(null)
   const cardRef = useRef<HTMLDivElement>(null)
   useModalEntrance(backdropRef, cardRef)
-  const messages = groups.map((g) => ({ po: g.po, text: buildZaloMessageForPO(g.rows, processedAt, priceBasisBySku) }))
+  const messages = groups.map((g) => ({
+    po: g.po,
+    text:
+      g.rows[0]?.system === 'JIT-CHOICE'
+        ? buildZaloMessageForJITFile(g.rows, g.period ?? g.rows[0]?.jitPeriod ?? '', processedAt)
+        : buildZaloMessageForPO(g.rows, processedAt, priceBasisBySku),
+  }))
   const isSingle = groups.length === 1
   // markupToHtml (lib/richtext.ts) dịch cùng cú pháp **/{color:}/list mà
   // ChromedpSender.SendMessage sẽ THẬT SỰ dán khi gửi (xem doc comment

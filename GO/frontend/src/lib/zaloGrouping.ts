@@ -1,0 +1,14 @@
+import type { OrderRow } from '../types'
+
+// groupKeyFor quyết định đơn vị "1 tin Zalo" của 1 dòng: PO cho mọi
+// vendor khác (không đổi), nhưng sourceId (định danh file PDF, khớp
+// đúng cách jitFileGroups.ts đã gộp buổi giao) cho JIT - vì 1 PDF JIT có
+// NHIỀU trang, MỖI trang 1 PO khác nhau, gộp theo po như cũ sẽ ra 1 tin
+// riêng cho từng trang thay vì 1 tin cho cả file như yêu cầu thực tế.
+// Dùng chung ở cả ResultTable.tsx (chọn dòng/tick chọn) lẫn
+// ControlPanel.tsx (build job gửi) - PHẢI cùng 1 định nghĩa ở cả 2 nơi,
+// khác nhau sẽ khiến dòng được chọn (UI) và dòng thực sự gửi (job) lệch
+// nhau.
+export function groupKeyFor(row: OrderRow): string {
+  return row.system === 'JIT-CHOICE' ? row.sourceId : row.po
+}

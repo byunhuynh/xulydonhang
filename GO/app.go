@@ -578,6 +578,15 @@ type ZaloJob struct {
 	System       string `json:"system"`
 	CustomerCode string `json:"customerCode"`
 	Message      string `json:"message"`
+	// DisplayLabel là nhãn CHỈ để hiện trong log ("Đang gửi {nhãn} →
+	// ..."), tách khỏi PO. Cho mọi vendor khác PO đã là 1 po thật, dễ
+	// đọc, nên frontend để trống DisplayLabel và Go rơi về dùng PO (xem
+	// bên dưới). JIT thì khác: PO giờ mang sourceId (hash 64 ký tự, khoá
+	// gộp nhóm THẬT của 1 file PDF - xem groupKeyFor, lib/zaloGrouping.ts
+	// phía frontend) để deselectPO khớp đúng dòng đã tick chọn sau khi
+	// gửi xong - PO không còn dùng để hiện log được nữa, nên frontend gửi
+	// kèm tên file PDF qua trường này.
+	DisplayLabel string `json:"displayLabel"`
 }
 
 // SendZaloMessages gửi tuần tự từng job trong 1 goroutine nền, phát sự
@@ -669,28 +678,35 @@ func (a *App) runZaloBatch(emitter Emitter, jobs []ZaloJob) {
 	})
 
 	for _, r := range resolved {
+		// Nhãn hiện log: DisplayLabel nếu frontend có gửi kèm (JIT - PO
+		// lúc này mang sourceId, không đọc được), rơi về PO cho mọi
+		// trường hợp còn lại (đã là 1 po thật, dễ đọc sẵn).
+		label := r.job.DisplayLabel
+		if label == "" {
+			label = r.job.PO
+		}
 		if r.err != nil {
 			// err bọc ErrNoContact kèm đúng key đã ghép (vd "MNBIGC") ở
 			// cuối chuỗi (xem ResolveContact) — cắt bỏ phần tiền tố lỗi kỹ
 			// thuật, chỉ hiện key đó cho người dùng biết CHÍNH XÁC dòng cần
 			// thêm trong Cài đặt > Zalo.
 			key := strings.TrimPrefix(r.err.Error(), zalosend.ErrNoContact.Error()+": ")
-			emitter.Emit("zalo:log", fmt.Sprintf("❌ %s: chưa cấu hình liên hệ Zalo cho %s (sửa ở Cài đặt > Zalo, thêm dòng khoá %q)", r.job.PO, r.job.System, key))
+			emitter.Emit("zalo:log", fmt.Sprintf("❌ %s: chưa cấu hình liên hệ Zalo cho %s (sửa ở Cài đặt > Zalo, thêm dòng khoá %q)", label, r.job.System, key))
 			emitter.Emit("zalo:sent", map[string]any{"po": r.job.PO, "ok": false})
 			continue
 		}
-		emitter.Emit("zalo:log", fmt.Sprintf("📤 Đang gửi %s → %s...", r.job.PO, r.contact))
+		emitter.Emit("zalo:log", fmt.Sprintf("📤 Đang gửi %s → %s...", label, r.contact))
 		// Deadline riêng cho từng job, giải phóng timer ngay khi job xong
 		// (không defer tới cuối vòng lặp) — batch dài không tích luỹ timer.
 		jobCtx, cancel := context.WithTimeout(ctx, zaloJobTimeout)
 		sendErr := a.zaloSender.SendMessage(jobCtx, r.contact, r.job.Message)
 		cancel()
 		if sendErr != nil {
-			emitter.Emit("zalo:log", fmt.Sprintf("❌ Gửi %s thất bại: %v", r.job.PO, sendErr))
+			emitter.Emit("zalo:log", fmt.Sprintf("❌ Gửi %s thất bại: %v", label, sendErr))
 			emitter.Emit("zalo:sent", map[string]any{"po": r.job.PO, "ok": false})
 			continue
 		}
-		emitter.Emit("zalo:log", fmt.Sprintf("✅ Đã gửi %s", r.job.PO))
+		emitter.Emit("zalo:log", fmt.Sprintf("✅ Đã gửi %s", label))
 		emitter.Emit("zalo:sent", map[string]any{"po": r.job.PO, "ok": true})
 	}
 }

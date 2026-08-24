@@ -375,3 +375,56 @@ export function buildZaloMessageForPO(
     processedAt,
   });
 }
+
+// buildZaloMessageForJITFile gộp CẢ FILE PDF JIT thành 1 tin (giống
+// buildZaloMessageForPO gộp CẢ PO của BigC thành 1 tin) - nhưng KHÔNG
+// dùng chung assembleOrderMessage/buildZaloMessageForPO được: 1 file JIT
+// chứa NHIỀU trang, MỖI trang 1 PO khác nhau (không như BigC, các dòng
+// chia sẻ CHUNG 1 po) - assembleOrderMessage chỉ hiện được đúng 1 po đại
+// diện (first.po), gọi thẳng với rows JIT sẽ ÂM THẦM làm mất mọi PO còn
+// lại khỏi tin nhắn. JIT cũng không có sai giá/khuyến mãi (Go processor
+// không set priceMismatchDetails/promoItems cho JIT) nên không cần phần
+// đó - liệt kê từng PO riêng cũng không hợp lý khi 1 file có thể có rất
+// nhiều PO, nên chỉ gộp lại thành SỐ LƯỢNG (đơn/mã sản phẩm) + tổng
+// tiền/cân nặng.
+//
+// KHÔNG hiện "số kiện" (totalPackages) - hàng JIT-CHOICE đóng thương mại
+// điện tử, mỗi đơn đóng gói RIÊNG một kiện, không gộp chung nhiều đơn/
+// kiện như quy tắc đóng kiện các hệ thống khác (info.PackSize) vẫn giả
+// định - số kiện tính theo quy tắc đó nên KHÔNG đúng cho JIT, hiện ra chỉ
+// gây hiểu nhầm.
+//
+// period là buổi giao (sáng/chiều) THEO GIÁ TRỊ NGƯỜI DÙNG ĐANG CHỌN -
+// caller phải tự lấy jitPeriodState.periodBySource[sourceId] trước (rơi
+// về row.jitPeriod nếu người dùng chưa đổi gì), KHÔNG đọc row.jitPeriod
+// trực tiếp ở đây vì giá trị đó chỉ phản ánh buổi lúc xử lý PDF, có thể
+// đã lỗi thời nếu người dùng vừa đổi qua ô chọn buổi trên bảng.
+export function buildZaloMessageForJITFile(
+  rows: OrderRow[],
+  period: string,
+  processedAt: string,
+): string {
+  if (rows.length === 0) return '';
+  const first = rows[0];
+
+  const totalDonGia = rows.reduce((sum, r) => sum + (Number(r.donGia) || 0), 0);
+  const totalWeightKg = formatWeightKg(
+    rows.reduce((sum, r) => sum + parseWeightKg(r.totalWeightKg || '0 kg'), 0),
+  );
+  // Đếm SỐ MÃ SẢN PHẨM bằng excelRows (số dòng Excel thật đã ghi cho mỗi
+  // trang) gộp qua Set để loại trùng - khớp đúng cách groupJITFiles
+  // (lib/jitFileGroups.ts) đã đếm cho phần chọn buổi giao, không tự bịa
+  // cách đếm khác cho cùng 1 khái niệm "số mã sản phẩm trong file".
+  const excelRowSet = new Set<number>();
+  for (const r of rows) for (const er of r.excelRows) excelRowSet.add(er);
+
+  const header = `**🔔 ĐƠN HÀNG JIT-CHOICE**\n${DIVIDER}`;
+  const identityLine = `🏪 {orange:${first.shipTo}} · 🗓️ ${first.entryDate} (**${period}**)`;
+  const countsLine = `🎫 Tổng số đơn: **${rows.length} PO** · 📦 Tổng số sản phẩm: **${excelRowSet.size} mã**`;
+  const totalsLine = `💰 **${formatMoney(totalDonGia)}đ** · ⚖️ ${totalWeightKg}`;
+
+  const paragraphs = [[header, identityLine].join('\n'), [countsLine, totalsLine].join('\n')];
+  if (processedAt) paragraphs.push(`⏱️ Xử lý lúc ${processedAt}`);
+
+  return paragraphs.join('\n\n');
+}

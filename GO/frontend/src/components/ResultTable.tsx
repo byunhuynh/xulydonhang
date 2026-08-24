@@ -25,6 +25,7 @@ import {
 import { useListEntrance } from '../lib/useListEntrance'
 import { mismatchesForPO } from '../lib/orderMismatchScope'
 import { groupJITFiles, skipsPriceReconciliation } from '../lib/jitFileGroups'
+import { groupKeyFor } from '../lib/zaloGrouping'
 import { belowSystemPriceDetails } from '../lib/poPriceWarning'
 import { JITPeriodMenu } from './JITPeriodMenu'
 import { isJITPeriodMenuDisabled } from '../lib/jitPeriodState'
@@ -224,18 +225,20 @@ export function ResultTable() {
       : pendingPOPriceAction.warningDetails
     : []
 
-  // Every PO number present in this batch, in first-seen order - the
-  // "chọn tất cả" checkbox and the toolbar's selected-count both count
-  // against this set, never against rows.length (one PO can span
-  // several BigC rows).
-  const uniquePOs: string[] = []
+  // Every group key present in this batch (po for most vendors, sourceId
+  // for JIT - see groupKeyFor), in first-seen order - the "chọn tất cả"
+  // checkbox and the toolbar's selected-count both count against this
+  // set, never against rows.length (one key can span several rows: BigC
+  // store rows sharing a po, or JIT pages sharing a sourceId).
+  const uniqueGroupKeys: string[] = []
   for (const row of rows) {
-    if (row.po && !uniquePOs.includes(row.po)) uniquePOs.push(row.po)
+    const key = groupKeyFor(row)
+    if (key && !uniqueGroupKeys.includes(key)) uniqueGroupKeys.push(key)
   }
 
-  function rowsForPO(po: string): number[] {
+  function rowsForGroupKey(key: string): number[] {
     return rows.reduce<number[]>((acc, row, idx) => {
-      if (row.po === po) acc.push(idx)
+      if (groupKeyFor(row) === key) acc.push(idx)
       return acc
     }, [])
   }
@@ -246,10 +249,18 @@ export function ResultTable() {
   }
 
   function openContentModalForSelection() {
-    const groups: POContentGroup[] = [...selectedPOs].map((po) => ({
-      po,
-      rows: rowsForPO(po).map((idx) => rows[idx]),
-    }))
+    const groups: POContentGroup[] = [...selectedPOs].map((key) => {
+      const groupRows = rowsForGroupKey(key).map((idx) => rows[idx])
+      const isJIT = groupRows[0]?.system === 'JIT-CHOICE'
+      return {
+        // Nhãn hiển thị của nhóm: JIT không có 1 po đại diện (mỗi trang
+        // 1 po khác nhau) nên dùng tên file PDF thay thế - vẫn là po
+        // thật cho mọi vendor khác.
+        po: isJIT ? (groupRows[0]?.fileName ?? key) : key,
+        rows: groupRows,
+        period: isJIT ? (jitPeriodState.periodBySource[key] ?? groupRows[0]?.jitPeriod) : undefined,
+      }
+    })
     setContentModalGroups(groups)
   }
 
@@ -326,12 +337,12 @@ export function ResultTable() {
                 <input
                   type="checkbox"
                   className="cursor-pointer accent-accent"
-                  checked={uniquePOs.length > 0 && selectedCount === uniquePOs.length}
+                  checked={uniqueGroupKeys.length > 0 && selectedCount === uniqueGroupKeys.length}
                   ref={(el) => {
-                    if (el) el.indeterminate = selectedCount > 0 && selectedCount < uniquePOs.length
+                    if (el) el.indeterminate = selectedCount > 0 && selectedCount < uniqueGroupKeys.length
                   }}
-                  onChange={(e) => toggleAllPOs(uniquePOs, e.target.checked)}
-                  title="Chọn tất cả PO"
+                  onChange={(e) => toggleAllPOs(uniqueGroupKeys, e.target.checked)}
+                  title="Chọn tất cả"
                 />
               </th>
               <th className="sticky top-0 z-10 w-12 border-b border-border bg-bg px-3 py-2 text-center font-sans text-[10px] font-bold uppercase tracking-wider text-muted">
@@ -361,7 +372,8 @@ export function ResultTable() {
             {rows.map((row, i) => {
               const meta = statusMeta(row)
               const price = priceMeta(row)
-              const isPOSelected = row.po !== '' && selectedPOs.has(row.po)
+              const rowGroupKey = groupKeyFor(row)
+              const isPOSelected = rowGroupKey !== '' && selectedPOs.has(rowGroupKey)
               const poMismatches = mismatchesForPO(rows, row.po)
               return (
                 <Fragment key={i}>
@@ -370,12 +382,12 @@ export function ResultTable() {
                     className={`transition-colors hover:bg-white/[0.03] ${isPOSelected ? 'bg-accent/[0.06]' : ''}`}
                   >
                     <td className="border-b border-border px-3 py-2 text-center" onClick={(e) => e.stopPropagation()}>
-                      {row.po !== '' && (
+                      {rowGroupKey !== '' && (
                         <input
                           type="checkbox"
                           className="cursor-pointer accent-accent"
                           checked={isPOSelected}
-                          onChange={() => togglePOSelection(row.po)}
+                          onChange={() => togglePOSelection(rowGroupKey)}
                         />
                       )}
                     </td>
@@ -552,15 +564,23 @@ export function ResultTable() {
         </table>
       </div>
       {contentModalGroups && contentModalGroups.length > 0 && (() => {
-        const firstRowIndex = rowsForPO(contentModalGroups[0].po)[0]
+        // Tra theo resultKey (định danh riêng của từng dòng), KHÔNG dùng
+        // lại rowsForGroupKey(g.po) - với nhóm JIT, g.po giờ là TÊN FILE
+        // hiển thị (xem openContentModalForSelection), không còn là 1 po
+        // thật để so khớp row.po nữa.
+        const indexByResultKey = new Map(rows.map((r, idx) => [r.resultKey, idx]))
+        const firstRowIndex = indexByResultKey.get(contentModalGroups[0].rows[0]?.resultKey ?? '')
         const combinedPriceBasis: Record<number, PriceBasis> = {}
         for (const g of contentModalGroups) {
-          Object.assign(combinedPriceBasis, buildPriceBasisForPO(rows, rowsForPO(g.po), resolvedChoice))
+          const indices = g.rows
+            .map((r) => indexByResultKey.get(r.resultKey))
+            .filter((idx): idx is number => idx !== undefined)
+          Object.assign(combinedPriceBasis, buildPriceBasisForPO(rows, indices, resolvedChoice))
         }
         return (
           <OrderContentModal
             groups={contentModalGroups}
-            processedAt={receivedAt[firstRowIndex] ?? ''}
+            processedAt={(firstRowIndex !== undefined ? receivedAt[firstRowIndex] : undefined) ?? ''}
             priceBasisBySku={combinedPriceBasis}
             onClose={() => setContentModalGroups(null)}
           />
