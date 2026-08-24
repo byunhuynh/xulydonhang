@@ -73,3 +73,20 @@ img, .no-drag {
 .wails-no-drag {
   --wails-draggable: no-drag;
 }
+
+/* Viền focus bằng bàn phím. Trước đây phần lớn nút trong app không có
+   chỉ báo focus nào thấy được, nên người dùng bàn phím (và bất kỳ ai
+   lỡ tay Tab) không biết mình đang đứng ở đâu. Đặt một lần ở đây thay
+   vì rải class lên từng nút để mọi thành phần mới sau này cũng có sẵn. */
+:focus-visible {
+  outline: 2px solid #28c5f2;
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+/* Màu bôi đen mặc định của trình duyệt không thuộc bảng màu nào của app;
+   đặt lại theo màu nhấn để phần chọn-copy trong bảng kết quả đọc được. */
+::selection {
+  background-color: rgba(40, 197, 242, 0.3);
+  color: #f1f0fb;
+}

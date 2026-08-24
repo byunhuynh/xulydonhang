@@ -9,6 +9,7 @@ import { ZaloQRModal } from './components/ZaloQRModal'
 import AnimatedBlueLogo from './components/AnimatedBlueLogo'
 import { useWailsEvents } from './hooks/useWailsEvents'
 import { useAppStore } from './store/appStore'
+import { formatBatchProgress } from './lib/batchProgress'
 import { InitializeApp } from '../wailsjs/go/main/App'
 
 type TabKey = 'process' | 'info'
@@ -17,8 +18,12 @@ function App() {
   useWailsEvents()
   const [tab, setTab] = useState<TabKey>('process')
   const isProcessing = useAppStore((s) => s.isProcessing)
+  const batchProgress = useAppStore((s) => s.batchProgress)
   const lockStatus = useAppStore((s) => s.lockStatus)
   const [isSettingsOpen, setIsSettingsOpen] = useState(false)
+  // Chuỗi rỗng khi lô chưa công bố kích thước - thanh trạng thái khi đó
+  // vẫn chỉ nói "Đang xử lý" như trước chứ không hiện "0/0 file".
+  const progressLabel = formatBatchProgress(batchProgress)
   const [startupState, setStartupState] = useState<'loading' | 'ready' | 'error'>('loading')
   const startupStarted = useRef(false)
 
@@ -69,7 +74,14 @@ function App() {
               isProcessing ? 'animate-pulse bg-accent shadow-[0_0_8px_theme(colors.accent)]' : 'bg-success shadow-[0_0_8px_theme(colors.success)]'
             }`}
           />
-          {isProcessing ? 'Đang xử lý...' : 'Sẵn sàng'}
+          {isProcessing ? (
+            <>
+              Đang xử lý
+              {progressLabel && <span className="tabular-nums text-accent">{progressLabel}</span>}
+            </>
+          ) : (
+            'Sẵn sàng'
+          )}
         </div>
       </header>
       <main className="flex-1 overflow-hidden p-4">

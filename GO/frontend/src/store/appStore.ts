@@ -10,6 +10,7 @@ import {
   type JITPeriodRequest,
   type JITPeriodState,
 } from '../lib/jitPeriodState'
+import { createBatchProgress, type BatchProgress } from '../lib/batchProgress'
 
 export type LockStatus = 'checking' | 'unlocked' | 'locked'
 
@@ -17,6 +18,7 @@ interface AppState {
   files: string[]
   stt: number
   isProcessing: boolean
+  batchProgress: BatchProgress
   logLines: LogEntry[]
   rows: OrderRow[]
   lockStatus: LockStatus
@@ -39,6 +41,7 @@ interface AppState {
   removeFiles: (files: string[]) => void
   setStt: (stt: number) => void
   setProcessing: (processing: boolean) => void
+  setBatchProgress: (progress: BatchProgress) => void
   appendLog: (line: string) => void
   clearLog: () => void
   appendRow: (row: OrderRow) => void
@@ -54,6 +57,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   files: [],
   stt: 1,
   isProcessing: false,
+  batchProgress: createBatchProgress(),
   logLines: [],
   rows: [],
   // Blocks the UI by default until the first "applock:status" event
@@ -89,6 +93,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     })),
   setStt: (stt) => set({ stt }),
   setProcessing: (isProcessing) => set({ isProcessing }),
+  setBatchProgress: (batchProgress) => set({ batchProgress }),
   appendLog: (line) =>
     set((state) => ({
       logLines: [

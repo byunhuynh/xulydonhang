@@ -2,11 +2,13 @@ import { useEffect } from 'react'
 import { EventsOn, OnFileDrop, OnFileDropOff } from '../../wailsjs/runtime/runtime'
 import { useAppStore, type LockStatus } from '../store/appStore'
 import type { OrderRow } from '../types'
+import type { BatchProgress } from '../lib/batchProgress'
 
 export function useWailsEvents() {
   const appendLog = useAppStore((s) => s.appendLog)
   const upsertRow = useAppStore((s) => s.upsertRow)
   const setProcessing = useAppStore((s) => s.setProcessing)
+  const setBatchProgress = useAppStore((s) => s.setBatchProgress)
   const setStt = useAppStore((s) => s.setStt)
   const addFiles = useAppStore((s) => s.addFiles)
   const setLockStatus = useAppStore((s) => s.setLockStatus)
@@ -16,6 +18,7 @@ export function useWailsEvents() {
   useEffect(() => {
     const offLog = EventsOn('process:log', (line: string) => appendLog(line))
     const offRow = EventsOn('process:row', (row: OrderRow) => upsertRow(row))
+    const offProgress = EventsOn('process:progress', (progress: BatchProgress) => setBatchProgress(progress))
     const offDone = EventsOn('process:done', (finalStt: number) => {
       setProcessing(false)
       setStt(finalStt)
@@ -52,6 +55,7 @@ export function useWailsEvents() {
     return () => {
       offLog()
       offRow()
+      offProgress()
       offDone()
       offDrop()
       offLock()
@@ -61,5 +65,5 @@ export function useWailsEvents() {
       offZaloDone()
       OnFileDropOff()
     }
-  }, [appendLog, upsertRow, setProcessing, setStt, addFiles, setLockStatus, deselectPO, setZaloQR])
+  }, [appendLog, upsertRow, setBatchProgress, setProcessing, setStt, addFiles, setLockStatus, deselectPO, setZaloQR])
 }

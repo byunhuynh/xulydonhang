@@ -92,6 +92,36 @@ function priceMeta(row: OrderRow): { classes: string; label: string; icon: 'ok' 
   return { classes: 'bg-success/15 text-success', label: 'Đúng giá', icon: 'ok' }
 }
 
+// Vạch màu 3px ở đầu mỗi dòng. Nhãn tròn trong cột Trạng thái vẫn giữ
+// nguyên; vạch này để đọc được tình trạng cả bảng khi liếc, không phải
+// đọc từng chữ - đặc biệt cần khi một lô có hàng chục dòng và chỉ vài
+// dòng thực sự cần người xử lý.
+function stripeClass(row: OrderRow): string {
+  switch (row.statusKind) {
+    case 'failed':
+      return 'bg-danger'
+    case 'warning':
+      return 'bg-warning'
+    case 'processing':
+      return 'bg-accent'
+    case 'done':
+      return 'bg-success'
+    default:
+      return 'bg-border'
+  }
+}
+
+// Mono CHỈ dành cho dữ liệu cần so ký tự theo cột: mã PO, mã khách, số
+// trang, số tiền. Trước đây cả bảng để font-mono, kể cả tên file và câu
+// trạng thái tiếng Việt - mono đọc chậm hơn và ngốn chiều ngang mà không
+// đổi lại được gì ở những cột đó.
+const cellClassByColumn: Partial<Record<(typeof columns)[number]['key'], string>> = {
+  page: 'font-mono tabular-nums text-muted',
+  maKhachHang: 'font-mono',
+  po: 'font-mono',
+  donGia: 'text-right font-mono tabular-nums',
+}
+
 function formatMoney(value: string): string {
   const n = Number(value)
   if (Number.isNaN(n)) return value
@@ -330,9 +360,10 @@ export function ResultTable() {
         </div>
       )}
       <div className="selectable flex-1 overflow-auto rounded-lg border border-border">
-        <table className="w-full border-collapse font-mono text-xs">
+        <table className="w-full border-collapse text-xs">
           <thead>
             <tr>
+              <th className="sticky top-0 z-10 w-[3px] border-b border-border bg-bg p-0" aria-hidden="true" />
               <th className="sticky top-0 z-10 w-9 border-b border-border bg-bg px-3 py-2 text-center">
                 <input
                   type="checkbox"
@@ -364,8 +395,14 @@ export function ResultTable() {
           <tbody ref={tbodyRef}>
             {rows.length === 0 && (
               <tr>
-                <td colSpan={columns.length + 3} className="p-6 text-center font-sans text-muted">
-                  Chưa có kết quả nào.
+                <td colSpan={columns.length + 4} className="p-0">
+                  <div className="m-3 rounded-lg border border-dashed border-border px-5 py-9 text-center">
+                    <p className="text-[13px] font-semibold text-ink">Chưa xử lý file nào</p>
+                    <p className="mx-auto mt-1.5 max-w-[46ch] text-xs leading-relaxed text-muted">
+                      Chọn file ở mục <span className="font-mono text-brandPurple">01</span> rồi bấm XỬ LÝ ĐƠN HÀNG. Kết quả
+                      hiện dần ngay khi từng đơn xong, không cần đợi hết file.
+                    </p>
+                  </div>
                 </td>
               </tr>
             )}
@@ -373,6 +410,7 @@ export function ResultTable() {
               const meta = statusMeta(row)
               const price = priceMeta(row)
               const rowGroupKey = groupKeyFor(row)
+              const isPending = row.statusKind === 'processing'
               const isPOSelected = rowGroupKey !== '' && selectedPOs.has(rowGroupKey)
               const poMismatches = mismatchesForPO(rows, row.po)
               return (
@@ -381,6 +419,7 @@ export function ResultTable() {
                     data-row-entry
                     className={`transition-colors hover:bg-white/[0.03] ${isPOSelected ? 'bg-accent/[0.06]' : ''}`}
                   >
+                    <td className={`border-b border-border p-0 ${stripeClass(row)}`} aria-hidden="true" />
                     <td className="border-b border-border px-3 py-2 text-center" onClick={(e) => e.stopPropagation()}>
                       {rowGroupKey !== '' && (
                         <input
@@ -391,7 +430,9 @@ export function ResultTable() {
                         />
                       )}
                     </td>
-                    <td className="border-b border-border px-3 py-2 text-center font-semibold text-muted">{i + 1}</td>
+                    <td className="border-b border-border px-3 py-2 text-center font-mono font-semibold tabular-nums text-muted">
+                      {i + 1}
+                    </td>
                     {columns.map((c) => {
                       const cellKey = `${i}-${c.key}`
                       const copyValue =
@@ -407,13 +448,22 @@ export function ResultTable() {
                           onClick={() => handleCopy(cellKey, copyValue)}
                           title="Nhấp để copy"
                           className={`relative cursor-pointer border-b border-border px-3 py-2 text-ink transition-colors ${
-                            isCopied ? 'bg-accent/20' : 'hover:bg-accent/[0.08]'
-                          }`}
+                            cellClassByColumn[c.key] ?? ''
+                          } ${isCopied ? 'bg-accent/20' : 'hover:bg-accent/[0.08]'}`}
                         >
                           {isCopied ? (
                             <span className="inline-flex items-center gap-1.5 font-sans font-semibold text-accent">
                               <FaCheck size={10} /> Đã copy
                             </span>
+                          ) : isPending && (c.key === 'donGia' || c.key === 'priceMismatchCount') ? (
+                            // Ô chưa có số của một dòng đang chạy: skeleton nhấp
+                            // nháy thay vì để trống. Trước đây dòng đang chạy
+                            // trông y hệt dòng đã xong bị thiếu dữ liệu.
+                            <span
+                              className="inline-block h-2 animate-pulse rounded bg-border"
+                              style={{ width: c.key === 'donGia' ? '56px' : '38px' }}
+                              aria-label="Đang tính"
+                            />
                           ) : c.key === 'status' ? (
                             <span
                               className={`inline-flex items-center gap-1.5 whitespace-nowrap rounded-full px-2.5 py-0.5 font-sans font-semibold ${meta.classes}`}
@@ -443,6 +493,10 @@ export function ResultTable() {
                                 {price.label}
                               </span>
                             )
+                          ) : c.key === 'fileName' ? (
+                            <span className="block max-w-[168px] truncate" title={row.fileName}>
+                              {row.fileName}
+                            </span>
                           ) : c.key === 'donGia' ? (
                             <span
                               key={flashCount[i] ?? 0}
@@ -473,7 +527,7 @@ export function ResultTable() {
                   </tr>
                   {expandedRow === i && row.priceMismatchDetails.length > 0 && (
                     <tr key={`${i}-detail`} className="bg-bg/60">
-                      <td colSpan={columns.length + 3} className="p-0">
+                      <td colSpan={columns.length + 4} className="p-0">
                         {poMismatches.length > 1 && (
                           <div className="flex items-center gap-2 border-b border-border bg-panel/60 px-3 py-2">
                             <span className="font-sans text-[10px] font-semibold uppercase tracking-wide text-muted">

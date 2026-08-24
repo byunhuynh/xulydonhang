@@ -477,7 +477,8 @@ func (a *App) runReservedBatch(emitter Emitter, files []string, stt int) {
 		return
 	}
 
-	for _, f := range files {
+	emitter.Emit("process:progress", BatchProgress{Done: 0, Total: len(files)})
+	for i, f := range files {
 		emitter.Emit("process:log", fmt.Sprintf("Đang xử lý %s...", filepath.Base(f)))
 		streamed := map[string]bool{}
 		loggedSkuKeys := map[string]bool{}
@@ -501,6 +502,7 @@ func (a *App) runReservedBatch(emitter Emitter, files []string, stt int) {
 				StatusKind: processing.StatusKindFailed,
 			}, f))
 			current++
+			emitter.Emit("process:progress", BatchProgress{Done: i + 1, Total: len(files)})
 			continue
 		}
 		for _, row := range rows {
@@ -511,8 +513,22 @@ func (a *App) runReservedBatch(emitter Emitter, files []string, stt int) {
 			emitProcessRowOncePerSkuKey(emitter, row, loggedSkuKeys)
 			current++
 		}
+		// Một file lỗi vẫn là một file đã xong phần việc của nó: nếu bỏ
+		// qua ở nhánh trên thì thanh tiến trình sẽ đứng im ở con số cũ
+		// cho tới hết lô và người dùng tưởng app treo.
+		emitter.Emit("process:progress", BatchProgress{Done: i + 1, Total: len(files)})
 	}
 	_ = a.cfg.SetSTT(current)
+}
+
+// BatchProgress là tiến trình của một lô, phát qua "process:progress" khi
+// lô bắt đầu và sau mỗi file. Frontend không tự suy ra được con số này:
+// một file có thể phát dòng tạm trước khi thực sự xong (BigC gửi 23 dòng
+// "đang xử lý" trước lần ghi Excel gộp), nên đếm theo dòng sẽ báo xong
+// sớm hơn thực tế.
+type BatchProgress struct {
+	Done  int `json:"done"`
+	Total int `json:"total"`
 }
 
 func (a *App) processOne(f string, stt int, emit func(processing.OrderRow)) (rows []processing.OrderRow, err error) {

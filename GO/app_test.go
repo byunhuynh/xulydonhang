@@ -134,7 +134,12 @@ func TestRunBatch_EmitsLogRowPerFileThenDone(t *testing.T) {
 
 	a.runBatch(emitter, []string{"a.pdf", "b.pdf"}, 10)
 
-	wantNames := []string{"process:log", "process:row", "process:log", "process:row", "process:done"}
+	wantNames := []string{
+		"process:progress",
+		"process:log", "process:row", "process:progress",
+		"process:log", "process:row", "process:progress",
+		"process:done",
+	}
 	if len(emitter.events) != len(wantNames) {
 		t.Fatalf("got %d events, want %d: %+v", len(emitter.events), len(wantNames), emitter.events)
 	}
@@ -244,7 +249,10 @@ func TestApp_RunBatchStreamsRowsWithoutDuplicates(t *testing.T) {
 				logPayloads = append(logPayloads, event.data[0].(string))
 			}
 		}
-		wantNames := []string{"process:log", "process:log", "process:row", "process:row", "process:log", "process:row", "process:done"}
+		// Tiến trình mở màn trước dòng log đầu tiên và đóng lại sau file
+		// cuối: thanh trạng thái biết tổng số file ngay từ đầu chứ không
+		// phải đợi file đầu tiên chạy xong mới hiện ra.
+		wantNames := []string{"process:progress", "process:log", "process:log", "process:row", "process:row", "process:log", "process:row", "process:progress", "process:done"}
 		if !reflect.DeepEqual(names, wantNames) {
 			t.Fatalf("event names = %#v, want %#v", names, wantNames)
 		}
@@ -289,7 +297,12 @@ func TestRunBatch_FileErrorEmitsLogAndContinues(t *testing.T) {
 
 	a.runBatch(emitter, []string{"bad.pdf", "good.pdf"}, 1)
 
-	wantNames := []string{"process:log", "process:log", "process:row", "process:log", "process:row", "process:done"}
+	wantNames := []string{
+		"process:progress",
+		"process:log", "process:log", "process:row", "process:progress",
+		"process:log", "process:row", "process:progress",
+		"process:done",
+	}
 	if len(emitter.events) != len(wantNames) {
 		t.Fatalf("got %d events, want %d: %+v", len(emitter.events), len(wantNames), emitter.events)
 	}
@@ -299,9 +312,25 @@ func TestRunBatch_FileErrorEmitsLogAndContinues(t *testing.T) {
 		}
 	}
 
-	failureRow, ok := emitter.events[2].data[0].(processing.OrderRow)
-	if !ok {
-		t.Fatalf("event[2].data[0] is not an OrderRow: %#v", emitter.events[2].data)
+	// Tìm theo tên sự kiện chứ không theo chỉ số: chỉ số đổi mỗi lần
+	// thêm một loại sự kiện mới vào lô, còn "dòng lỗi đầu tiên" thì không.
+	var failureRow processing.OrderRow
+	found := false
+	for _, event := range emitter.events {
+		if event.name != "process:row" {
+			continue
+		}
+		row, ok := event.data[0].(processing.OrderRow)
+		if !ok {
+			t.Fatalf("process:row data = %#v, want processing.OrderRow", event.data)
+		}
+		if row.StatusKind == processing.StatusKindFailed {
+			failureRow, found = row, true
+			break
+		}
+	}
+	if !found {
+		t.Fatal("không có dòng failed nào cho bad.pdf")
 	}
 	if failureRow.FileName != "bad.pdf" {
 		t.Fatalf("failure row FileName = %q, want %q", failureRow.FileName, "bad.pdf")
@@ -937,5 +966,56 @@ func TestApp_RefreshZaloQR_DelegatesToSender(t *testing.T) {
 	}
 	if sender.refreshQRCalls != 1 {
 		t.Fatalf("refreshQRCalls = %d, want 1", sender.refreshQRCalls)
+	}
+}
+
+func TestApp_RunBatchReportsProgressPerFile(t *testing.T) {
+	// Frontend không có cách nào tự đếm "còn bao nhiêu file nữa": một file
+	// có thể phát ra dòng tạm rồi mới xong (BigC, JIT), nên đếm theo dòng
+	// sẽ báo xong sớm. Backend đang lặp qua danh sách file nên chỉ nó biết
+	// con số thật - đây là chỗ nói ra.
+	cfg := config.NewStore(filepath.Join(t.TempDir(), "config.txt"))
+	a := &App{cfg: cfg, processor: &stubProcessor{}, excelPath: freshOrderWorkbook(t)}
+	emitter := &fakeEmitter{}
+
+	a.runBatch(emitter, []string{"a.pdf", "b.pdf", "c.pdf"}, 1)
+
+	var got []BatchProgress
+	for _, event := range emitter.events {
+		if event.name == "process:progress" {
+			got = append(got, event.data[0].(BatchProgress))
+		}
+	}
+	want := []BatchProgress{
+		{Done: 0, Total: 3},
+		{Done: 1, Total: 3},
+		{Done: 2, Total: 3},
+		{Done: 3, Total: 3},
+	}
+	if len(got) != len(want) {
+		t.Fatalf("progress events = %+v, want %+v", got, want)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("progress[%d] = %+v, want %+v", i, got[i], want[i])
+		}
+	}
+}
+
+func TestApp_RunBatchReportsProgressEvenWhenAFileFails(t *testing.T) {
+	cfg := config.NewStore(filepath.Join(t.TempDir(), "config.txt"))
+	a := &App{cfg: cfg, processor: &stubProcessor{failOn: "b.pdf"}, excelPath: freshOrderWorkbook(t)}
+	emitter := &fakeEmitter{}
+
+	a.runBatch(emitter, []string{"a.pdf", "b.pdf"}, 1)
+
+	last := BatchProgress{}
+	for _, event := range emitter.events {
+		if event.name == "process:progress" {
+			last = event.data[0].(BatchProgress)
+		}
+	}
+	if (last != BatchProgress{Done: 2, Total: 2}) {
+		t.Fatalf("progress cuối = %+v, want mọi file đều được tính kể cả file lỗi", last)
 	}
 }
