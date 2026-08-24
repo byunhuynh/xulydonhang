@@ -3,6 +3,7 @@ package processing
 import (
 	"context"
 	"math/rand"
+	"reflect"
 	"testing"
 	"time"
 )
@@ -50,5 +51,23 @@ func TestMockProcessor_ContextCancelledReturnsError(t *testing.T) {
 
 	if _, err := p.Process(ctx, "/tmp/order1.pdf", 1); err == nil {
 		t.Fatal("Process expected error when context is already cancelled, got nil")
+	}
+}
+
+func TestProcessor_ProcessStreamingEmitsReturnedRows(t *testing.T) {
+	p := &RealProcessor{}
+	var emitted []OrderRow
+
+	rows, err := p.ProcessStreaming(context.Background(), "missing.pdf", 1, func(row OrderRow) {
+		emitted = append(emitted, row)
+	})
+	if err != nil {
+		t.Fatalf("ProcessStreaming returned error: %v", err)
+	}
+	if len(rows) != 1 {
+		t.Fatalf("ProcessStreaming returned %d rows, want 1", len(rows))
+	}
+	if !reflect.DeepEqual(emitted, rows) {
+		t.Fatalf("emitted rows = %#v, want %#v", emitted, rows)
 	}
 }

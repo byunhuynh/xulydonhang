@@ -18,6 +18,13 @@ type Processor interface {
 	Process(ctx context.Context, filePath string, stt int) ([]OrderRow, error)
 }
 
+// StreamingProcessor optionally reports completed rows while processing is
+// still in progress. Processor remains the required contract so existing
+// processors continue to work unchanged.
+type StreamingProcessor interface {
+	ProcessStreaming(ctx context.Context, filePath string, stt int, emit func(OrderRow)) ([]OrderRow, error)
+}
+
 var mockVendors = []string{
 	"Coop", "BigC", "Lotte", "Satra", "Emart", "Kingfood", "Winmart",
 	"Fujimart", "BHX", "Farmer", "CN-HCM", "MR.DIY", "JIT", "JV-Mart", "JMART", "BC MART",

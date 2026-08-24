@@ -41,6 +41,26 @@ func (s *stubProcessor) Process(ctx context.Context, filePath string, stt int) (
 	return []processing.OrderRow{{FileName: filePath, PO: "PO1", Status: processing.StatusDone}}, nil
 }
 
+type streamingStubProcessor struct {
+	emitted []processing.OrderRow
+	returned []processing.OrderRow
+	streamCalls int
+	processCalls int
+}
+
+var _ processing.StreamingProcessor = (*streamingStubProcessor)(nil)
+
+func (s *streamingStubProcessor) Process(ctx context.Context, filePath string, stt int) ([]processing.OrderRow, error) {
+	s.processCalls++
+	return s.returned, nil
+}
+
+func (s *streamingStubProcessor) ProcessStreaming(ctx context.Context, filePath string, stt int, emit func(processing.OrderRow)) ([]processing.OrderRow, error) {
+	s.streamCalls++
+	for _, row := range s.emitted { emit(row) }
+	return s.returned, nil
+}
+
 // freshOrderWorkbook copies the empty (8-header-row, no data) test
 // template into a temp dir and returns its path - runBatch now calls
 // excelwriter.ClearOrderRows(a.excelPath) before anything else (see
@@ -94,6 +114,46 @@ func TestRunBatch_EmitsLogRowPerFileThenDone(t *testing.T) {
 	if gotSTT != 12 {
 		t.Fatalf("STT after batch = %d, want 12", gotSTT)
 	}
+}
+
+func TestApp_RunBatchStreamsRowsWithoutDuplicates(t *testing.T) {
+	t.Run("streaming processor emits each row once", func(t *testing.T) {
+		processor := &streamingStubProcessor{
+			emitted: []processing.OrderRow{{ResultKey: "a", SkuLog: []string{"streamed sku"}}},
+			returned: []processing.OrderRow{
+				{ResultKey: "a", SkuLog: []string{"streamed sku"}},
+				{ResultKey: "b", SkuLog: []string{"returned sku"}},
+			},
+		}
+		a := &App{cfg: config.NewStore(filepath.Join(t.TempDir(), "config.txt")), processor: processor, excelPath: freshOrderWorkbook(t)}
+		emitter := &fakeEmitter{}
+		a.runBatch(emitter, []string{"a.pdf"}, 1)
+		if processor.streamCalls != 1 || processor.processCalls != 0 {
+			t.Fatalf("calls = streaming %d, regular %d; want streaming 1, regular 0", processor.streamCalls, processor.processCalls)
+		}
+		var keys []string
+		for _, event := range emitter.events {
+			if event.name == "process:row" {
+				row, ok := event.data[0].(processing.OrderRow)
+				if !ok { t.Fatalf("process:row data = %T, want processing.OrderRow", event.data[0]) }
+				keys = append(keys, row.ResultKey)
+			}
+		}
+		if !reflect.DeepEqual(keys, []string{"a", "b"}) { t.Fatalf("streamed row keys = %#v, want []string{\"a\", \"b\"}", keys) }
+		var names []string
+		for _, event := range emitter.events { names = append(names, event.name) }
+		wantNames := []string{"process:log", "process:log", "process:row", "process:log", "process:row", "process:done"}
+		if !reflect.DeepEqual(names, wantNames) { t.Fatalf("event names = %#v, want %#v", names, wantNames) }
+	})
+	t.Run("non-streaming processor still emits returned rows", func(t *testing.T) {
+		a := &App{cfg: config.NewStore(filepath.Join(t.TempDir(), "config.txt")), processor: &stubProcessor{}, excelPath: freshOrderWorkbook(t)}
+		emitter := &fakeEmitter{}
+		a.runBatch(emitter, []string{"legacy.pdf"}, 1)
+		var rows []processing.OrderRow
+		for _, event := range emitter.events { if event.name == "process:row" { rows = append(rows, event.data[0].(processing.OrderRow)) } }
+		if len(rows) != 1 { t.Fatalf("process:row count = %d, want 1", len(rows)) }
+		if rows[0].ResultKey != "legacy:legacy.pdf:::PO1" { t.Fatalf("legacy processor ResultKey = %q, want deterministic fallback", rows[0].ResultKey) }
+	})
 }
 
 func TestRunBatch_FileErrorEmitsLogAndContinues(t *testing.T) {

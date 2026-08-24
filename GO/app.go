@@ -358,10 +358,18 @@ func (a *App) runBatch(emitter Emitter, files []string, stt int) {
 
 	for _, f := range files {
 		emitter.Emit("process:log", fmt.Sprintf("Đang xử lý %s...", filepath.Base(f)))
-		rows, err := a.processOne(f, current)
+		streamed := map[string]bool{}
+		emitRow := func(row processing.OrderRow) {
+			row = emitProcessRow(emitter, row)
+			if row.ResultKey != "" {
+				streamed[row.ResultKey] = true
+			}
+			current++
+		}
+		rows, err := a.processOne(f, current, emitRow)
 		if err != nil {
 			emitter.Emit("process:log", fmt.Sprintf("❌ Lỗi xử lý %s: %v", filepath.Base(f), err))
-			emitter.Emit("process:row", processing.OrderRow{
+			emitProcessRow(emitter, processing.OrderRow{
 				FileName:   filepath.Base(f),
 				Status:     processing.StatusFailed,
 				StatusKind: processing.StatusKindFailed,
@@ -370,23 +378,43 @@ func (a *App) runBatch(emitter Emitter, files []string, stt int) {
 			continue
 		}
 		for _, row := range rows {
-			for _, line := range row.SkuLog {
-				emitter.Emit("process:log", line)
+			row = ensureResultKey(row)
+			if row.ResultKey != "" && streamed[row.ResultKey] {
+				continue
 			}
-			emitter.Emit("process:row", row)
+			emitProcessRow(emitter, row)
 			current++
 		}
 	}
 	_ = a.cfg.SetSTT(current)
 }
 
-func (a *App) processOne(f string, stt int) (rows []processing.OrderRow, err error) {
+func (a *App) processOne(f string, stt int, emit func(processing.OrderRow)) (rows []processing.OrderRow, err error) {
 	defer func() {
 		if r := recover(); r != nil {
 			err = fmt.Errorf("panic: %v", r)
 		}
 	}()
+	if processor, ok := a.processor.(processing.StreamingProcessor); ok {
+		return processor.ProcessStreaming(context.Background(), f, stt, emit)
+	}
 	return a.processor.Process(context.Background(), f, stt)
+}
+
+func emitProcessRow(emitter Emitter, row processing.OrderRow) processing.OrderRow {
+	row = ensureResultKey(row)
+	for _, line := range row.SkuLog {
+		emitter.Emit("process:log", line)
+	}
+	emitter.Emit("process:row", row)
+	return row
+}
+
+func ensureResultKey(row processing.OrderRow) processing.OrderRow {
+	if row.ResultKey == "" {
+		row.ResultKey = fmt.Sprintf("legacy:%s:%s:%s:%s", row.FileName, row.Page, row.System, row.PO)
+	}
+	return row
 }
 
 // ZaloJob là 1 lần gửi cần thực hiện: nội dung tin nhắn ĐÃ được frontend

@@ -41,13 +41,23 @@ type RealProcessor struct {
 }
 
 func (p *RealProcessor) Process(ctx context.Context, filePath string, stt int) ([]OrderRow, error) {
+	return p.process(ctx, filePath, stt, nil)
+}
+
+func (p *RealProcessor) ProcessStreaming(ctx context.Context, filePath string, stt int, emit func(OrderRow)) ([]OrderRow, error) {
+	return p.process(ctx, filePath, stt, emit)
+}
+
+func (p *RealProcessor) process(ctx context.Context, filePath string, stt int, emit func(OrderRow)) ([]OrderRow, error) {
 	pageTexts, pageNumbers, err := extractPageTexts(filePath)
 	if err != nil {
-		return []OrderRow{{
+		rows := []OrderRow{{
 			FileName:   filepath.Base(filePath),
 			Status:     StatusFailed + " - không đọc được PDF: " + err.Error(),
 			StatusKind: StatusKindFailed,
-		}}, nil
+		}}
+		emitRows(emit, rows)
+		return rows, nil
 	}
 
 	// BigC's identifying markers are present on every page of a real
@@ -58,7 +68,9 @@ func (p *RealProcessor) Process(ctx context.Context, filePath string, stt int) (
 	// specifically and, if it's BigC, hand the WHOLE file to
 	// processBigcDocument instead of entering the per-page loop below.
 	if len(pageTexts) > 0 && vendor.Identify(pageTexts[0]) == "BigC" {
-		return p.processBigcDocument(filePath, pageTexts)
+		rows, err := p.processBigcDocument(filePath, pageTexts)
+		emitRows(emit, rows)
+		return rows, err
 	}
 
 	var rows []OrderRow
@@ -193,7 +205,13 @@ func (p *RealProcessor) Process(ctx context.Context, filePath string, stt int) (
 		}
 	}
 
+	emitRows(emit, rows)
 	return rows, nil
+}
+
+func emitRows(emit func(OrderRow), rows []OrderRow) {
+	if emit == nil { return }
+	for _, row := range rows { emit(row) }
 }
 
 func splitPageIntoPOs(text string) ([]string, bool) {
