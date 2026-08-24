@@ -1,0 +1,21 @@
+/* CSS cho AnimatedBlueLogo. Wrapper cha quyết định kích thước (đặt
+   height + aspect-[627/332] lên chính thẻ .animated-blue-logo) và bóng đổ
+   (drop-shadow qua className) - component này cố tình không tự áp filter
+   riêng, để dùng lại được ở nhiều chỗ khác nhau trong app (logo header
+   lúc idle cần glow cyan khác với lúc dùng trong màn hình loading). */
+
+.animated-blue-logo {
+  display: inline-block;
+  line-height: 0;
+}
+
+.animated-blue-logo svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+
+.animated-blue-logo .logo-cyan-stroke {
+  will-change: clip-path;
+}

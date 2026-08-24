@@ -17,11 +17,13 @@ export interface PromoItem {
 
 export interface OrderRow {
   fileName: string
+  sourceId: string
   page: string
   system: string
   maKhachHang: string
   po: string
   resultKey: string
+  maVanDon: string
   donGia: string
   status: string
   statusKind: string

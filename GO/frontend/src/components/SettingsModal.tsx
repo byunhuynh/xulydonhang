@@ -1,10 +1,11 @@
 // GO/frontend/src/components/SettingsModal.tsx
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { FaXmark } from 'react-icons/fa6'
 import { GetAppSettings, SaveAppSettings } from '../../wailsjs/go/main/App'
 import { useAppStore } from '../store/appStore'
 import type { AppSettings } from '../types'
 import { KeyValueEditor } from './KeyValueEditor'
+import { useModalEntrance } from '../lib/useModalEntrance'
 
 type SettingsTab = 'gid' | 'zalo' | 'reminder'
 
@@ -18,6 +19,9 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
   const [saved, setSaved] = useState(false)
   const [dupState, setDupState] = useState({ gid: false, zalo: false, reminder: false })
   const appendLog = useAppStore((s) => s.appendLog)
+  const backdropRef = useRef<HTMLDivElement>(null)
+  const cardRef = useRef<HTMLDivElement>(null)
+  useModalEntrance(backdropRef, cardRef, [!!settings])
 
   useEffect(() => {
     GetAppSettings()
@@ -27,8 +31,10 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
 
   if (!settings) {
     return (
-      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60" onClick={onClose}>
-        <div className="rounded-xl border border-border bg-panel p-6 text-sm text-muted">Đang tải...</div>
+      <div ref={backdropRef} className="fixed inset-0 z-50 flex items-center justify-center bg-black/60" onClick={onClose}>
+        <div ref={cardRef} className="rounded-xl border border-border bg-panel p-6 text-sm text-muted">
+          Đang tải...
+        </div>
       </div>
     )
   }
@@ -52,8 +58,9 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
   ]
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60" onClick={onClose}>
+    <div ref={backdropRef} className="fixed inset-0 z-50 flex items-center justify-center bg-black/60" onClick={onClose}>
       <div
+        ref={cardRef}
         className="flex max-h-[80vh] w-[560px] flex-col rounded-xl border border-border bg-panel p-4"
         onClick={(e) => e.stopPropagation()}
       >
@@ -111,7 +118,7 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
         </div>
         <div className="mt-3 flex items-center justify-between border-t border-border pt-3">
           {saved ? (
-            <span className="font-sans text-xs text-success">Đã lưu. Khởi động lại app để áp dụng thay đổi.</span>
+            <span className="font-sans text-xs text-success">Đã lưu và áp dụng ngay.</span>
           ) : (
             <span />
           )}

@@ -138,8 +138,11 @@ export function FileListPanel({
   }
 
   return (
+    // Không animate flex-grow (không dùng transition-all ở đây) - animate
+    // trực tiếp thuộc tính flex trong 1 flex-col dùng chung với LogPanel
+    // từng gây đè/chồng hình giữa 2 panel lúc đổi kích thước (WebView2).
     <section
-      className={`flex min-h-0 flex-col rounded-xl border border-border bg-panel p-3.5 transition-all ${
+      className={`flex min-h-0 flex-col rounded-xl border border-border bg-panel p-3.5 ${
         size === 'compact' ? 'flex-none' : size === 'expanded' ? 'flex-1' : 'flex-[2]'
       }`}
     >

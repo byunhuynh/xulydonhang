@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useState } from 'react'
+import { Fragment, useEffect, useRef, useState } from 'react'
 import {
   FaCircle,
   FaCheck,
@@ -9,6 +9,7 @@ import {
   FaFilePdf,
   FaMagnifyingGlassDollar,
   FaCommentDots,
+  FaXmark,
 } from 'react-icons/fa6'
 import { useAppStore } from '../store/appStore'
 import type { OrderRow, PriceMismatchDetail } from '../types'
@@ -21,8 +22,21 @@ import {
   buildPriceBasisForPO,
   type PriceBasis,
 } from '../lib/zaloMessage'
+import { useListEntrance } from '../lib/useListEntrance'
+import { mismatchesForPO } from '../lib/orderMismatchScope'
 import { groupJITFiles, skipsPriceReconciliation } from '../lib/jitFileGroups'
+import { belowSystemPriceDetails } from '../lib/poPriceWarning'
 import { JITPeriodMenu } from './JITPeriodMenu'
+import { isJITPeriodMenuDisabled } from '../lib/jitPeriodState'
+
+type PendingPOPriceAction =
+  | { kind: 'single'; rowIndex: number; detail: PriceMismatchDetail }
+  | {
+      kind: 'all'
+      po: string
+      items: Array<{ rowIndex: number; detail: PriceMismatchDetail }>
+      warningDetails: PriceMismatchDetail[]
+    }
 
 const columns: {
   key: Exclude<
@@ -87,6 +101,8 @@ export function ResultTable() {
   const rows = useAppStore((s) => s.rows)
   const isProcessing = useAppStore((s) => s.isProcessing)
   const adjustRowDonGia = useAppStore((s) => s.adjustRowDonGia)
+  const tbodyRef = useRef<HTMLTableSectionElement>(null)
+  useListEntrance(tbodyRef, '[data-row-entry]', rows.length)
   const [copiedKey, setCopiedKey] = useState<string | null>(null)
   const [expandedRow, setExpandedRow] = useState<number | null>(null)
   // Selection is keyed by PO NUMBER, not row index - BigC can produce
@@ -99,13 +115,15 @@ export function ResultTable() {
   const toggleAllPOs = useAppStore((s) => s.toggleAllPOs)
   const clearSelection = useAppStore((s) => s.clearSelection)
   const resolvedChoice = useAppStore((s) => s.resolvedChoice)
-  const [jitPeriodByFile, setJITPeriodByFile] = useState<Record<string, string>>({})
-  const [updatingJITFile, setUpdatingJITFile] = useState<string | null>(null)
   const setResolvedChoiceKey = useAppStore((s) => s.setResolvedChoice)
   const clearResolvedChoice = useAppStore((s) => s.clearResolvedChoice)
   const [flashCount, setFlashCount] = useState<Record<number, number>>({})
   const [contentModalGroups, setContentModalGroups] = useState<POContentGroup[] | null>(null)
   const appendLog = useAppStore((s) => s.appendLog)
+  const jitPeriodState = useAppStore((s) => s.jitPeriodState)
+  const beginJITPeriodUpdate = useAppStore((s) => s.beginJITPeriodUpdate)
+  const completeJITPeriodUpdate = useAppStore((s) => s.completeJITPeriodUpdate)
+  const [pendingPOPriceAction, setPendingPOPriceAction] = useState<PendingPOPriceAction | null>(null)
 
   // Stamps the wall-clock moment each row FIRST appears in the table -
   // the honest stand-in this feature has for Python's server-side
@@ -134,6 +152,7 @@ export function ResultTable() {
       setExpandedRow(null)
       clearResolvedChoice()
       setContentModalGroups(null)
+      setPendingPOPriceAction(null)
       clearSelection()
       clearReceivedAt()
     }
@@ -145,7 +164,7 @@ export function ResultTable() {
     setTimeout(() => setCopiedKey((cur) => (cur === key ? null : cur)), 1000)
   }
 
-  async function handleApplyPrice(rowIndex: number, detail: PriceMismatchDetail, useInvoicePrice: boolean) {
+  async function commitApplyPrice(rowIndex: number, detail: PriceMismatchDetail, useInvoicePrice: boolean) {
     const price = useInvoicePrice ? detail.invoicePrice : detail.systemPrice
     const key = `${rowIndex}-${detail.excelRow}`
     const previousPrice = resolveEffectivePrice(rowIndex, detail, resolvedChoice)
@@ -162,18 +181,48 @@ export function ResultTable() {
     }
   }
 
-  // Applies the same choice to every mismatched SKU in this order in one
-  // click - sequential, not concurrent: each ConfirmPrice call edits a
-  // different cell in the same shared Excel file, and running them one
-  // at a time (matching how a user clicking each row by hand would
-  // naturally serialize) avoids relying on excelize's file-level
-  // open/save being safe under concurrent writers.
-  async function handleApplyAll(rowIndex: number, useInvoicePrice: boolean) {
-    const row = rows[rowIndex]
-    for (const detail of row.priceMismatchDetails) {
-      await handleApplyPrice(rowIndex, detail, useInvoicePrice)
+  async function handleApplyPrice(rowIndex: number, detail: PriceMismatchDetail, useInvoicePrice: boolean) {
+    if (useInvoicePrice && belowSystemPriceDetails([detail]).length > 0) {
+      setPendingPOPriceAction({ kind: 'single', rowIndex, detail })
+      return
+    }
+    await commitApplyPrice(rowIndex, detail, useInvoicePrice)
+  }
+
+  // Applies one price basis to every mismatch belonging to the PO, across
+  // all BigC store pages. Sequential writes protect the shared workbook.
+  async function handleApplyAllForPO(po: string, useInvoicePrice: boolean) {
+    const items = mismatchesForPO(rows, po)
+    const warningDetails = useInvoicePrice
+      ? belowSystemPriceDetails(items.map(({ detail }) => detail))
+      : []
+    if (warningDetails.length > 0) {
+      setPendingPOPriceAction({ kind: 'all', po, items, warningDetails })
+      return
+    }
+    for (const item of items) {
+      await commitApplyPrice(item.rowIndex, item.detail, useInvoicePrice)
     }
   }
+
+  async function confirmPendingPOPrice() {
+    const pending = pendingPOPriceAction
+    if (!pending) return
+    setPendingPOPriceAction(null)
+    if (pending.kind === 'single') {
+      await commitApplyPrice(pending.rowIndex, pending.detail, true)
+      return
+    }
+    for (const item of pending.items) {
+      await commitApplyPrice(item.rowIndex, item.detail, true)
+    }
+  }
+
+  const pendingWarningDetails = pendingPOPriceAction
+    ? pendingPOPriceAction.kind === 'single'
+      ? [pendingPOPriceAction.detail]
+      : pendingPOPriceAction.warningDetails
+    : []
 
   // Every PO number present in this batch, in first-seen order - the
   // "chọn tất cả" checkbox and the toolbar's selected-count both count
@@ -207,18 +256,20 @@ export function ResultTable() {
   const selectedCount = selectedPOs.size
   const jitFiles = groupJITFiles(rows)
 
-  async function handleJITPeriodChange(fileName: string, period: string) {
-    const group = jitFiles.find((item) => item.fileName === fileName)
+  async function handleJITPeriodChange(sourceId: string, period: string) {
+    const group = jitFiles.find((item) => item.sourceId === sourceId)
     if (!group) return
-    setUpdatingJITFile(fileName)
+    const request = beginJITPeriodUpdate(sourceId)
+    if (!request) return
     try {
       await UpdateJITPeriod(group.excelRows, group.orderDate, group.warehouse, period)
-      setJITPeriodByFile((current) => ({ ...current, [fileName]: period }))
-      appendLog(`✅ JIT ${fileName}: đã đổi toàn bộ ${group.orderCount} đơn sang buổi ${period}`)
+      if (completeJITPeriodUpdate(request, period)) {
+        appendLog(`✅ JIT ${group.fileName}: đã đổi toàn bộ ${group.orderCount} đơn sang buổi ${period}`)
+      }
     } catch (err) {
-      appendLog(`❌ Không đổi được buổi JIT cho ${fileName}: ${String(err)}`)
-    } finally {
-      setUpdatingJITFile(null)
+      if (completeJITPeriodUpdate(request)) {
+        appendLog(`❌ Không đổi được buổi JIT cho ${group.fileName}: ${String(err)}`)
+      }
     }
   }
 
@@ -229,15 +280,15 @@ export function ResultTable() {
         <div className="mb-2 space-y-1.5 rounded-lg border border-accent/25 bg-accent/[0.05] p-2.5">
           <div className="font-sans text-[10px] font-bold uppercase tracking-wider text-muted">Buổi giao đơn JIT theo file PDF</div>
           {jitFiles.map((group) => {
-            const value = jitPeriodByFile[group.fileName] ?? group.period
+            const value = jitPeriodState.periodBySource[group.sourceId] ?? group.period
             return (
-              <div key={group.fileName} className="flex items-center gap-3 rounded-md bg-bg/70 px-3 py-2">
+              <div key={group.sourceId} className="flex items-center gap-3 rounded-md bg-bg/70 px-3 py-2">
                 <span className="min-w-0 flex-1 truncate font-mono text-xs text-ink" title={group.fileName}>{group.fileName}</span>
                 <span className="whitespace-nowrap font-sans text-[11px] text-muted">Áp dụng {group.orderCount} đơn</span>
                 <JITPeriodMenu
                   value={value}
-                  disabled={isProcessing || updatingJITFile === group.fileName}
-                  onChange={(period) => handleJITPeriodChange(group.fileName, period)}
+                  disabled={isJITPeriodMenuDisabled(isProcessing, jitPeriodState)}
+                  onChange={(period) => handleJITPeriodChange(group.sourceId, period)}
                   ariaLabel={`Buổi giao cho ${group.fileName}`}
                 />
               </div>
@@ -269,9 +320,9 @@ export function ResultTable() {
       )}
       <div className="selectable flex-1 overflow-auto rounded-lg border border-border">
         <table className="w-full border-collapse font-mono text-xs">
-          <thead className="sticky top-0 bg-bg">
+          <thead>
             <tr>
-              <th className="w-9 border-b border-border px-3 py-2 text-center">
+              <th className="sticky top-0 z-10 w-9 border-b border-border bg-bg px-3 py-2 text-center">
                 <input
                   type="checkbox"
                   className="cursor-pointer accent-accent"
@@ -283,23 +334,26 @@ export function ResultTable() {
                   title="Chọn tất cả PO"
                 />
               </th>
+              <th className="sticky top-0 z-10 w-12 border-b border-border bg-bg px-3 py-2 text-center font-sans text-[10px] font-bold uppercase tracking-wider text-muted">
+                STT
+              </th>
               {columns.map((c) => (
                 <th
                   key={c.key}
-                  className="border-b border-border px-3 py-2 text-left font-sans text-[10px] font-bold uppercase tracking-wider text-muted"
+                  className="sticky top-0 z-10 border-b border-border bg-bg px-3 py-2 text-left font-sans text-[10px] font-bold uppercase tracking-wider text-muted"
                 >
                   {c.label}
                 </th>
               ))}
-              <th className="border-b border-border px-3 py-2 text-left font-sans text-[10px] font-bold uppercase tracking-wider text-muted">
+              <th className="sticky top-0 z-10 border-b border-border bg-bg px-3 py-2 text-left font-sans text-[10px] font-bold uppercase tracking-wider text-muted">
                 Nội dung
               </th>
             </tr>
           </thead>
-          <tbody>
+          <tbody ref={tbodyRef}>
             {rows.length === 0 && (
               <tr>
-                <td colSpan={columns.length + 2} className="p-6 text-center font-sans text-muted">
+                <td colSpan={columns.length + 3} className="p-6 text-center font-sans text-muted">
                   Chưa có kết quả nào.
                 </td>
               </tr>
@@ -308,9 +362,13 @@ export function ResultTable() {
               const meta = statusMeta(row)
               const price = priceMeta(row)
               const isPOSelected = row.po !== '' && selectedPOs.has(row.po)
+              const poMismatches = mismatchesForPO(rows, row.po)
               return (
                 <Fragment key={i}>
-                  <tr className={`transition-colors hover:bg-white/[0.03] ${isPOSelected ? 'bg-accent/[0.06]' : ''}`}>
+                  <tr
+                    data-row-entry
+                    className={`transition-colors hover:bg-white/[0.03] ${isPOSelected ? 'bg-accent/[0.06]' : ''}`}
+                  >
                     <td className="border-b border-border px-3 py-2 text-center" onClick={(e) => e.stopPropagation()}>
                       {row.po !== '' && (
                         <input
@@ -321,6 +379,7 @@ export function ResultTable() {
                         />
                       )}
                     </td>
+                    <td className="border-b border-border px-3 py-2 text-center font-semibold text-muted">{i + 1}</td>
                     {columns.map((c) => {
                       const cellKey = `${i}-${c.key}`
                       const copyValue =
@@ -345,7 +404,7 @@ export function ResultTable() {
                             </span>
                           ) : c.key === 'status' ? (
                             <span
-                              className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 font-sans font-semibold ${meta.classes}`}
+                              className={`inline-flex items-center gap-1.5 whitespace-nowrap rounded-full px-2.5 py-0.5 font-sans font-semibold ${meta.classes}`}
                             >
                               <FaCircle size={5} />
                               {meta.label}
@@ -358,7 +417,7 @@ export function ResultTable() {
                                   e.stopPropagation()
                                   setExpandedRow((cur) => (cur === i ? null : i))
                                 }}
-                                className={`inline-flex cursor-pointer items-center gap-1.5 rounded-full px-2.5 py-0.5 font-sans font-semibold ${price.classes}`}
+                                className={`inline-flex cursor-pointer items-center gap-1.5 whitespace-nowrap rounded-full px-2.5 py-0.5 font-sans font-semibold ${price.classes}`}
                               >
                                 <FaTriangleExclamation size={11} />
                                 {price.label}
@@ -366,7 +425,7 @@ export function ResultTable() {
                               </button>
                             ) : (
                               <span
-                                className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 font-sans font-semibold ${price.classes}`}
+                                className={`inline-flex items-center gap-1.5 whitespace-nowrap rounded-full px-2.5 py-0.5 font-sans font-semibold ${price.classes}`}
                               >
                                 {price.icon === 'ok' && <FaCircleCheck size={11} />}
                                 {price.label}
@@ -402,27 +461,27 @@ export function ResultTable() {
                   </tr>
                   {expandedRow === i && row.priceMismatchDetails.length > 0 && (
                     <tr key={`${i}-detail`} className="bg-bg/60">
-                      <td colSpan={columns.length + 2} className="p-0">
-                        {row.priceMismatchDetails.length > 1 && (
+                      <td colSpan={columns.length + 3} className="p-0">
+                        {poMismatches.length > 1 && (
                           <div className="flex items-center gap-2 border-b border-border bg-panel/60 px-3 py-2">
                             <span className="font-sans text-[10px] font-semibold uppercase tracking-wide text-muted">
-                              Áp dụng cho cả {row.priceMismatchDetails.length} mã
+                              Áp dụng cho toàn bộ PO ({poMismatches.length} mã)
                             </span>
                             <button
                               type="button"
                               disabled={isProcessing}
-                              onClick={() => handleApplyAll(i, true)}
+                              onClick={() => handleApplyAllForPO(row.po, true)}
                               className="inline-flex items-center gap-1.5 rounded border border-border px-2.5 py-1 font-sans text-[10px] font-semibold text-ink transition-colors hover:border-ink disabled:cursor-not-allowed disabled:opacity-40"
                             >
-                              <FaFilePdf size={9} /> Toàn bộ giá PO
+                              <FaFilePdf size={9} /> Dùng giá PO cho toàn bộ {poMismatches.length} mã
                             </button>
                             <button
                               type="button"
                               disabled={isProcessing}
-                              onClick={() => handleApplyAll(i, false)}
+                              onClick={() => handleApplyAllForPO(row.po, false)}
                               className="inline-flex items-center gap-1.5 rounded border border-accent/50 px-2.5 py-1 font-sans text-[10px] font-semibold text-accent transition-colors hover:bg-accent/10 disabled:cursor-not-allowed disabled:opacity-40"
                             >
-                              <FaMagnifyingGlassDollar size={9} /> Toàn bộ giá hệ thống
+                              <FaMagnifyingGlassDollar size={9} /> Dùng giá hệ thống cho toàn bộ {poMismatches.length} mã
                             </button>
                           </div>
                         )}
@@ -507,6 +566,77 @@ export function ResultTable() {
           />
         )
       })()}
+      {pendingPOPriceAction && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="po-price-warning-title"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget) setPendingPOPriceAction(null)
+          }}
+        >
+          <div className="flex max-h-[85vh] w-full max-w-3xl flex-col overflow-hidden rounded-xl border border-warning/50 bg-panel shadow-2xl">
+            <div className="flex items-start gap-3 border-b border-border px-5 py-4">
+              <FaTriangleExclamation className="mt-0.5 shrink-0 text-warning" size={20} />
+              <div className="min-w-0 flex-1">
+                <h2 id="po-price-warning-title" className="font-sans text-base font-bold text-warning">
+                  Xác nhận áp dụng giá PO thấp hơn giá hệ thống
+                </h2>
+                <p className="mt-1 font-sans text-xs leading-5 text-muted">
+                  Giá bán ra của {pendingWarningDetails.length} mã dưới đây thấp hơn giá hệ thống. Vui lòng kiểm tra và xác nhận trước khi áp dụng.
+                </p>
+              </div>
+              <button
+                type="button"
+                aria-label="Đóng cảnh báo"
+                onClick={() => setPendingPOPriceAction(null)}
+                className="rounded p-1 text-muted transition-colors hover:bg-white/5 hover:text-ink"
+              >
+                <FaXmark size={16} />
+              </button>
+            </div>
+            <div className="overflow-auto px-5 py-3">
+              <table className="w-full border-collapse font-mono text-xs">
+                <thead>
+                  <tr className="border-b border-border text-left font-sans text-[10px] uppercase tracking-wide text-muted">
+                    <th className="px-2 py-2">Mã</th>
+                    <th className="px-2 py-2">Tên sản phẩm</th>
+                    <th className="px-2 py-2 text-right">Giá PO</th>
+                    <th className="px-2 py-2 text-right">Giá hệ thống</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {pendingWarningDetails.map((detail) => (
+                    <tr key={`${detail.excelRow}-${detail.sku}`} className="border-b border-border last:border-0">
+                      <td className="px-2 py-2 font-semibold text-ink">{detail.sku}</td>
+                      <td className="px-2 py-2 text-muted">{detail.productName}</td>
+                      <td className="px-2 py-2 text-right font-semibold text-danger">{detail.invoicePrice.toLocaleString('vi-VN')}đ</td>
+                      <td className="px-2 py-2 text-right text-ink">{detail.systemPrice.toLocaleString('vi-VN')}đ</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <div className="flex justify-end gap-2 border-t border-border px-5 py-4">
+              <button
+                type="button"
+                onClick={() => setPendingPOPriceAction(null)}
+                className="rounded-lg border border-border px-4 py-2 font-sans text-xs font-semibold text-muted transition-colors hover:border-ink hover:text-ink"
+              >
+                Hủy
+              </button>
+              <button
+                type="button"
+                onClick={confirmPendingPOPrice}
+                className="rounded-lg bg-warning px-4 py-2 font-sans text-xs font-bold text-[#17120a] transition-opacity hover:opacity-90"
+              >
+                Xác nhận áp dụng giá PO
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </section>
   )
 }

@@ -2,6 +2,14 @@ import { create } from 'zustand'
 import type { LogEntry, OrderRow } from '../types'
 import type { PriceBasis } from '../lib/zaloMessage'
 import { upsertOrderRow } from '../lib/orderRowUpsert'
+import {
+  beginJITPeriodUpdate as beginJITPeriodUpdateState,
+  completeJITPeriodUpdate as completeJITPeriodUpdateState,
+  createJITPeriodState,
+  resetJITPeriodState,
+  type JITPeriodRequest,
+  type JITPeriodState,
+} from '../lib/jitPeriodState'
 
 export type LockStatus = 'checking' | 'unlocked' | 'locked'
 
@@ -15,6 +23,7 @@ interface AppState {
   selectedPOs: Set<string>
   resolvedChoice: Record<string, PriceBasis>
   receivedAt: Record<number, string>
+  jitPeriodState: JITPeriodState
   togglePOSelection: (po: string) => void
   toggleAllPOs: (allPOs: string[], checked: boolean) => void
   clearSelection: () => void
@@ -23,6 +32,8 @@ interface AppState {
   clearResolvedChoice: () => void
   stampReceivedAt: (rowIndex: number, time: string) => void
   clearReceivedAt: () => void
+  zaloQR: string | null
+  setZaloQR: (svgMarkup: string | null) => void
   setFiles: (files: string[]) => void
   addFiles: (files: string[]) => void
   removeFiles: (files: string[]) => void
@@ -33,11 +44,13 @@ interface AppState {
   appendRow: (row: OrderRow) => void
   upsertRow: (row: OrderRow) => void
   resetRows: () => void
+  beginJITPeriodUpdate: (sourceId: string) => JITPeriodRequest | null
+  completeJITPeriodUpdate: (request: JITPeriodRequest, period?: string) => boolean
   adjustRowDonGia: (rowIndex: number, delta: number) => void
   setLockStatus: (status: LockStatus) => void
 }
 
-export const useAppStore = create<AppState>((set) => ({
+export const useAppStore = create<AppState>((set, get) => ({
   files: [],
   stt: 1,
   isProcessing: false,
@@ -59,6 +72,12 @@ export const useAppStore = create<AppState>((set) => ({
   // received a different (and mislabelled - "processed at", but really
   // "sent at") time than the one the user reviewed in the preview.
   receivedAt: {},
+  jitPeriodState: createJITPeriodState(),
+  // Mã QR đăng nhập Zalo hiện tại (chuỗi markup SVG lấy trực tiếp từ
+  // trang, đọc trong EnsureLoggedIn - xem GO/internal/zalosend) - null
+  // nghĩa là không cần hiện popup QR (chưa tới lúc cần, hoặc đã đăng
+  // nhập xong). Đẩy lên zalo:log/zalo:qr qua useWailsEvents.ts.
+  zaloQR: null,
   setFiles: (files) => set({ files }),
   addFiles: (newFiles) =>
     set((state) => ({
@@ -80,7 +99,20 @@ export const useAppStore = create<AppState>((set) => ({
   clearLog: () => set({ logLines: [] }),
   appendRow: (row) => set((state) => ({ rows: [...state.rows, row] })),
   upsertRow: (row) => set((state) => ({ rows: upsertOrderRow(state.rows, row) })),
-  resetRows: () => set({ rows: [] }),
+  resetRows: () => set((state) => ({
+    rows: [],
+    jitPeriodState: resetJITPeriodState(state.jitPeriodState),
+  })),
+  beginJITPeriodUpdate: (sourceId) => {
+    const transition = beginJITPeriodUpdateState(get().jitPeriodState, sourceId)
+    if (transition.request) set({ jitPeriodState: transition.state })
+    return transition.request
+  },
+  completeJITPeriodUpdate: (request, period) => {
+    const transition = completeJITPeriodUpdateState(get().jitPeriodState, request, period)
+    if (transition.accepted) set({ jitPeriodState: transition.state })
+    return transition.accepted
+  },
   // Applied after ConfirmPrice succeeds for one mismatched SKU: donGia is
   // the order's total (sum of unitPrice * qty across every product line,
   // computed once on the Go side - see PriceMismatchDetail's own doc
@@ -132,4 +164,7 @@ export const useAppStore = create<AppState>((set) => ({
       state.receivedAt[rowIndex] ? state : { receivedAt: { ...state.receivedAt, [rowIndex]: time } },
     ),
   clearReceivedAt: () => set({ receivedAt: {} }),
+  // Chuỗi rỗng từ backend (zalo:qr) cũng coi như null - "không cần hiện
+  // QR nữa" (đã đăng nhập, hoặc hết giờ chờ).
+  setZaloQR: (svgMarkup) => set({ zaloQR: svgMarkup || null }),
 }))

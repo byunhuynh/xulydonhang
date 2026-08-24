@@ -66,6 +66,10 @@ export function ControlPanel() {
       return {
         po,
         system: poRows[0]?.system ?? '',
+        // 2 ký tự đầu của mã khách hàng là miền (MN/MB) - cần để Go ghép
+        // đúng key Cài đặt > Zalo (vd "MNBIGC"), vì system một mình
+        // không phân biệt miền (xem zalosend.ResolveContact).
+        customerCode: poRows[0]?.maKhachHang ?? '',
         message: buildZaloMessageForPO(poRows, processedAt, priceBasis),
       }
     })

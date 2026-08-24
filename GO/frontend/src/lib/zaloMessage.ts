@@ -1,31 +1,123 @@
 // Builds the Zalo order-notification message shown to the recipient
-// (store/vendor contact) — plain text only, since Zalo's own send
-// surface doesn't render any markup, so no rich formatting is attempted
-// here (confirmed: no client-side setup needed for that). Grouped into
-// short sections (blank line between each) rather than one dense block,
-// and keeps the price-mismatch detail the recipient actually needs: not
-// a raw invoice-vs-system dump, but which price basis is CURRENTLY being
-// used for each mismatched SKU (and for the order's own total) — since
-// that choice is exactly what changes what they'll actually be charged.
-import type { OrderRow, PriceMismatchDetail } from '../types'
-
-function addLine(lines: string[], label: string, value: string | number | null | undefined) {
-  if (value === '' || value === null || value === undefined) return
-  lines.push(`${label}: ${value}`)
-}
+// (store/vendor contact). Content uses the markup syntax
+// GO/internal/zalosend/richtext understands (RICH_TEXT_SYNTAX.md -
+// **bold**/*italic*/__underline__/~~strike~~/{color:text}/list) - the
+// real send (ChromedpSender.SendMessage) always pastes through that
+// engine regardless of whether markup is present, so using it costs
+// nothing and makes the notification much easier for a recipient to
+// scan (bold PO/total, colored price-mismatch warning, a real bullet
+// list for promo items) than a wall of plain emoji-prefixed lines.
+// The preview modal renders this SAME markup through
+// lib/richtext.ts's smaller TS port, so what's previewed always
+// matches what actually gets sent. Grouped into short sections (blank
+// line between each) rather than one dense block, and keeps the
+// price-mismatch detail the recipient actually needs: not a raw
+// invoice-vs-system dump, but which price basis is CURRENTLY being used
+// for each mismatched SKU (and for the order's own total) — since that
+// choice is exactly what changes what they'll actually be charged.
+import type { OrderRow, PriceMismatchDetail } from "../types";
 
 function formatMoney(n: number): string {
-  return n.toLocaleString('vi-VN')
+  return n.toLocaleString("vi-VN");
 }
 
-export type PriceBasis = 'po' | 'system'
-
-function basisLabel(basis: PriceBasis): string {
-  return basis === 'po' ? 'giá PO' : 'giá hệ thống'
+// bold wraps a value in **markup** only when non-empty - a truthy check
+// is enough since callers only ever pass strings here; wrapping an empty
+// string would otherwise produce a bare, meaningless "****".
+function bold(
+  value: string | number | null | undefined,
+): string | number | null | undefined {
+  if (value === "" || value === null || value === undefined) return value;
+  return `**${value}**`;
 }
 
-function effectivePrice(detail: PriceMismatchDetail, basis: PriceBasis): number {
-  return basis === 'po' ? detail.invoicePrice : detail.systemPrice
+export type PriceBasis = "po" | "system";
+
+// DETAIL_INDENT thụt lề các dòng chi tiết (giá PO/hệ thống dưới 1 SKU
+// sai giá) bằng KÝ TỰ KHOẢNG TRẮNG KHÔNG NGẮT (U+00A0) lặp lại, KHÔNG
+// dùng cú pháp "2 khoảng trắng + list lồng nhau" của RICH_TEXT_SYNTAX.md
+// mục 3 nữa. Lý do đổi: cách cũ dựa vào ChromedpSender bấm nút thật
+// "Lùi đầu dòng" N lần SAU khi dán (applyIndents, cơ chế hybrid 2 bước)
+// — xác nhận qua gửi thật là KHÔNG ổn định cho danh sách nhiều mã sai
+// giá liên tiếp (thụt lề bị làm phẳng). Non-breaking space thì ngược
+// lại: là TEXT THẬT nằm sẵn trong nội dung dán, sống sót qua HTML y hệt
+// nhau ở cả bản xem trước (richtext.ts) lẫn bản dán thật (không giống
+// khoảng trắng thường U+0020, trình duyệt/HTML KHÔNG gộp/rút gọn nbsp
+// liên tiếp) — không còn phụ thuộc bước bấm nút nào cả, đơn giản hơn và
+// đáng tin cậy hơn hẳn.
+const DETAIL_INDENT = "    ";
+
+// DIVIDER phân cách các phần của tin (tiêu đề/tổng tiền/cảnh báo giá/
+// khuyến mãi/link) — 12 ký tự "━", ĐÃ gửi thử thật lên điện thoại để chọn
+// độ dài: 20 ký tự bị tràn 1-2 ký tự cuối xuống dòng riêng trên màn hình
+// hẹp, 12 ký tự thì không.
+const DIVIDER = "━━━━━━━━━━━━";
+
+// code tô màu cam cho mã hàng (SKU) — tách biệt rõ với tên sản phẩm
+// (giữ đậm, không màu) khi cùng xuất hiện trên 1 dòng: không thể vừa
+// đậm vừa màu trên CÙNG 1 đoạn (RICH_TEXT_SYNTAX.md mục 1, không lồng
+// định dạng), nên SKU dùng {orange:...} còn tên sản phẩm dùng **...**
+// — 2 kiểu định dạng khác nhau vẫn tạo được 2 điểm nhấn thị giác riêng
+// biệt trên cùng 1 dòng. Không dùng đỏ/xanh lá ở đây vì 2 màu đó đã
+// mang nghĩa cố định (cảnh báo sai giá / giá đang áp dụng) trong
+// formatMismatchLine — dùng lại cho SKU sẽ gây hiểu nhầm.
+function code(sku: string): string {
+  return `{orange:${sku}}`;
+}
+
+// formatMismatchLine dựng khối cho 1 SKU sai giá: dòng cha (mã hàng tô
+// cam + tên đậm, không gạch đầu dòng "- " vì bản thân cả khối mismatch
+// không phải 1 <ul>, khác promo bên dưới) và 1 dòng con thụt lề bằng
+// DETAIL_INDENT gộp CẢ 2 giá nối bằng "→" (thay vì 2 dòng riêng như bản
+// cũ) — giá KHÔNG được áp dụng gạch ngang, giá ĐANG được áp dụng tô xanh
+// lá kèm ✅, mũi tên tự nói lên "giá này đổi thành giá kia". Bố cục đã
+// gửi thử thật (Zalo di động) và xác nhận đọc rõ, không tràn dòng. KHÔNG
+// lồng **đậm** vào bên trong {màu:...} ở đây - cú pháp không hỗ trợ lồng
+// 2 định dạng cùng lúc trên 1 đoạn (RICH_TEXT_SYNTAX.md mục 1); code()
+// và **productName** vì vậy tách rời trên cùng dòng thay vì gộp chung 1
+// span. Dùng chung cho cả buildZaloMessage lẫn buildZaloMessageForPO
+// (logic giống hệt nhau, chỉ khác nguồn dữ liệu gọi vào).
+function formatMismatchLine(d: PriceMismatchDetail, basis: PriceBasis): string {
+  // Names the promo behind "Hệ thống" whenever one was actually examined
+  // for this SKU - a bare system price that happens to differ from the
+  // PO's own invoice price reads as unexplained otherwise; "(KM: ...)" is
+  // the same promo text already shown for a MATCHED price in the system
+  // log (formatSkuLogLine's own "KM:" suffix), just surfaced here too
+  // since a mismatch is exactly the case where the recipient most needs
+  // to know a promo was involved. The trailing "(áp dụng <date range>)"
+  // is that same promo's own pricing-sheet column header - lets whoever
+  // reviews this later look the exact promo up on the real sheet instead
+  // of hunting by free-text description alone.
+  const dateSuffix =
+    d.promoText && d.promoDateRange ? ` (áp dụng ${d.promoDateRange})` : "";
+  const promoNote = d.promoText ? ` (KM: ${d.promoText}${dateSuffix})` : "";
+
+  const poText = `PO ${formatMoney(d.invoicePrice)}đ`;
+  const systemText = `Hệ thống ${formatMoney(d.systemPrice)}đ${promoNote}`;
+  const poSide = basis === "po" ? `{green:✅ ${poText}}` : `~~${poText}~~`;
+  const systemSide =
+    basis === "system" ? `{green:✅ ${systemText}}` : `~~${systemText}~~`;
+
+  return (
+    `${code(d.sku)} — **${d.productName}**\n` +
+    `${DETAIL_INDENT}${poSide} → ${systemSide}`
+  );
+}
+
+// formatPromoLine dùng cú pháp gạch đầu dòng thật ("- ") thay vì ký tự
+// "•" cứng như trước - GO/internal/zalosend/richtext nhận diện đúng cú
+// pháp này và gộp các dòng liên tiếp thành 1 <ul> thật khi dán vào Zalo
+// (xem RICH_TEXT_SYNTAX.md mục 2), thay vì chỉ là các dòng text rời rạc
+// nhìn giống danh sách. Mã hàng tô cam như formatMismatchLine, NHƯNG tên
+// sản phẩm KHÔNG đậm ở đây (khác mismatch) - cố ý: khuyến mãi chỉ mang
+// tính thông tin, không cần hành động gì, để plain giúp phân biệt ngay
+// bằng mắt với các dòng mismatch (in đậm = cần chú ý/xác nhận).
+function formatPromoLine(p: {
+  sku: string;
+  productName: string;
+  qty: number;
+}): string {
+  return `- ${code(p.sku)} ${p.productName}: ${p.qty}`;
 }
 
 // resolveEffectivePrice là whichever giá đang tính vào DonGia của dòng
@@ -38,8 +130,8 @@ export function resolveEffectivePrice(
   detail: PriceMismatchDetail,
   resolvedChoice: Record<string, PriceBasis>,
 ): number {
-  const choice = resolvedChoice[`${rowIndex}-${detail.excelRow}`]
-  return choice === 'po' ? detail.invoicePrice : detail.systemPrice
+  const choice = resolvedChoice[`${rowIndex}-${detail.excelRow}`];
+  return choice === "po" ? detail.invoicePrice : detail.systemPrice;
 }
 
 // buildPriceBasisForRow rút gọn resolvedChoice (key theo rowIndex, có
@@ -50,11 +142,12 @@ export function buildPriceBasisForRow(
   row: OrderRow,
   resolvedChoice: Record<string, PriceBasis>,
 ): Record<number, PriceBasis> {
-  const result: Record<number, PriceBasis> = {}
+  const result: Record<number, PriceBasis> = {};
   for (const d of row.priceMismatchDetails ?? []) {
-    result[d.excelRow] = resolvedChoice[`${rowIndex}-${d.excelRow}`] ?? 'system'
+    result[d.excelRow] =
+      resolvedChoice[`${rowIndex}-${d.excelRow}`] ?? "system";
   }
-  return result
+  return result;
 }
 
 // buildPriceBasisForPO gộp buildPriceBasisForRow của mọi dòng thuộc 1 PO
@@ -66,11 +159,93 @@ export function buildPriceBasisForPO(
   rowIndices: number[],
   resolvedChoice: Record<string, PriceBasis>,
 ): Record<number, PriceBasis> {
-  const result: Record<number, PriceBasis> = {}
+  const result: Record<number, PriceBasis> = {};
   for (const idx of rowIndices) {
-    Object.assign(result, buildPriceBasisForRow(idx, rows[idx], resolvedChoice))
+    Object.assign(
+      result,
+      buildPriceBasisForRow(idx, rows[idx], resolvedChoice),
+    );
   }
-  return result
+  return result;
+}
+
+// assembleOrderMessage dựng nội dung tin theo đúng bố cục ĐÃ GỬI THỬ THẬT
+// lên Zalo di động và xác nhận đọc rõ (tiêu đề gộp tên hệ thống, PO+cửa
+// hàng chung 1 dòng, 2 mốc ngày chung 1 dòng, DIVIDER phân cách các phần)
+// - dùng chung cho cả buildZaloMessage lẫn buildZaloMessageForPO, chỉ
+// khác nguồn dữ liệu đầu vào đã được 2 hàm đó gom sẵn.
+//
+// Cách nối các khối: header (tiêu đề+PO/cửa hàng+ngày) luôn là 1 đoạn
+// riêng. Từ khối tổng tiền trở đi, mọi khối HIỆN CÓ (tổng tiền, cảnh báo
+// sai giá, khuyến mãi, link) được nối liền bằng DIVIDER (không xuống
+// dòng trống) — RIÊNG bên trong khối cảnh báo sai giá, dòng cảnh báo và
+// từng mã sai giá vẫn cách nhau 1 dòng trống như bản cũ (dễ phân biệt
+// từng mã). Khối nào không có dữ liệu (vd không có khuyến mãi) thì tự
+// biến mất khỏi chuỗi nối, không để lại DIVIDER mồ côi.
+function assembleOrderMessage(fields: {
+  po: string;
+  system: string;
+  shipTo: string;
+  entryDate: string;
+  cancelDate: string;
+  totalMoney: number;
+  totalPackages: number | string | undefined | null;
+  totalWeightKg: string | undefined | null;
+  mismatches: PriceMismatchDetail[];
+  priceBasisBySku: Record<number, PriceBasis>;
+  promoItems: { sku: string; productName: string; qty: number }[];
+  orderUrl: string;
+  processedAt: string;
+}): string {
+  const hasMismatch = fields.mismatches.length > 0;
+  const hasPromo = fields.promoItems.length > 0;
+
+  const titleSystem = fields.system ? ` ${fields.system.toUpperCase()}` : "";
+  const headerLines = [`**🔔 ĐƠN HÀNG${titleSystem}**`, DIVIDER];
+  const identityParts = [
+    fields.po && `🎫 ${bold(fields.po)}`,
+    fields.shipTo && `🏪 ${fields.shipTo}`,
+  ].filter(Boolean);
+  if (identityParts.length > 0) headerLines.push(identityParts.join(" · "));
+  const dateParts = [
+    fields.entryDate && `Đặt ${fields.entryDate}`,
+    fields.cancelDate && `Hạn ${fields.cancelDate}`,
+  ].filter(Boolean);
+  if (dateParts.length > 0) headerLines.push(`🗓️ ${dateParts.join(" → ")}`);
+  const headerBlock = headerLines.join("\n");
+
+  const totalsParts = [
+    `💰 **${formatMoney(fields.totalMoney)}đ**${hasMismatch ? " (theo giá dưới)" : ""}`,
+  ];
+  if (fields.totalPackages) totalsParts.push(`📦 ${fields.totalPackages} kiện`);
+  if (fields.totalWeightKg) totalsParts.push(`⚖️ ${fields.totalWeightKg}`);
+  const totalsBlock = totalsParts.join(" · ");
+
+  let mismatchBlock = "";
+  if (hasMismatch) {
+    const items = fields.mismatches.map((d) =>
+      formatMismatchLine(d, fields.priceBasisBySku[d.excelRow] ?? "system"),
+    );
+    mismatchBlock = [
+      `{red:⚠️ Có ${fields.mismatches.length} mã chờ xác nhận giá}`,
+      ...items,
+    ].join("\n\n");
+  }
+
+  const promoBlock = hasPromo
+    ? `**🎁 Khuyến mãi**\n${fields.promoItems.map(formatPromoLine).join("\n")}`
+    : "";
+
+  const linkBlock = fields.orderUrl ? `🔗 ${fields.orderUrl}` : "";
+
+  const chained = [totalsBlock, mismatchBlock, promoBlock, linkBlock]
+    .filter((b) => b !== "")
+    .join(`\n${DIVIDER}\n`);
+
+  const paragraphs = [headerBlock, chained].filter((p) => p !== "");
+  if (fields.processedAt) paragraphs.push(`⏱️ Xử lý lúc ${fields.processedAt}`);
+
+  return paragraphs.join("\n\n");
 }
 
 // buildZaloMessage's processedAt is the frontend's own "row just
@@ -92,75 +267,21 @@ export function buildZaloMessage(
   processedAt: string,
   priceBasisBySku: Record<number, PriceBasis>,
 ): string {
-  const orderUrl = row.po ? `https://bluedonhang.pages.dev/?po=${row.po}` : ''
-  const hasMismatch = row.priceMismatchCount > 0
-  const mismatches = row.priceMismatchDetails ?? []
-  const promoItems = row.promoItems ?? []
-
-  const identity: string[] = []
-  addLine(identity, '🎫 Đơn hàng', row.po)
-  addLine(identity, '🏬 Hệ thống', row.system)
-  addLine(identity, '🏪 Cửa hàng', row.shipTo)
-
-  const dates: string[] = []
-  addLine(dates, '🗓️ Ngày đặt', row.entryDate)
-  addLine(dates, '⏳ Hạn giao', row.cancelDate)
-
-  const totals: string[] = []
-  addLine(
-    totals,
-    '💰 Tổng tiền',
-    `${formatMoney(Number(row.donGia) || 0)}đ${hasMismatch ? ' (đã tính theo giá bên dưới)' : ''}`,
-  )
-  addLine(totals, '📦 Số kiện', row.totalPackages)
-  addLine(totals, '⚖️ Trọng lượng', row.totalWeightKg)
-
-  const sections = [
-    '🔔 THÔNG BÁO ĐƠN HÀNG',
-    identity.join('\n'),
-    dates.join('\n'),
-    totals.join('\n'),
-  ].filter((s) => s !== '')
-
-  if (hasMismatch) {
-    const mismatchLines = mismatches.map((d, idx) => {
-      const basis = priceBasisBySku[d.excelRow] ?? 'system'
-      const chosenPrice = effectivePrice(d, basis)
-      // Names the promo behind "Giá hệ thống" whenever one was actually
-      // examined for this SKU - a bare system price that happens to
-      // differ from the PO's own invoice price reads as unexplained
-      // otherwise; "(KM: ...)" is the same promo text already shown for
-      // a MATCHED price in the system log (formatSkuLogLine's own "KM:"
-      // suffix), just surfaced here too since a mismatch is exactly the
-      // case where the recipient most needs to know a promo was involved.
-      // The trailing "(áp dụng <date range>)" is that same promo's own
-      // pricing-sheet column header - lets whoever reviews this later
-      // look the exact promo up on the real sheet instead of hunting by
-      // free-text description alone.
-      const dateSuffix = d.promoText && d.promoDateRange ? ` (áp dụng ${d.promoDateRange})` : ''
-      const promoNote = d.promoText ? ` (KM: ${d.promoText}${dateSuffix})` : ''
-      return (
-        `${idx + 1}. ${d.sku} - ${d.productName}\n` +
-        `   Giá PO: ${formatMoney(d.invoicePrice)}đ · Giá hệ thống: ${formatMoney(d.systemPrice)}đ${promoNote}\n` +
-        `   ➡️ Áp dụng ${basisLabel(basis)}: ${formatMoney(chosenPrice)}đ`
-      )
-    })
-    sections.push(`⚠️ Có ${row.priceMismatchCount} mã đang chờ xác nhận giá:\n${mismatchLines.join('\n')}`)
-  }
-
-  if (promoItems.length > 0) {
-    const promoLines = promoItems.map((p) => `• ${p.sku} - ${p.productName}: ${p.qty}`)
-    sections.push(`🎁 Hàng khuyến mãi (tổng theo mã):\n${promoLines.join('\n')}`)
-  }
-
-  if (orderUrl) {
-    sections.push(`🔗 Xem chi tiết đơn hàng:\n${orderUrl}`)
-  }
-  if (processedAt) {
-    sections.push(`⏱️ Xử lý lúc ${processedAt}`)
-  }
-
-  return sections.join('\n\n')
+  return assembleOrderMessage({
+    po: row.po,
+    system: row.system,
+    shipTo: row.shipTo,
+    entryDate: row.entryDate,
+    cancelDate: row.cancelDate,
+    totalMoney: Number(row.donGia) || 0,
+    totalPackages: row.totalPackages,
+    totalWeightKg: row.totalWeightKg,
+    mismatches: row.priceMismatchDetails ?? [],
+    priceBasisBySku,
+    promoItems: row.promoItems ?? [],
+    orderUrl: row.po ? `https://bluedonhang.pages.dev/?po=${row.po}` : "",
+    processedAt,
+  });
 }
 
 // parseWeightKg/formatWeightKg mirror the Go side's coop.FormatWeightKg
@@ -169,14 +290,15 @@ export function buildZaloMessage(
 // strings back into one combined total without redoing the underlying
 // kg math on the Go side.
 function parseWeightKg(formatted: string): number {
-  const n = parseFloat(formatted)
-  if (Number.isNaN(n)) return 0
-  return formatted.trim().endsWith('tấn') ? n * 1000 : n
+  const n = parseFloat(formatted);
+  if (Number.isNaN(n)) return 0;
+  return formatted.trim().endsWith("tấn") ? n * 1000 : n;
 }
 
 function formatWeightKg(kg: number): string {
-  if (kg >= 1000) return `${(kg / 1000).toFixed(2).replace(/0$/, '').replace(/\.$/, '.0')} tấn`
-  return `${kg.toFixed(2).replace(/0$/, '').replace(/\.$/, '.0')} kg`
+  if (kg >= 1000)
+    return `${(kg / 1000).toFixed(2).replace(/0$/, "").replace(/\.$/, ".0")} tấn`;
+  return `${kg.toFixed(2).replace(/0$/, "").replace(/\.$/, ".0")} kg`;
 }
 
 // buildZaloMessageForPO mirrors the real xulydonhang.py mechanism
@@ -199,86 +321,57 @@ export function buildZaloMessageForPO(
   processedAt: string,
   priceBasisBySku: Record<number, PriceBasis>,
 ): string {
-  if (rows.length === 0) return ''
-  const first = rows[0]
-  const orderUrl = first.po ? `https://bluedonhang.pages.dev/?po=${first.po}` : ''
+  if (rows.length === 0) return "";
+  const first = rows[0];
+  const orderUrl = first.po
+    ? `https://bluedonhang.pages.dev/?po=${first.po}`
+    : "";
 
-  const totalDonGia = rows.reduce((sum, r) => sum + (Number(r.donGia) || 0), 0)
-  const totalPackages = rows.reduce((sum, r) => sum + (r.totalPackages || 0), 0)
-  const totalWeightKg = formatWeightKg(rows.reduce((sum, r) => sum + parseWeightKg(r.totalWeightKg || '0 kg'), 0))
+  const totalDonGia = rows.reduce((sum, r) => sum + (Number(r.donGia) || 0), 0);
+  const totalPackages = rows.reduce(
+    (sum, r) => sum + (r.totalPackages || 0),
+    0,
+  );
+  const totalWeightKg = formatWeightKg(
+    rows.reduce((sum, r) => sum + parseWeightKg(r.totalWeightKg || "0 kg"), 0),
+  );
 
-  const mismatchBySku = new Map<string, PriceMismatchDetail>()
+  const mismatchBySku = new Map<string, PriceMismatchDetail>();
   for (const r of rows) {
     for (const d of r.priceMismatchDetails ?? []) {
-      const existing = mismatchBySku.get(d.sku)
-      if (existing) existing.qty += d.qty
-      else mismatchBySku.set(d.sku, { ...d })
+      const existing = mismatchBySku.get(d.sku);
+      if (existing) existing.qty += d.qty;
+      else mismatchBySku.set(d.sku, { ...d });
     }
   }
-  const mismatches = [...mismatchBySku.values()]
+  const mismatches = [...mismatchBySku.values()];
 
-  const promoBySku = new Map<string, { sku: string; productName: string; qty: number }>()
+  const promoBySku = new Map<
+    string,
+    { sku: string; productName: string; qty: number }
+  >();
   for (const r of rows) {
     for (const p of r.promoItems ?? []) {
-      const existing = promoBySku.get(p.sku)
-      if (existing) existing.qty += p.qty
-      else promoBySku.set(p.sku, { ...p })
+      const existing = promoBySku.get(p.sku);
+      if (existing) existing.qty += p.qty;
+      else promoBySku.set(p.sku, { ...p });
     }
   }
-  const promoItems = [...promoBySku.values()]
+  const promoItems = [...promoBySku.values()];
 
-  const identity: string[] = []
-  addLine(identity, '🎫 Đơn hàng', first.po)
-  addLine(identity, '🏬 Hệ thống', first.system)
-  addLine(identity, '🏪 Cửa hàng', first.shipTo)
-
-  const dates: string[] = []
-  addLine(dates, '🗓️ Ngày đặt', first.entryDate)
-  addLine(dates, '⏳ Hạn giao', first.cancelDate)
-
-  const hasMismatch = mismatches.length > 0
-  const totals: string[] = []
-  addLine(
-    totals,
-    '💰 Tổng tiền',
-    `${formatMoney(totalDonGia)}đ${hasMismatch ? ' (đã tính theo giá bên dưới)' : ''}`,
-  )
-  addLine(totals, '📦 Số kiện', totalPackages)
-  addLine(totals, '⚖️ Trọng lượng', totalWeightKg)
-
-  const sections = [
-    '🔔 THÔNG BÁO ĐƠN HÀNG',
-    identity.join('\n'),
-    dates.join('\n'),
-    totals.join('\n'),
-  ].filter((s) => s !== '')
-
-  if (hasMismatch) {
-    const mismatchLines = mismatches.map((d, idx) => {
-      const basis = priceBasisBySku[d.excelRow] ?? 'system'
-      const chosenPrice = effectivePrice(d, basis)
-      const dateSuffix = d.promoText && d.promoDateRange ? ` (áp dụng ${d.promoDateRange})` : ''
-      const promoNote = d.promoText ? ` (KM: ${d.promoText}${dateSuffix})` : ''
-      return (
-        `${idx + 1}. ${d.sku} - ${d.productName}\n` +
-        `   Giá PO: ${formatMoney(d.invoicePrice)}đ · Giá hệ thống: ${formatMoney(d.systemPrice)}đ${promoNote}\n` +
-        `   ➡️ Áp dụng ${basisLabel(basis)}: ${formatMoney(chosenPrice)}đ`
-      )
-    })
-    sections.push(`⚠️ Có ${mismatches.length} mã đang chờ xác nhận giá:\n${mismatchLines.join('\n')}`)
-  }
-
-  if (promoItems.length > 0) {
-    const promoLines = promoItems.map((p) => `• ${p.sku} - ${p.productName}: ${p.qty}`)
-    sections.push(`🎁 Hàng khuyến mãi (tổng theo mã):\n${promoLines.join('\n')}`)
-  }
-
-  if (orderUrl) {
-    sections.push(`🔗 Xem chi tiết đơn hàng:\n${orderUrl}`)
-  }
-  if (processedAt) {
-    sections.push(`⏱️ Xử lý lúc ${processedAt}`)
-  }
-
-  return sections.join('\n\n')
+  return assembleOrderMessage({
+    po: first.po,
+    system: first.system,
+    shipTo: first.shipTo,
+    entryDate: first.entryDate,
+    cancelDate: first.cancelDate,
+    totalMoney: totalDonGia,
+    totalPackages,
+    totalWeightKg,
+    mismatches,
+    priceBasisBySku,
+    promoItems,
+    orderUrl,
+    processedAt,
+  });
 }

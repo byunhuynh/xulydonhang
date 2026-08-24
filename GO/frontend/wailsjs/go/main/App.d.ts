@@ -3,13 +3,19 @@
 import {appsettings} from '../models';
 import {main} from '../models';
 
+export function CancelZaloLogin():Promise<void>;
+
 export function ConfirmPrice(arg1:number,arg2:number):Promise<void>;
 
 export function GetAppSettings():Promise<appsettings.Settings>;
 
 export function GetSTT():Promise<number>;
 
+export function InitializeApp():Promise<void>;
+
 export function ProcessFiles(arg1:Array<string>,arg2:number):Promise<void>;
+
+export function RefreshZaloQR():Promise<void>;
 
 export function SaveAppSettings(arg1:appsettings.Settings):Promise<void>;
 

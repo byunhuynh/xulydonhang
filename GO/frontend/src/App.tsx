@@ -1,12 +1,15 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { FaGears, FaCircleInfo, FaGear } from 'react-icons/fa6'
 import { ProcessTab } from './components/ProcessTab'
 import { InfoTab } from './components/InfoTab'
 import { SettingsModal } from './components/SettingsModal'
 import { TitleBar } from './components/TitleBar'
 import { LockOverlay } from './components/LockOverlay'
+import { ZaloQRModal } from './components/ZaloQRModal'
+import AnimatedBlueLogo from './components/AnimatedBlueLogo'
 import { useWailsEvents } from './hooks/useWailsEvents'
 import { useAppStore } from './store/appStore'
+import { InitializeApp } from '../wailsjs/go/main/App'
 
 type TabKey = 'process' | 'info'
 
@@ -16,17 +19,30 @@ function App() {
   const isProcessing = useAppStore((s) => s.isProcessing)
   const lockStatus = useAppStore((s) => s.lockStatus)
   const [isSettingsOpen, setIsSettingsOpen] = useState(false)
+  const [startupState, setStartupState] = useState<'loading' | 'ready' | 'error'>('loading')
+  const startupStarted = useRef(false)
+
+  const initialize = () => {
+    setStartupState('loading')
+    InitializeApp()
+      .then(() => setStartupState('ready'))
+      .catch(() => setStartupState('error'))
+  }
+
+  useEffect(() => {
+    if (startupStarted.current) return
+    startupStarted.current = true
+    initialize()
+  }, [])
 
   return (
     <div className="flex h-screen flex-col">
       <TitleBar />
       <header className="flex items-center gap-1 border-b border-border bg-panel/60 px-4 pt-3">
         <div className="mr-4 flex items-center gap-2.5 pb-3.5">
-          <img
-            src="/logo.svg"
-            alt="Blue Hà Thành"
-            className="no-drag h-[26px] w-auto drop-shadow-[0_0_12px_rgba(40,197,242,0.4)]"
-            draggable={false}
+          <AnimatedBlueLogo
+            active={isProcessing}
+            className="no-drag h-[26px] w-auto aspect-[627/332] drop-shadow-[0_0_12px_rgba(40,197,242,0.4)]"
           />
           <div className="flex flex-col leading-[1.15]">
             <span className="text-sm font-extrabold text-ink">Blue Hà Thành</span>
@@ -64,6 +80,31 @@ function App() {
       </footer>
       {isSettingsOpen && <SettingsModal onClose={() => setIsSettingsOpen(false)} />}
       {lockStatus !== 'unlocked' && <LockOverlay status={lockStatus} />}
+      <ZaloQRModal />
+      {startupState !== 'ready' && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-bg/95 backdrop-blur-sm">
+          <div className="w-[min(420px,calc(100vw-32px))] rounded-2xl border border-border bg-panel p-8 text-center shadow-2xl">
+            {startupState === 'loading' ? (
+              <>
+                <div className="mx-auto mb-5 h-10 w-10 animate-spin rounded-full border-4 border-border border-t-accent" />
+                <p className="text-base font-semibold text-ink">Đang tải dữ liệu…</p>
+              </>
+            ) : (
+              <>
+                <p className="text-base font-semibold text-danger">Không tải được dữ liệu</p>
+                <p className="mt-2 text-sm text-muted">Vui lòng kiểm tra kết nối mạng rồi thử lại.</p>
+                <button
+                  type="button"
+                  onClick={initialize}
+                  className="mt-6 rounded-lg bg-accent px-5 py-2.5 text-sm font-semibold text-bg transition-opacity hover:opacity-90"
+                >
+                  Thử lại
+                </button>
+              </>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   )
 }

@@ -23,7 +23,7 @@ export function ProcessTab() {
           sidePanel === 'log' ? 'grid-cols-[1fr_440px]' : 'grid-cols-[1fr_300px]'
         }`}
       >
-        <div className="animate-rise h-full min-h-0 [animation-delay:60ms]">
+        <div className="animate-rise h-full min-h-0 min-w-0 [animation-delay:60ms]">
           <ResultTable />
         </div>
         <div className="animate-rise flex h-full min-h-0 flex-col gap-4 [animation-delay:120ms]">

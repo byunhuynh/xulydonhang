@@ -24,6 +24,7 @@ export namespace main {
 	export class ZaloJob {
 	    po: string;
 	    system: string;
+	    customerCode: string;
 	    message: string;
 	
 	    static createFrom(source: any = {}) {
@@ -34,6 +35,7 @@ export namespace main {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.po = source["po"];
 	        this.system = source["system"];
+	        this.customerCode = source["customerCode"];
 	        this.message = source["message"];
 	    }
 	}
