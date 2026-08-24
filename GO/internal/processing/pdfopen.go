@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"fmt"
 	"os"
+	"strconv"
 
 	"github.com/ledongthuc/pdf"
 )
@@ -68,7 +69,7 @@ func pdfOpen(path string) (f *os.File, r *pdf.Reader, err error) {
 	}
 	raw = stripInlineImageData(raw)
 
-	r, err = pdf.NewReader(bytes.NewReader(raw), int64(len(raw)))
+	r, err = tryNewReader(raw)
 	if err == nil {
 		return f, r, nil
 	}
@@ -91,14 +92,196 @@ func pdfOpen(path string) (f *os.File, r *pdf.Reader, err error) {
 	// Adapted to work against the in-memory (possibly now inline-image-
 	// stripped) copy rather than the raw *os.File, so both fixes compose
 	// correctly for a file that needs both.
+	trimmed := raw
 	if trimmedLen, found := trimTrailingGarbageAfterEOFBytes(raw); found {
-		if r2, err2 := pdf.NewReader(bytes.NewReader(raw[:trimmedLen]), int64(trimmedLen)); err2 == nil {
+		trimmed = raw[:trimmedLen]
+		if r2, err2 := tryNewReader(trimmed); err2 == nil {
 			return f, r2, nil
+		}
+	}
+
+	// Fallback: the trailer's startxref offset does not actually point at
+	// the cross-reference table. Confirmed on a real archived Coop PDF
+	// (coop/testdata/realpdfs/103229379-00.pdf, PO 103229379): its
+	// startxref says 9482, which is the file's own total length, while
+	// the "xref" keyword that starts its real table sits 342 bytes
+	// earlier at 9140 — every object, the table and the trailer are
+	// intact, only that one number is wrong. The vendored library seeks
+	// straight to the declared offset and panics on EOF instead of
+	// looking for the table, so before this fallback the file was
+	// unreadable and produced a Failed row. Rebuilding the offset is
+	// exactly what lenient real-world readers do for this shape.
+	//
+	// A file whose recorded entries are themselves wrong needs more than
+	// a corrected offset, so rebuildXref (pdfxrefrepair.go) follows as a
+	// last resort — the real Coop file above turns out to need both.
+	// Every repaired reader is additionally required to resolve its own
+	// page tree before being handed back: a rebuilt table that merely
+	// parses, but whose entries still point at the wrong bytes, would
+	// otherwise panic later inside the caller instead of failing here.
+	repairs := []func([]byte) ([]byte, bool){repairStartxrefOffset, rebuildXref}
+	for _, candidate := range [][]byte{raw, trimmed} {
+		for _, repair := range repairs {
+			repaired, ok := repair(candidate)
+			if !ok {
+				continue
+			}
+			r3, err3 := tryNewReader(repaired)
+			if err3 != nil || !readerHasPages(r3) {
+				continue
+			}
+			return f, r3, nil
 		}
 	}
 
 	f.Close()
 	return nil, nil, err
+}
+
+// readerHasPages reports whether r can actually resolve its page tree,
+// with a panic boundary because the vendored library panics rather than
+// returning an error when an xref entry points at bytes that are not the
+// object it promised. Used to validate a REPAIRED reader before pdfOpen
+// hands it back — a repair that produces a reader which only fails later
+// is worse than no repair at all, since the caller's own error path
+// never gets the chance to report the file as unreadable.
+func readerHasPages(r *pdf.Reader) (ok bool) {
+	if r == nil {
+		return false
+	}
+	defer func() {
+		if recover() != nil {
+			ok = false
+		}
+	}()
+	return r.NumPage() > 0
+}
+
+// tryNewReader is pdf.NewReader with its own panic boundary, so one
+// failed attempt can be followed by another repair attempt instead of
+// unwinding all the way out of pdfOpen. The reader-construction path
+// (NewReaderEncrypted -> readXref) panics rather than returning an error
+// whenever the startxref offset does not land on a readable token — see
+// pdfOpen's own doc comment.
+func tryNewReader(data []byte) (r *pdf.Reader, err error) {
+	defer func() {
+		if rec := recover(); rec != nil {
+			r = nil
+			err = fmt.Errorf("malformed PDF (panic while reading): %v", rec)
+		}
+	}()
+	return pdf.NewReader(bytes.NewReader(data), int64(len(data)))
+}
+
+// repairStartxrefOffset returns a copy of data with a corrected trailer
+// appended when the existing trailer's startxref offset does not point
+// at a cross-reference section but a real "xref" table exists elsewhere
+// in the file. Returns ok=false whenever the declared offset already
+// looks right, no real table can be located, or the file has no trailing
+// startxref at all — so a genuinely structureless file still fails
+// instead of being silently "repaired" into something that looks valid.
+//
+// The original bytes are never rewritten in place: every xref entry in
+// the file is a byte offset into it, so shifting anything would
+// invalidate the very table being recovered. Appending a fresh
+// "startxref <offset> %%EOF" block after the existing one is enough
+// because the library reads the LAST startxref inside the file's final
+// 100 bytes.
+func repairStartxrefOffset(data []byte) ([]byte, bool) {
+	window := eofScanWindow
+	if window > len(data) {
+		window = len(data)
+	}
+	start := len(data) - window
+	idx := bytes.LastIndex(data[start:], []byte("startxref"))
+	if idx < 0 {
+		return nil, false
+	}
+	declared, declaredOK := parseOffsetAfter(data[start+idx+len("startxref"):])
+	if declaredOK && startsXrefSection(data, declared) {
+		return nil, false
+	}
+	actual, found := lastXrefTableOffset(data)
+	if !found || (declaredOK && actual == declared) {
+		return nil, false
+	}
+	repaired := make([]byte, 0, len(data)+32)
+	repaired = append(repaired, data...)
+	repaired = append(repaired, []byte(fmt.Sprintf("\r\nstartxref\r\n%d\r\n%%%%EOF\r\n", actual))...)
+	return repaired, true
+}
+
+// parseOffsetAt reads the first decimal integer in data, skipping any
+// leading PDF whitespace, and also reports the index just past its last
+// digit so a caller can keep reading the tokens after it.
+func parseOffsetAt(data []byte) (value int, next int, ok bool) {
+	i := 0
+	for i < len(data) && isPDFWhitespace(data[i]) {
+		i++
+	}
+	digits := i
+	for i < len(data) && data[i] >= '0' && data[i] <= '9' {
+		i++
+	}
+	if i == digits {
+		return 0, 0, false
+	}
+	n, err := strconv.Atoi(string(data[digits:i]))
+	if err != nil {
+		return 0, 0, false
+	}
+	return n, i, true
+}
+
+// parseOffsetAfter reads the first decimal integer in data, skipping any
+// leading PDF whitespace.
+func parseOffsetAfter(data []byte) (int, bool) {
+	value, _, ok := parseOffsetAt(data)
+	return value, ok
+}
+
+// startsXrefSection reports whether offset lands on something a
+// cross-reference section can legally start with: the "xref" keyword of
+// a classic table, or the object header of an xref stream ("12 0 obj").
+func startsXrefSection(data []byte, offset int) bool {
+	if offset < 0 || offset >= len(data) {
+		return false
+	}
+	i := offset
+	for i < len(data) && isPDFWhitespace(data[i]) {
+		i++
+	}
+	if i >= len(data) {
+		return false
+	}
+	if findPDFKeyword(data[i:min(i+4+1, len(data))], 0, "xref") == 0 {
+		return true
+	}
+	return data[i] >= '0' && data[i] <= '9'
+}
+
+// lastXrefTableOffset returns the offset of the last standalone "xref"
+// keyword that is actually followed by a subsection header ("0 13"), so
+// a stray "xref" token inside a stream or a string cannot be mistaken
+// for the table.
+func lastXrefTableOffset(data []byte) (int, bool) {
+	offset, found := 0, false
+	for pos := 0; ; {
+		idx := findPDFKeyword(data, pos, "xref")
+		if idx < 0 {
+			break
+		}
+		pos = idx + len("xref")
+		// A real table's keyword is followed by a subsection header —
+		// two integers, "<first object number> <count>". Anything else
+		// is a coincidental token, not a table to point the trailer at.
+		if _, next, ok := parseOffsetAt(data[pos:]); ok {
+			if _, _, ok2 := parseOffsetAt(data[pos+next:]); ok2 {
+				offset, found = idx, true
+			}
+		}
+	}
+	return offset, found
 }
 
 // stripInlineImageData replaces every "BI ... ID<ws><data>EI"

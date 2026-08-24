@@ -4,6 +4,8 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"order-processor/internal/processing/vendor"
 )
 
 func TestPdfOpen_TrimsGarbageAfterEOF(t *testing.T) {
@@ -163,5 +165,55 @@ func TestPdfOpen_ExtractsTextFromRealEmartPDFsWithInlineImages(t *testing.T) {
 		if len(text) == 0 {
 			t.Errorf("%s: page.GetPlainText returned empty text", name)
 		}
+	}
+}
+
+func TestPdfOpen_RepairsStartxrefPointingPastTheRealXrefTable(t *testing.T) {
+	// The real archived Coop PDF this repair exists for: its trailer says
+	// "startxref 9482", which is the file's own total length — 342 bytes
+	// PAST the "xref" keyword that actually starts its cross-reference
+	// table (offset 9140). The vendored library seeks straight to 9482,
+	// reads EOF and panics out of pdf.NewReader, so before this repair
+	// every attempt to process this file produced a Failed row with
+	// "malformed PDF (panic while reading)". The table itself, the
+	// trailer and every object in the file are intact — only that one
+	// offset is wrong.
+	path := filepath.Join("coop", "testdata", "realpdfs", "103229379-00.pdf")
+	if _, statErr := os.Stat(path); statErr != nil {
+		t.Skipf("real sample PDF not found at %s: %v", path, statErr)
+	}
+	f, r, err := pdfOpen(path)
+	if err != nil {
+		t.Fatalf("pdfOpen returned error for a PDF whose startxref points past its xref table: %v", err)
+	}
+	defer f.Close()
+	if r == nil {
+		t.Fatal("pdfOpen returned a nil reader with no error")
+	}
+	if r.NumPage() < 1 {
+		t.Errorf("NumPage() = %d, want at least 1", r.NumPage())
+	}
+}
+
+func TestPdfOpen_RecoversTextFromPlaceholderStreamLengths(t *testing.T) {
+	// Same real file as above, one layer deeper: every content stream in
+	// it declares "/Length 9 0 R" while object 9 is the placeholder 0 its
+	// generator never patched, so a rebuilt cross-reference table alone
+	// still yields a page whose text is empty — enough to open, not
+	// enough to recognise the vendor. Measuring each stream's real extent
+	// up to "endstream" is what makes this file processable at all.
+	path := filepath.Join("coop", "testdata", "realpdfs", "103229379-00.pdf")
+	if _, statErr := os.Stat(path); statErr != nil {
+		t.Skipf("real sample PDF not found at %s: %v", path, statErr)
+	}
+	pages, _, err := extractPageTexts(path)
+	if err != nil {
+		t.Fatalf("extractPageTexts: %v", err)
+	}
+	if len(pages) == 0 {
+		t.Fatal("no pages extracted")
+	}
+	if got := vendor.Identify(pages[0]); got != "Coop" {
+		t.Fatalf("vendor.Identify = %q, want %q (extracted %d chars)", got, "Coop", len(pages[0]))
 	}
 }

@@ -76,11 +76,27 @@ func isGarbledText(text string) bool {
 			continue
 		}
 		total++
-		if r == utf8.RuneError {
+		if r == utf8.RuneError || isControlRune(r) {
 			garbled++
 		}
 	}
 	return total > 20 && garbled*2 > total
+}
+
+// isControlRune reports whether r is a control character — the second
+// shape a failed text decode takes, alongside U+FFFD. When a simple
+// font's /Encoding dictionary maps codes to glyph names the vendored
+// library's name->rune table doesn't know (typical of a subset font:
+// confirmed on the real archived Coop PDF 103346096-00.pdf, whose only
+// font is QSWINA+LucidaConsole with a 69-entry /Differences array), its
+// dictEncoder falls through to the RAW CODE BYTE for every one of them.
+// Those bytes are perfectly valid UTF-8 — "\x01\x02\x03..." — so
+// U+FFFD counting alone sees a page that looks fine while the text is
+// entirely unreadable. Real extracted text never contains C0 controls:
+// the whitespace ones this counter cares about (space, tab, CR, LF) are
+// already skipped by the caller before anything is counted.
+func isControlRune(r rune) bool {
+	return r < 0x20 || r == 0x7f
 }
 
 // hexTokenPattern matches one PDF hex-string token, e.g. "<0a>" or
@@ -128,7 +144,22 @@ func decodeSimpleFontCmap(font pdf.Font) (map[byte]rune, bool) {
 	if font.V.Key("Subtype").Name() == "Type0" {
 		return nil, false
 	}
-	if font.V.Key("Encoding").Kind() != pdf.Null {
+	switch font.V.Key("Encoding").Kind() {
+	case pdf.Null:
+		// No /Encoding at all — the original FujiMart shape.
+	case pdf.Dict:
+		// An /Encoding DICTIONARY (/Differences, optionally over a
+		// /BaseEncoding). The vendored library takes this branch in
+		// preference to /ToUnicode and decodes through glyph NAMES,
+		// which for a subset font are frequently names its table does
+		// not know — see isControlRune for the confirmed Coop case. The
+		// PDF spec makes /ToUnicode the authoritative mapping for text
+		// EXTRACTION regardless of how the glyphs are selected for
+		// rendering (§9.10.2), so preferring it here is not a guess.
+	default:
+		// A named base encoding (WinAnsiEncoding, MacRomanEncoding,
+		// Identity-H) decodes through a table this parser has no reason
+		// to second-guess.
 		return nil, false
 	}
 	toUnicode := font.V.Key("ToUnicode")

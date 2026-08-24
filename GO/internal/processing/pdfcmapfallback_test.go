@@ -3,10 +3,14 @@ package processing
 import (
 	"bytes"
 	"fmt"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/ledongthuc/pdf"
+
+	"order-processor/internal/processing/vendor"
 )
 
 // --- isGarbledText -----------------------------------------------------
@@ -320,5 +324,31 @@ func TestExtractPageTextViaCorrectedCmap_BailsWhenAnyFontIsType0(t *testing.T) {
 	text, ok := extractPageTextViaCorrectedCmap(page)
 	if ok {
 		t.Errorf("extractPageTextViaCorrectedCmap(page with a Type0 font mixed in) = (%q, true), want ok=false", text)
+	}
+}
+
+func TestExtractPageTexts_DecodesDifferencesEncodedSubsetFontViaToUnicode(t *testing.T) {
+	// Real archived Coop PDF whose only font is a subset TrueType
+	// (QSWINA+LucidaConsole) carrying BOTH an /Encoding dictionary with a
+	// 69-entry /Differences array AND a well-formed 1-byte /ToUnicode
+	// CMap. The vendored library picks the /Differences path whenever
+	// /Encoding is a dictionary and never looks at /ToUnicode; the glyph
+	// names in this subset's Differences array are not in its
+	// name->rune table, so every character fell through to its own raw
+	// code byte and the page extracted as C0 control-character soup
+	// ("\x01\x02\x03..."), which vendor.Identify cannot classify.
+	path := filepath.Join("coop", "testdata", "realpdfs", "103346096-00.pdf")
+	if _, statErr := os.Stat(path); statErr != nil {
+		t.Skipf("real sample PDF not found at %s: %v", path, statErr)
+	}
+	pages, _, err := extractPageTexts(path)
+	if err != nil {
+		t.Fatalf("extractPageTexts: %v", err)
+	}
+	if len(pages) == 0 {
+		t.Fatal("no pages extracted")
+	}
+	if got := vendor.Identify(pages[0]); got != "Coop" {
+		t.Fatalf("vendor.Identify = %q, want %q\nextracted text:\n%q", got, "Coop", pages[0])
 	}
 }
