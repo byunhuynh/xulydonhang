@@ -3,7 +3,16 @@ export interface PriceMismatchDetail {
   productName: string
   invoicePrice: number
   systemPrice: number
+  qty: number
   excelRow: number
+  promoText: string
+  promoDateRange: string
+}
+
+export interface PromoItem {
+  sku: string
+  productName: string
+  qty: number
 }
 
 export interface OrderRow {
@@ -18,6 +27,12 @@ export interface OrderRow {
   driveUrl: string
   priceMismatchCount: number
   priceMismatchDetails: PriceMismatchDetail[]
+  shipTo: string
+  entryDate: string
+  cancelDate: string
+  totalWeightKg: string
+  totalPackages: number
+  promoItems: PromoItem[]
 }
 
 export interface LogEntry {

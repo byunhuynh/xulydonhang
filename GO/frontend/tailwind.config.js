@@ -28,10 +28,15 @@ export default {
           from: { opacity: '0', transform: 'translateY(8px)' },
           to: { opacity: '1', transform: 'translateY(0)' },
         },
+        'flash-cell': {
+          '0%': { backgroundColor: 'rgba(40,197,242,0.35)' },
+          '100%': { backgroundColor: 'transparent' },
+        },
       },
       animation: {
         'pulse-glow': 'pulse-glow 2.6s ease-in-out infinite',
         rise: 'rise 0.4s cubic-bezier(0.16,1,0.3,1) both',
+        'flash-cell': 'flash-cell 0.9s ease',
       },
     },
   },
