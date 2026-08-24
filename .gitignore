@@ -33,6 +33,25 @@ Thumbs.db
 # ===== IDE =====
 .vscode/
 .idea/
+.claude/settings.local.json
+
+# ===== Local test / automation artefacts =====
+.playwright-mcp/
+GO/.gocache-test/
+GO/.tmp/
+GO/test_output.txt
+app-screenshot*.png
+resulttable-*-verification.png
+task*_initial.png
+task*_after_process.md
+preview*.png
+scratch*.txt
+*.manual_backup_before_*
+*.log
+
+# ===== Machine-local runtime config =====
+GO/config.txt
+settings.bhconfig
 
 
 zalo_state.json
@@ -53,3 +72,21 @@ zalo_profile/
 GO/frontend/node_modules/
 GO/frontend/dist/
 GO/build/bin/
+
+# ===== Go build/test cache (local, ~500MB) =====
+GO/.gocache/
+
+# ===== File nén tải về / backup thủ công =====
+*.rar
+*.zip
+*.7z
+
+# ===== Runtime state & output của app (đổi mỗi lần chạy) =====
+/config.txt
+/message.txt
+/dondathang_test.xlsx
+reminder_error_*.png
+/Postman.lnk
+
+# ===== npm/Wails generated =====
+GO/frontend/package.json.md5
