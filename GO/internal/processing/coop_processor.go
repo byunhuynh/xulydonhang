@@ -48,16 +48,27 @@ func (p *RealProcessor) ProcessStreaming(ctx context.Context, filePath string, s
 	return p.process(ctx, filePath, stt, emit)
 }
 
+func orderResultKey(fileName, page, po string) string {
+	return fileName + "|" + page + "|" + po
+}
+
+func emitOrderRow(emit func(OrderRow), row OrderRow) OrderRow {
+	row.ResultKey = orderResultKey(row.FileName, row.Page, row.PO)
+	if emit != nil {
+		emit(row)
+	}
+	return row
+}
+
 func (p *RealProcessor) process(ctx context.Context, filePath string, stt int, emit func(OrderRow)) ([]OrderRow, error) {
 	pageTexts, pageNumbers, err := extractPageTexts(filePath)
 	if err != nil {
-		rows := []OrderRow{{
+		row := emitOrderRow(emit, OrderRow{
 			FileName:   filepath.Base(filePath),
 			Status:     StatusFailed + " - không đọc được PDF: " + err.Error(),
 			StatusKind: StatusKindFailed,
-		}}
-		emitRows(emit, rows)
-		return rows, nil
+		})
+		return []OrderRow{row}, nil
 	}
 
 	// BigC's identifying markers are present on every page of a real
@@ -82,68 +93,68 @@ func (p *RealProcessor) process(ctx context.Context, filePath string, stt int, e
 		case "Coop":
 			segments, ok := splitPageIntoPOs(text)
 			if !ok {
-				rows = append(rows, OrderRow{
+				rows = append(rows, emitOrderRow(emit, OrderRow{
 					FileName: filepath.Base(filePath), Page: pageLabel, System: "Coop",
 					Status: StatusFailed + " - không đếm khớp số đơn trên trang", StatusKind: StatusKindFailed,
-				})
+				}))
 				continue
 			}
 			for segIdx, segment := range segments {
 				segLabel := fmt.Sprintf("%d/%d", segIdx+1, len(segments))
 				row, err := p.processSegment(filePath, pageNumbers[pageIdx], segment, segLabel)
 				if err != nil {
-					rows = append(rows, OrderRow{
+					rows = append(rows, emitOrderRow(emit, OrderRow{
 						FileName: filepath.Base(filePath), Page: segLabel, System: "Coop",
 						Status: fmt.Sprintf("%s - %v", StatusFailed, err), StatusKind: StatusKindFailed,
-					})
+					}))
 					continue
 				}
-				rows = append(rows, row)
+				rows = append(rows, emitOrderRow(emit, row))
 			}
 
 		case "Lotte":
 			row, err := p.processLotteSegment(filePath, pageNumbers[pageIdx], text, pageLabel)
 			if err != nil {
-				rows = append(rows, OrderRow{
+				rows = append(rows, emitOrderRow(emit, OrderRow{
 					FileName: filepath.Base(filePath), Page: pageLabel, System: "Lotte",
 					Status: fmt.Sprintf("%s - %v", StatusFailed, err), StatusKind: StatusKindFailed,
-				})
+				}))
 				continue
 			}
-			rows = append(rows, row)
+			rows = append(rows, emitOrderRow(emit, row))
 
 		case "Satra":
 			row, err := p.processSatraSegment(filePath, pageNumbers[pageIdx], text, pageLabel)
 			if err != nil {
-				rows = append(rows, OrderRow{
+				rows = append(rows, emitOrderRow(emit, OrderRow{
 					FileName: filepath.Base(filePath), Page: pageLabel, System: "Satra",
 					Status: fmt.Sprintf("%s - %v", StatusFailed, err), StatusKind: StatusKindFailed,
-				})
+				}))
 				continue
 			}
-			rows = append(rows, row)
+			rows = append(rows, emitOrderRow(emit, row))
 
 		case "Emart":
 			row, err := p.processEmartSegment(filePath, pageNumbers[pageIdx], text, pageLabel)
 			if err != nil {
-				rows = append(rows, OrderRow{
+				rows = append(rows, emitOrderRow(emit, OrderRow{
 					FileName: filepath.Base(filePath), Page: pageLabel, System: "Emart",
 					Status: fmt.Sprintf("%s - %v", StatusFailed, err), StatusKind: StatusKindFailed,
-				})
+				}))
 				continue
 			}
-			rows = append(rows, row)
+			rows = append(rows, emitOrderRow(emit, row))
 
 		case "Kingfood":
 			row, err := p.processKingfoodSegment(filePath, pageNumbers[pageIdx], text, pageLabel)
 			if err != nil {
-				rows = append(rows, OrderRow{
+				rows = append(rows, emitOrderRow(emit, OrderRow{
 					FileName: filepath.Base(filePath), Page: pageLabel, System: "Kingfood",
 					Status: fmt.Sprintf("%s - %v", StatusFailed, err), StatusKind: StatusKindFailed,
-				})
+				}))
 				continue
 			}
-			rows = append(rows, row)
+			rows = append(rows, emitOrderRow(emit, row))
 
 		case "Winmart":
 			// Re-extract this page's text with extractWinmartPageText
@@ -163,49 +174,48 @@ func (p *RealProcessor) process(ctx context.Context, filePath string, stt int, e
 			}
 			row, err := p.processWinmartSegment(filePath, pageNumbers[pageIdx], winmartText, pageLabel)
 			if err != nil {
-				rows = append(rows, OrderRow{
+				rows = append(rows, emitOrderRow(emit, OrderRow{
 					FileName: filepath.Base(filePath), Page: pageLabel, System: "Winmart",
 					Status: fmt.Sprintf("%s - %v", StatusFailed, err), StatusKind: StatusKindFailed,
-				})
+				}))
 				continue
 			}
-			rows = append(rows, row)
+			rows = append(rows, emitOrderRow(emit, row))
 
 		case "FujiMart":
 			row, err := p.processFujimartSegment(filePath, pageNumbers[pageIdx], text, pageLabel)
 			if err != nil {
-				rows = append(rows, OrderRow{
+				rows = append(rows, emitOrderRow(emit, OrderRow{
 					FileName: filepath.Base(filePath), Page: pageLabel, System: "FujiMart",
 					Status: fmt.Sprintf("%s - %v", StatusFailed, err), StatusKind: StatusKindFailed,
-				})
+				}))
 				continue
 			}
-			rows = append(rows, row)
+			rows = append(rows, emitOrderRow(emit, row))
 
 		case "JMart":
 			row, err := p.processJMartSegment(filePath, pageNumbers[pageIdx], text, pageLabel)
 			if err != nil {
-				rows = append(rows, OrderRow{
+				rows = append(rows, emitOrderRow(emit, OrderRow{
 					FileName: filepath.Base(filePath), Page: pageLabel, System: "JMart",
 					Status: fmt.Sprintf("%s - %v", StatusFailed, err), StatusKind: StatusKindFailed,
-				})
+				}))
 				continue
 			}
-			rows = append(rows, row)
+			rows = append(rows, emitOrderRow(emit, row))
 
 		default:
 			reason := "không nhận diện được nhà cung cấp"
 			if v != "" {
 				reason = "nhà cung cấp " + v + " chưa được hỗ trợ"
 			}
-			rows = append(rows, OrderRow{
+			rows = append(rows, emitOrderRow(emit, OrderRow{
 				FileName: filepath.Base(filePath), Page: pageLabel, System: v,
 				Status: StatusFailed + " - " + reason, StatusKind: StatusKindFailed,
-			})
+			}))
 		}
 	}
 
-	emitRows(emit, rows)
 	return rows, nil
 }
 

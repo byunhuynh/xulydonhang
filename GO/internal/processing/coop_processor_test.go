@@ -2,12 +2,107 @@ package processing
 
 import (
 	"context"
+	"errors"
+	"path/filepath"
 	"testing"
 
+	"github.com/pdfcpu/pdfcpu/pkg/api"
 	"github.com/xuri/excelize/v2"
 	"order-processor/internal/processing/pricing"
 	"order-processor/internal/processing/productdata"
 )
+
+type failAfterFirstStreamPricingSource struct {
+	index *pricing.Index
+	fail  bool
+}
+
+func (s *failAfterFirstStreamPricingSource) FetchIndex(string) (*pricing.Index, error) {
+	if s.fail {
+		return nil, errors.New("pricing source switched off after first streamed row")
+	}
+	return s.index, nil
+}
+
+// TestRealProcessorStreamsEachCompletedSegment proves that a completed
+// segment is reported before processing the next one. The callback makes the
+// second page's pricing fetch fail; that failure is possible only when the
+// first page was emitted immediately, rather than after the whole file.
+func TestRealProcessorStreamsEachCompletedSegment(t *testing.T) {
+	store, err := productdata.Load("productdata/testdata/data.xlsx")
+	if err != nil {
+		t.Fatalf("Load productdata failed: %v", err)
+	}
+	priceCsv := [][]string{
+		{"STT", "Mã hàng", "Tên", "Giá"},
+		{"1", "1234567", "Nước giặt", "141.272"},
+	}
+	priceIndex := pricing.ParseIndex(priceCsv)
+	fixturePath := filepath.Join(t.TempDir(), "multi-page-coop.pdf")
+	if err := api.MergeCreateFile([]string{"testdata/sample_coop_order.pdf", "testdata/sample_coop_order.pdf"}, fixturePath, false, nil); err != nil {
+		t.Fatalf("build two-page fixture from sample Coop PDF: %v", err)
+	}
+
+	baseline := &RealProcessor{
+		Store: store, Pricing: &fixturePricingSource{index: priceIndex}, ExcelPath: copyTestWorkbookForProcessor(t),
+	}
+	baselineRows, err := baseline.Process(context.Background(), fixturePath, 1)
+	if err != nil {
+		t.Fatalf("baseline Process returned error: %v", err)
+	}
+	if len(baselineRows) != 2 {
+		t.Fatalf("baseline Process returned %d rows, want 2 for the two-page fixture: %+v", len(baselineRows), baselineRows)
+	}
+	for _, row := range baselineRows {
+		if row.StatusKind == StatusKindFailed {
+			t.Fatalf("baseline row unexpectedly failed: %+v", row)
+		}
+	}
+
+	pricingSource := &failAfterFirstStreamPricingSource{index: priceIndex}
+	rp := &RealProcessor{
+		Store: store, Pricing: pricingSource, ExcelPath: copyTestWorkbookForProcessor(t),
+	}
+	var emitted []OrderRow
+	var callbackLengths []int
+	rows, err := rp.ProcessStreaming(context.Background(), fixturePath, 1, func(row OrderRow) {
+		emitted = append(emitted, row)
+		callbackLengths = append(callbackLengths, len(emitted))
+		if len(emitted) == 1 {
+			pricingSource.fail = true
+		}
+	})
+	if err != nil {
+		t.Fatalf("ProcessStreaming returned error: %v", err)
+	}
+	if len(rows) != 2 {
+		t.Fatalf("ProcessStreaming returned %d rows, want 2: %+v", len(rows), rows)
+	}
+	if rows[1].StatusKind != StatusKindFailed {
+		t.Fatalf("second returned row StatusKind = %q, want %q after first row streams", rows[1].StatusKind, StatusKindFailed)
+	}
+	if len(emitted) != len(rows) {
+		t.Fatalf("emitted %d rows, want %d returned rows", len(emitted), len(rows))
+	}
+	for i, row := range rows {
+		if callbackLengths[i] != i+1 {
+			t.Errorf("callback length after segment %d = %d, want %d", i+1, callbackLengths[i], i+1)
+		}
+		if emitted[i].StatusKind != row.StatusKind {
+			t.Errorf("emitted row %d StatusKind = %q, want returned row's %q", i, emitted[i].StatusKind, row.StatusKind)
+		}
+		if emitted[i].ResultKey != row.ResultKey {
+			t.Errorf("emitted row %d ResultKey = %q, want returned row's %q", i, emitted[i].ResultKey, row.ResultKey)
+		}
+		wantKey := row.FileName + "|" + row.Page + "|" + row.PO
+		if row.ResultKey != wantKey {
+			t.Errorf("returned row %d ResultKey = %q, want %q", i, row.ResultKey, wantKey)
+		}
+	}
+	if emitted[1].StatusKind != StatusKindFailed {
+		t.Fatalf("second emitted row StatusKind = %q, want %q", emitted[1].StatusKind, StatusKindFailed)
+	}
+}
 
 func TestRealProcessor_ProcessesRealSampleCoopFile(t *testing.T) {
 	store, err := productdata.Load("productdata/testdata/data.xlsx")
