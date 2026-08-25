@@ -90,3 +90,7 @@ reminder_error_*.png
 
 # ===== npm/Wails generated =====
 GO/frontend/package.json.md5
+
+# ===== Worktrees (scratch, never committed) =====
+.claude/worktrees/
+.worktrees/
