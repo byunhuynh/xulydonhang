@@ -90,6 +90,15 @@ func TestAppendComboRows(t *testing.T) {
 	if got, _ := f.GetCellValue(SheetDataShop, "A2"); got != "Sản phẩm A" {
 		t.Errorf("A2 = %q — dòng có sẵn bị ghi đè", got)
 	}
+	// Ghi vào "data shop" không được đụng tới sheet "Mã misa" — đó là bảng
+	// tra cứu KHÁC, người dùng gõ tay riêng, mất một dòng ở đây là mất dữ
+	// liệu thật không lấy lại được.
+	if v, _ := f.GetCellValue(SheetMisa, "B1"); v != "Tên Kênh" {
+		t.Errorf("Mã misa!B1 = %q — tiêu đề bảng Mã misa bị hỏng", v)
+	}
+	if v, _ := f.GetCellValue(SheetMisa, "B3"); v != "Shop X" {
+		t.Errorf("Mã misa!B3 = %q — dòng shop có sẵn trong Mã misa bị hỏng", v)
+	}
 	f.Close()
 
 	// Nạp lại: mã mới phải tra được ngay, cả hai nhánh tra.
@@ -109,7 +118,45 @@ func TestAppendComboRows(t *testing.T) {
 	// theo khoá Product+Variant+Combo — nên chỉ khớp được qua
 	// ByProductVariant(product, variant) khi Combo của dòng đó RỖNG (xem
 	// TestLoadAndLookup: "chỉ khớp dòng bỏ trống Mã combo"). Đây là hành vi
-	// gốc, không phải lỗi của AppendComboRows.
+	// gốc, không phải lỗi của AppendComboRows. Trường hợp Combo rỗng được
+	// kiểm riêng ở TestAppendComboRowsFindableByProductVariantWhenComboBlank.
+
+	// "Mã misa" vẫn tra được đúng shop đã có từ trước — bổ sung "data shop"
+	// không làm hỏng bảng tra cứu shop.
+	if c, ok := tb.MisaCode("Shop X"); !ok || c != "MN_TMDT_00001" {
+		t.Errorf("MisaCode(Shop X) = %q, ok=%v — Mã misa bị ảnh hưởng sau khi bổ sung data shop", c, ok)
+	}
+}
+
+func TestAppendComboRowsFindableByProductVariantWhenComboBlank(t *testing.T) {
+	// Đây chính là hình dạng dòng mà modal "mã còn thiếu" (Task 11) sinh ra
+	// cho một dòng hàng KHÔNG có Mã sản phẩm: Combo để trống. Theo khoá mà
+	// FromRows dựng (Product+Variant+Combo), đây là DUY NHẤT hình dạng mà một
+	// dòng no-SKU có thể được ByProductVariant tra thấy — combo không rỗng
+	// thì không bao giờ khớp (xem TestAppendComboRows). Nếu đường này hỏng,
+	// app sẽ hỏi lại đúng sản phẩm đã khai ở MỌI lần chạy sau: lời hứa
+	// "không hỏi lại lần sau" của cả tính năng AppendComboRows vỡ ngay.
+	path := newLookupWorkbook(t)
+
+	if _, err := AppendComboRows(path, []ComboRow{{
+		Product: "Sản phẩm không SKU", Variant: "Loại Duy Nhất", Combo: "",
+		TP: [4]string{"TP999", "", "", ""},
+		SL: [4]string{"5", "", "", ""},
+	}}); err != nil {
+		t.Fatalf("AppendComboRows: %v", err)
+	}
+
+	tb, err := Load(path)
+	if err != nil {
+		t.Fatalf("Load sau khi bổ sung: %v", err)
+	}
+	row, ok := tb.ByProductVariant("Sản phẩm không SKU", "Loại Duy Nhất")
+	if !ok {
+		t.Fatalf("ByProductVariant không tìm thấy dòng Combo rỗng vừa bổ sung — app sẽ hỏi lại sản phẩm này mỗi lần chạy")
+	}
+	if row.TP[0] != "TP999" || row.SL[0] != "5" {
+		t.Errorf("dòng vừa bổ sung sai: %+v", row)
+	}
 }
 
 func TestAppendComboRowsSkipsTrailingBlankRows(t *testing.T) {
