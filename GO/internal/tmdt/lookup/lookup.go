@@ -161,3 +161,59 @@ func (t *Tables) MisaCode(shop string) (string, bool) {
 	c, ok := t.misa[key(shop)]
 	return c, ok
 }
+
+// AppendComboRows ghi tiếp các dòng khai báo mới vào sheet "data shop",
+// đúng cột A..K, ngay dưới dòng CÓ DỮ LIỆU cuối cùng — trả về số dòng đầu
+// tiên đã ghi.
+//
+// Vì sao phải tự dò dòng cuối thay vì dùng len(GetRows(...)): bảng này do
+// người dùng gõ tay, thường có dòng trống lẫn ở cuối, và excelize đếm cả
+// dòng chỉ mang kiểu dáng. Ghi xuống sau vùng trống sẽ tạo một khoảng hở
+// giữa bảng, khiến chính người dùng khó rà soát về sau.
+func AppendComboRows(path string, rows []ComboRow) (firstRow int, err error) {
+	f, err := excelize.OpenFile(path)
+	if err != nil {
+		return 0, fmt.Errorf("lookup: mở %s: %w", path, err)
+	}
+	defer f.Close()
+
+	existing, err := f.GetRows(SheetDataShop)
+	if err != nil {
+		return 0, fmt.Errorf("lookup: đọc sheet %q: %w", SheetDataShop, err)
+	}
+	lastData := 1 // ít nhất là dòng tiêu đề
+	for i, r := range existing {
+		for _, cell := range r {
+			if strings.TrimSpace(cell) != "" {
+				lastData = i + 1
+				break
+			}
+		}
+	}
+	firstRow = lastData + 1
+	if len(rows) == 0 {
+		return firstRow, nil
+	}
+
+	current := firstRow
+	for _, row := range rows {
+		cells := []interface{}{
+			row.Product, row.Variant, row.Combo,
+			row.TP[0], row.SL[0], row.TP[1], row.SL[1],
+			row.TP[2], row.SL[2], row.TP[3], row.SL[3],
+		}
+		axis, cellErr := excelize.CoordinatesToCellName(1, current)
+		if cellErr != nil {
+			return 0, fmt.Errorf("lookup: tính ô dòng %d: %w", current, cellErr)
+		}
+		if err := f.SetSheetRow(SheetDataShop, axis, &cells); err != nil {
+			return 0, fmt.Errorf("lookup: ghi dòng %d vào %q: %w", current, SheetDataShop, err)
+		}
+		current++
+	}
+
+	if err := f.Save(); err != nil {
+		return 0, fmt.Errorf("lookup: lưu %s: %w", path, err)
+	}
+	return firstRow, nil
+}
