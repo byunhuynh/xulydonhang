@@ -210,6 +210,29 @@ so với một ô `#N/A` mà AMIS sẽ báo lỗi ngay khi import.
 
 ## Modal sửa mã thiếu
 
+### Vì sao gom một lần, không hỏi ngay từng mã
+
+Modal bật **đúng một lần**, sau khi quy đổi xong toàn bộ dữ liệu đã tải
+về, và **trước khi ghi bất kỳ file nào**. Ba lý do:
+
+1. **Quy đổi không tốn thời gian.** Phần chậm là tải API (~50 trang cho
+   một tuần); tra bảng cho 5.000 dòng chỉ là tra map trong bộ nhớ, xong
+   trong mili-giây. Dừng giữa vòng lặp đó không tiết kiệm được gì cho ai.
+2. **Hỏi ngay từng mã vẫn phải gom trùng.** Một mã chưa khai báo thường
+   dính hàng trăm dòng hàng, nên kiểu "hỏi ngay" bắt buộc cũng phải gom
+   theo khoá — tức là vẫn hỏi một lần cho mỗi mã, chỉ khác là rải ra
+   thành N lần ngắt thay vì một. Không được thêm gì, mất ngữ cảnh nhiều
+   hơn: người dùng không thấy còn bao nhiêu mã nữa, không biết mã nào
+   ảnh hưởng nhiều dòng hơn để ưu tiên.
+3. **Không bao giờ có file ghi nửa vời.** Mọi lần ghi Excel xảy ra sau
+   khi đã chốt xong mã. Nếu để "chạy xong phiên rồi mới hỏi" thì
+   `dondathang.xlsx` đã mang `#N/A` một lúc rồi mới phải ghi đè lần hai
+   — giữa hai lần đó người dùng hoàn toàn có thể mở nhầm file dở.
+
+Thực tế `data shop` đang có 291 dòng và sản phẩm mới chỉ thêm lai rai,
+nên số mã thiếu mỗi lần chạy thường là 0–3. Không thiếu mã nào thì modal
+không bật, batch chạy thẳng.
+
 Payload sự kiện `tmdt:missing`:
 
 ```go
