@@ -16,6 +16,12 @@ type Settings struct {
 	Gid      map[string]string `json:"gid"`
 	Zalo     map[string]string `json:"zalo"`
 	Reminder map[string]string `json:"reminder"`
+	// Haravan giữ cấu hình nhánh TMĐT. Hai khoá quy ước:
+	//   access_token  - private token Haravan, scope com.read_orders
+	//   exclude_shops - danh sách shop bỏ qua, ngăn bởi dấu phẩy
+	// Vẫn là map[string]string như 3 nhóm còn lại để popup Cài đặt dùng
+	// lại nguyên KeyValueEditor, không phải viết form riêng.
+	Haravan map[string]string `json:"haravan"`
 }
 
 // Store đọc/ghi Settings từ 1 file JSON đuôi .bhconfig (không phải
@@ -57,7 +63,7 @@ func (s *Store) Load(oldIniPath string) (Settings, error) {
 		return Settings{}, err
 	}
 	if !migrated {
-		return Settings{Gid: map[string]string{}, Zalo: map[string]string{}, Reminder: map[string]string{}}, nil
+		return Settings{Gid: map[string]string{}, Zalo: map[string]string{}, Reminder: map[string]string{}, Haravan: map[string]string{}}, nil
 	}
 	if err := s.Save(settings); err != nil {
 		return Settings{}, fmt.Errorf("appsettings: write migrated %s: %w", s.path, err)
@@ -92,5 +98,8 @@ func ensureMaps(s *Settings) {
 	}
 	if s.Reminder == nil {
 		s.Reminder = map[string]string{}
+	}
+	if s.Haravan == nil {
+		s.Haravan = map[string]string{}
 	}
 }

@@ -4,6 +4,7 @@ export namespace appsettings {
 	    gid: Record<string, string>;
 	    zalo: Record<string, string>;
 	    reminder: Record<string, string>;
+	    haravan: Record<string, string>;
 	
 	    static createFrom(source: any = {}) {
 	        return new Settings(source);
@@ -14,6 +15,7 @@ export namespace appsettings {
 	        this.gid = source["gid"];
 	        this.zalo = source["zalo"];
 	        this.reminder = source["reminder"];
+	        this.haravan = source["haravan"];
 	    }
 	}
 

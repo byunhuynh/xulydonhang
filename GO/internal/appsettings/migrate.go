@@ -36,7 +36,11 @@ func migrateFromOldIni(path string) (Settings, bool, error) {
 	if err != nil {
 		return Settings{}, false, fmt.Errorf("appsettings: migrate <reminder>: %w", err)
 	}
-	return Settings{Gid: gid, Zalo: zalo, Reminder: reminder}, true, nil
+	haravan, err := parseTagBlock(string(content), "haravan")
+	if err != nil {
+		return Settings{}, false, fmt.Errorf("appsettings: migrate <haravan>: %w", err)
+	}
+	return Settings{Gid: gid, Zalo: zalo, Reminder: reminder, Haravan: haravan}, true, nil
 }
 
 // parseTagBlock đọc khối <tagName>...</tagName>, mỗi dòng bên trong

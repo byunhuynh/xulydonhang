@@ -7,7 +7,7 @@ import type { AppSettings } from '../types'
 import { KeyValueEditor } from './KeyValueEditor'
 import { useModalEntrance } from '../lib/useModalEntrance'
 
-type SettingsTab = 'gid' | 'zalo' | 'reminder'
+type SettingsTab = 'gid' | 'zalo' | 'reminder' | 'haravan'
 
 interface SettingsModalProps {
   onClose: () => void
@@ -17,7 +17,7 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
   const [tab, setTab] = useState<SettingsTab>('gid')
   const [settings, setSettings] = useState<AppSettings | null>(null)
   const [saved, setSaved] = useState(false)
-  const [dupState, setDupState] = useState({ gid: false, zalo: false, reminder: false })
+  const [dupState, setDupState] = useState({ gid: false, zalo: false, reminder: false, haravan: false })
   const appendLog = useAppStore((s) => s.appendLog)
   const backdropRef = useRef<HTMLDivElement>(null)
   const cardRef = useRef<HTMLDivElement>(null)
@@ -39,7 +39,7 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
     )
   }
 
-  const hasDuplicates = dupState.gid || dupState.zalo || dupState.reminder
+  const hasDuplicates = dupState.gid || dupState.zalo || dupState.reminder || dupState.haravan
 
   async function handleSave() {
     if (!settings) return
@@ -55,6 +55,7 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
     { key: 'gid', label: 'Google Sheets (GID)' },
     { key: 'zalo', label: 'Zalo' },
     { key: 'reminder', label: 'Nhắc nhở' },
+    { key: 'haravan', label: 'Haravan (TMĐT)' },
   ]
 
   return (
@@ -113,6 +114,16 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
               keyLabel="Nhóm"
               valueLabel="Bật"
               valueType="toggle"
+            />
+          )}
+          {tab === 'haravan' && (
+            <KeyValueEditor
+              entries={settings.haravan}
+              onChange={(haravan) => setSettings({ ...settings, haravan })}
+              onDuplicateChange={(hasDup) => setDupState((d) => ({ ...d, haravan: hasDup }))}
+              keyLabel="Khoá"
+              valueLabel="Giá trị"
+              valueType="text"
             />
           )}
         </div>

@@ -49,4 +49,5 @@ export interface AppSettings {
   gid: Record<string, string>
   zalo: Record<string, string>
   reminder: Record<string, string>
+  haravan: Record<string, string>
 }

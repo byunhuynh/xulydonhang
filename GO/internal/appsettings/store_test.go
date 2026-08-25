@@ -102,3 +102,46 @@ func TestStore_Save_RoundTrips(t *testing.T) {
 		t.Errorf("Reminder = %v, want %v", got.Reminder, want.Reminder)
 	}
 }
+
+func TestSettingsHaravanRoundTrip(t *testing.T) {
+	dir := t.TempDir()
+	store := NewStore(filepath.Join(dir, "settings.bhconfig"))
+
+	want := Settings{
+		Gid:      map[string]string{"MAKH": "1"},
+		Zalo:     map[string]string{},
+		Reminder: map[string]string{},
+		Haravan:  map[string]string{"access_token": "abc123", "exclude_shops": "CLEVY VIỆT NAM"},
+	}
+	if err := store.Save(want); err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+	got, err := store.Load(filepath.Join(dir, "khong-co-settings.ini"))
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if got.Haravan["access_token"] != "abc123" {
+		t.Errorf("access_token = %q, muốn %q", got.Haravan["access_token"], "abc123")
+	}
+	if got.Haravan["exclude_shops"] != "CLEVY VIỆT NAM" {
+		t.Errorf("exclude_shops = %q, muốn %q", got.Haravan["exclude_shops"], "CLEVY VIỆT NAM")
+	}
+}
+
+func TestLoadFillsEmptyHaravanMap(t *testing.T) {
+	// File .bhconfig cũ (viết trước khi có nhánh TMĐT) không có khoá
+	// "haravan" — Load phải trả map rỗng chứ không phải nil, để
+	// SettingsModal đọc được ngay mà không nil-check ở mọi chỗ dùng.
+	dir := t.TempDir()
+	path := filepath.Join(dir, "settings.bhconfig")
+	if err := os.WriteFile(path, []byte(`{"gid":{},"zalo":{},"reminder":{}}`), 0o644); err != nil {
+		t.Fatalf("ghi file cũ: %v", err)
+	}
+	got, err := NewStore(path).Load(filepath.Join(dir, "khong-co.ini"))
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if got.Haravan == nil {
+		t.Fatalf("Haravan = nil, muốn map rỗng")
+	}
+}
