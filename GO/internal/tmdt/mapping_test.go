@@ -32,6 +32,10 @@ func fakeTables(t *testing.T) *lookup.Tables {
 			{"QUÀ TẶNG ĐƠN TỪ 200K", "", "SP-QUA", "", "", "", "", "", "", "", ""},
 			// Dòng lỗi dữ liệu: có mã thành phẩm nhưng SLTP dùng dấu phẩy thập phân.
 			{"Sản phẩm SLTP dấu phẩy", "Loại B", "SP-PHAY", "TP555", "1,5", "", "", "", "", "", ""},
+			// Hai dòng cho TestBuildBlankIfZeroOnSLTP: SLTP ghi đúng chữ "0", và
+			// SLTP dính khoảng trắng hai đầu.
+			{"Combo có SLTP 0", "Loại C", "SP-SL0", "TP777", "2", "TP888", "0", "", "", "", ""},
+			{"Combo SLTP dính khoảng trắng", "Loại D", "SP-SLWS", "TP999", " 3 ", "", "", "", "", "", ""},
 		},
 		// Mã misa: cột B = tên kênh, cột D = mã MISA, dữ liệu từ dòng 3
 		[][]string{
@@ -331,4 +335,81 @@ func TestBuildBlankShopNameGetsReadableLabel(t *testing.T) {
 	if _, coKhoaRong := res.MissingShops[""]; coKhoaRong {
 		t.Errorf("MissingShops còn khoá rỗng: %v", res.MissingShops)
 	}
+}
+
+// TestBuildBlankIfZeroOnSLTP khoá quy tắc blankIfZero ở PHÍA SLTP. Test này
+// tồn tại vì bảng "data shop" do người dùng GÕ TAY: ô SLTP hay dính khoảng
+// trắng / xuống dòng, và công thức Excel cũ bọc kết quả trong IF(KQ=0,"",KQ)
+// nên số 0 hiện ra thành ô TRỐNG. Sheet "Haravan" là thứ người dùng đọc và
+// đối chiếu, nên hai chuyện đó phải giữ nguyên trong SheetRow.SL, không chỉ
+// đúng ở dòng hạch toán — parseSL tự cắt khoảng trắng nên Số lượng vẫn đúng
+// dù blankIfZero có bị bỏ, và đó chính là lý do phải kiểm THẲNG ô sheet.
+//
+// Hai nhánh con khoá được hai mức khác nhau, đã đo bằng đột biến:
+//
+//   - Nhánh "0" khoá ĐÚNG blankIfZero: bỏ nó khỏi phía SLTP là đỏ ngay.
+//   - Nhánh khoảng trắng khoá HÀNH VI, không khoá một hàm: khoảng trắng bị
+//     cắt HAI LẦN — lookup.FromRows TrimSpace khi đọc bảng, rồi blankIfZero
+//     TrimSpace lần nữa — nên bỏ MỘT trong hai vẫn xanh, phải bỏ CẢ HAI mới
+//     đỏ. Hai lớp cắt này dư thừa có chủ ý (bảng gõ tay), và test bảo đảm ô
+//     sheet không bao giờ mang khoảng trắng dù lớp nào còn lại.
+func TestBuildBlankIfZeroOnSLTP(t *testing.T) {
+	t.Run("SLTP bằng 0 thành ô trống và không sinh dòng", func(t *testing.T) {
+		line := baseLine()
+		line.SKU, line.Title, line.VariantTitle = "SP-SL0", "Combo có SLTP 0", "Loại C"
+		line.Quantity, line.Price = 1, 100000
+		res := Build([]OrderLine{line}, fakeTables(t), Options{})
+
+		sheet := res.SheetRows[0]
+		if sheet.SL[0] != "2" {
+			t.Errorf("sheet SLTP1 = %q, muốn \"2\"", sheet.SL[0])
+		}
+		// Mã thành phẩm 2 VẪN hiện, chỉ SLTP của nó rỗng — đúng như công thức cũ.
+		if sheet.TP[1] != "TP888" {
+			t.Errorf("sheet MÃ TP 2 = %q, muốn TP888", sheet.TP[1])
+		}
+		if sheet.SL[1] != "" {
+			t.Errorf("sheet SLTP2 = %q, muốn ô TRỐNG — công thức cũ bọc IF(KQ=0,\"\",KQ)", sheet.SL[1])
+		}
+
+		// Thành phẩm SLTP = 0 không được thành dòng hạch toán.
+		if len(res.OrderRows) != 1 {
+			t.Fatalf("có %d dòng dondathang, muốn 1 — thành phẩm SLTP=0 không được sinh dòng: %+v",
+				len(res.OrderRows), res.OrderRows)
+		}
+		if res.OrderRows[0].SKU != "TP777" || res.OrderRows[0].Qty != 2 {
+			t.Errorf("dòng = %q × %v, muốn TP777 × 2", res.OrderRows[0].SKU, res.OrderRows[0].Qty)
+		}
+		// Tổng SLTP chỉ tính thành phẩm sinh ra dòng, nên vẫn là 2.
+		gia, tongSLTP := 100000.0, 2.0
+		if want := gia / tongSLTP / 1.08; res.OrderRows[0].UnitPrice != want {
+			t.Errorf("Đơn giá = %v, muốn %v (÷ tổng SLTP = 2)", res.OrderRows[0].UnitPrice, want)
+		}
+		// Không phải dòng bị bỏ âm thầm: có sinh dòng nên không đếm.
+		if len(res.NoComponent) != 0 {
+			t.Errorf("NoComponent = %v, muốn rỗng", res.NoComponent)
+		}
+	})
+
+	t.Run("SLTP dính khoảng trắng bị cắt", func(t *testing.T) {
+		line := baseLine()
+		line.SKU, line.Title, line.VariantTitle = "SP-SLWS", "Combo SLTP dính khoảng trắng", "Loại D"
+		line.Quantity, line.Price = 2, 90000
+		res := Build([]OrderLine{line}, fakeTables(t), Options{})
+
+		if got := res.SheetRows[0].SL[0]; got != "3" {
+			t.Errorf("sheet SLTP1 = %q, muốn \"3\" — bảng gõ tay dính khoảng trắng, sheet không được mang theo", got)
+		}
+		if len(res.OrderRows) != 1 {
+			t.Fatalf("có %d dòng dondathang, muốn 1", len(res.OrderRows))
+		}
+		// " 3 " phải đọc thành 3: Số lượng = 2 × 3 = 6.
+		if res.OrderRows[0].Qty != 6 {
+			t.Errorf("Số lượng = %v, muốn 6 (2 × 3)", res.OrderRows[0].Qty)
+		}
+		gia, tongSLTP := 90000.0, 3.0
+		if want := gia / tongSLTP / 1.08; res.OrderRows[0].UnitPrice != want {
+			t.Errorf("Đơn giá = %v, muốn %v", res.OrderRows[0].UnitPrice, want)
+		}
+	})
 }
