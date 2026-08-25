@@ -37,6 +37,12 @@ export function TMDTDateRangeModal({ fileNames, onConfirm, onCancel }: Props) {
     const max = maxSelectableDate(today)
     return new Date(Date.UTC(max.getUTCFullYear(), max.getUTCMonth(), 1))
   })
+  // anchor khác null CHỈ khi đã chọn ngày đầu nhưng chưa chọn ngày thứ hai
+  // — tức đang "giữa" một lượt chọn khoảng. Đây là lúc duy nhất giới hạn
+  // 7 ngày phải hiện trên lịch (isSelectableDay nhận anchor để vô hiệu hoá
+  // những ngày cách anchor quá xa). Không dùng chung 1 cờ với range: nếu
+  // gộp lại, sau khi range đã có giá trị sẽ không còn cách nào phân biệt
+  // "đang chọn ngày thứ hai" với "đã chọn xong" — bug cũ chính là vậy.
   const [anchor, setAnchor] = useState<string | null>(null)
   const [range, setRange] = useState<TMDTDateRange | null>(null)
 
@@ -55,17 +61,25 @@ export function TMDTDateRangeModal({ fileNames, onConfirm, onCancel }: Props) {
 
   function pick(day: Date) {
     const iso = toISODate(day)
-    if (!anchor || range) {
+    if (!anchor) {
+      // Ngày đầu của một lượt chọn mới: giữ làm anchor, hiện tạm như một
+      // khoảng 1 ngày trong lúc chờ người dùng bấm ngày thứ hai.
       setAnchor(iso)
       setRange({ from: iso, to: iso })
       return
     }
+    // Ngày thứ hai: đóng khoảng lại và xoá anchor — lượt chọn tiếp theo
+    // (nếu có) sẽ lại bắt đầu từ nhánh "ngày đầu" ở trên.
     setRange(normalizeRange(anchor, iso))
+    setAnchor(null)
   }
 
   function applyPreset(preset: 'yesterday' | '3days' | '7days') {
     const r = presetRange(preset, today)
-    setAnchor(r.from)
+    // Preset cho ra khoảng đã hoàn tất ngay, không phải đang giữa lượt
+    // chọn — anchor phải về null để lịch không bị khoá theo giới hạn 7
+    // ngày tính từ r.from.
+    setAnchor(null)
     setRange(r)
     setMonth(new Date(Date.UTC(parseISODate(r.to).getUTCFullYear(), parseISODate(r.to).getUTCMonth(), 1)))
   }
@@ -84,7 +98,7 @@ export function TMDTDateRangeModal({ fileNames, onConfirm, onCancel }: Props) {
       aria-modal="true"
       aria-label="Chọn khoảng thời gian lấy đơn TMĐT"
     >
-      <div ref={cardRef} className="w-full max-w-md rounded-lg border border-border bg-bg p-5 shadow-xl">
+      <div ref={cardRef} className="w-full max-w-md rounded-lg border border-border bg-panel p-5 shadow-xl">
         <h2 className="font-sans text-base font-semibold text-ink">Lấy đơn TMĐT theo khoảng ngày</h2>
         <p className="mt-1 font-sans text-xs text-muted">
           {fileNames.join(', ')} — chỉ lấy đến hết ngày hôm qua, tối đa {MAX_RANGE_DAYS} ngày.
@@ -138,7 +152,7 @@ export function TMDTDateRangeModal({ fileNames, onConfirm, onCancel }: Props) {
           {days.map((day) => {
             const iso = toISODate(day)
             const otherMonth = day.getUTCMonth() !== month.getUTCMonth()
-            const selectable = isSelectableDay(day, today, range ? null : anchor)
+            const selectable = isSelectableDay(day, today, anchor)
             const selected = inRange(day)
             return (
               <button
@@ -163,7 +177,7 @@ export function TMDTDateRangeModal({ fileNames, onConfirm, onCancel }: Props) {
 
         <div className="mt-4 min-h-[1.25rem] font-sans text-xs">
           {error ? (
-            <span className="text-red-400">{error}</span>
+            <span className="text-danger">{error}</span>
           ) : (
             <span className="text-muted">Đã chọn: {formatRangeLabel(range as TMDTDateRange)}</span>
           )}
