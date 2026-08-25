@@ -28,6 +28,10 @@ func fakeTables(t *testing.T) *lookup.Tables {
 			{"Bột tẩy lồng", "Combo 5 Túi", "SP000443", "TP10127", "5", "", "", "", "", "", ""},
 			{"Combo đôi", "Bộ 2 món", "SP999", "TP111", "1", "TP222", "2", "", "", "", ""},
 			{"Không mã combo", "Loại A", "", "TP333", "1", "", "", "", "", "", ""},
+			// Dòng quà tặng: tra được nhưng CỐ Ý không khai mã thành phẩm nào.
+			{"QUÀ TẶNG ĐƠN TỪ 200K", "", "SP-QUA", "", "", "", "", "", "", "", ""},
+			// Dòng lỗi dữ liệu: có mã thành phẩm nhưng SLTP dùng dấu phẩy thập phân.
+			{"Sản phẩm SLTP dấu phẩy", "Loại B", "SP-PHAY", "TP555", "1,5", "", "", "", "", "", ""},
 		},
 		// Mã misa: cột B = tên kênh, cột D = mã MISA, dữ liệu từ dòng 3
 		[][]string{
@@ -86,7 +90,11 @@ func TestBuildQtyAndUnitPrice(t *testing.T) {
 	if row.Qty != 5 {
 		t.Errorf("Qty = %v, muốn 5", row.Qty)
 	}
-	const wantPrice = 88999.0 / 5 / 1.08
+	// Tính bằng biến float64, KHÔNG phải hằng số: hằng số Go rút gọn với độ
+	// chính xác vô hạn rồi mới làm tròn một lần, nên có thể lệch chữ số cuối
+	// so với hai phép chia float64 mà mapping.go thực sự làm.
+	gia, sltp := 88999.0, 5.0
+	wantPrice := gia / sltp / 1.08
 	if row.UnitPrice != wantPrice {
 		t.Errorf("UnitPrice = %v, muốn %v", row.UnitPrice, wantPrice)
 	}
@@ -247,5 +255,80 @@ func TestBuildClevyStaysInSheetButNotInDondathang(t *testing.T) {
 	}
 	if len(res.Missing) != 0 {
 		t.Errorf("CLEVY không phải mã thiếu, không được hỏi người dùng: %+v", res.Missing)
+	}
+	// CLEVY chưa có trong sheet "Mã misa" và sẽ không bao giờ có — nó không
+	// sinh dòng hạch toán nào. Đếm nó vào MissingShops là báo động giả ở MỌI
+	// lần chạy, kèm câu "→ Mã khách hàng = #N/A" trong khi không có dòng nào
+	// mang giá trị đó.
+	if len(res.MissingShops) != 0 {
+		t.Errorf("MissingShops = %v, muốn rỗng — CLEVY cố ý không quy đổi", res.MissingShops)
+	}
+	// Nhưng GIÁ TRỊ thì vẫn #N/A: workbook thật ghi #N/A vào cột Mã misa.
+	if res.SheetRows[0].Misa != lookup.NotAvailable {
+		t.Errorf("sheet Mã misa = %q, muốn %q", res.SheetRows[0].Misa, lookup.NotAvailable)
+	}
+	if res.NoComponent == nil || len(res.NoComponent) != 0 {
+		t.Errorf("NoComponent = %v, muốn map rỗng khác nil — CLEVY không phải dòng bị bỏ âm thầm", res.NoComponent)
+	}
+}
+
+// Hai test dưới khoá đường BỎ DÒNG ÂM THẦM: dòng TRA ĐƯỢC bảng "data shop"
+// nhưng không sinh ra dòng hạch toán nào. Không có bộ đếm thì đơn hàng biến
+// mất khỏi file gửi AMIS mà không #N/A, không cảnh báo, không log.
+
+func TestBuildGiftRowWithNoComponentIsCounted(t *testing.T) {
+	line := baseLine()
+	line.SKU, line.Title, line.VariantTitle = "SP-QUA", "QUÀ TẶNG ĐƠN TỪ 200K", ""
+	res := Build([]OrderLine{line}, fakeTables(t), Options{})
+
+	if len(res.OrderRows) != 0 {
+		t.Fatalf("có %d dòng dondathang, muốn 0 — dòng này không khai mã thành phẩm", len(res.OrderRows))
+	}
+	if len(res.Missing) != 0 {
+		t.Errorf("tra ĐƯỢC bảng nên không phải mã thiếu: %+v", res.Missing)
+	}
+	want := KhongKhaiThanhPham + MissingKey("SP-QUA", "QUÀ TẶNG ĐƠN TỪ 200K", "")
+	if res.NoComponent[want] != 1 {
+		t.Errorf("NoComponent = %v, muốn %q đếm 1", res.NoComponent, want)
+	}
+	// Sheet vẫn ghi ô TRỐNG (đúng thiết kế), khác #N/A.
+	if res.SheetRows[0].TP[0] != "" {
+		t.Errorf("sheet TP1 = %q, muốn trống", res.SheetRows[0].TP[0])
+	}
+}
+
+func TestBuildUnreadableSLTPIsCountedAsDataError(t *testing.T) {
+	line := baseLine()
+	// SLTP1 trong bảng là "1,5" — dấu phẩy thập phân, ParseFloat không đọc được.
+	line.SKU, line.Title, line.VariantTitle = "SP-PHAY", "Sản phẩm SLTP dấu phẩy", "Loại B"
+	res := Build([]OrderLine{line}, fakeTables(t), Options{})
+
+	if len(res.OrderRows) != 0 {
+		t.Fatalf("có %d dòng dondathang, muốn 0", len(res.OrderRows))
+	}
+	if len(res.Missing) != 0 {
+		t.Errorf("tra ĐƯỢC bảng nên không phải mã thiếu: %+v", res.Missing)
+	}
+	want := SLTPKhongDocDuoc + MissingKey("SP-PHAY", "Sản phẩm SLTP dấu phẩy", "Loại B")
+	if res.NoComponent[want] != 1 {
+		t.Errorf("NoComponent = %v, muốn %q đếm 1 (lỗi dữ liệu, khác dòng quà tặng)",
+			res.NoComponent, want)
+	}
+	// Hai nguyên nhân KHÔNG được lẫn vào nhau: mức nghiêm trọng khác hẳn.
+	if res.NoComponent[KhongKhaiThanhPham+MissingKey("SP-PHAY", "Sản phẩm SLTP dấu phẩy", "Loại B")] != 0 {
+		t.Errorf("SLTP không đọc được bị xếp thành 'không khai thành phẩm': %v", res.NoComponent)
+	}
+}
+
+func TestBuildBlankShopNameGetsReadableLabel(t *testing.T) {
+	line := baseLine()
+	line.Shop = "   " // Haravan có đơn thiếu note attribute BranchName
+	res := Build([]OrderLine{line}, fakeTables(t), Options{})
+	if res.MissingShops[ShopKhongTen] != 1 {
+		t.Errorf("MissingShops = %v, muốn khoá %q đếm 1 — Task 11 in thẳng khoá này ra cảnh báo",
+			res.MissingShops, ShopKhongTen)
+	}
+	if _, coKhoaRong := res.MissingShops[""]; coKhoaRong {
+		t.Errorf("MissingShops còn khoá rỗng: %v", res.MissingShops)
 	}
 }

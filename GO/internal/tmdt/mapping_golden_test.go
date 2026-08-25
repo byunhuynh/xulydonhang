@@ -109,6 +109,18 @@ func TestBuildGoldenAgainstMauChuan(t *testing.T) {
 	if len(got.Missing) != 0 {
 		t.Errorf("golden không được thiếu mã nào, nhưng thiếu %d: %+v", len(got.Missing), got.Missing)
 	}
+	// Bảng tra cứu thật không có mã nào bị bỏ âm thầm; NoComponent phải khác
+	// nil để Task 11 đọc được ngay mà không cần kiểm nil.
+	if got.NoComponent == nil {
+		t.Errorf("NoComponent = nil, muốn map rỗng")
+	} else if len(got.NoComponent) != 0 {
+		t.Errorf("NoComponent = %v, muốn rỗng trên fixture vàng", got.NoComponent)
+	}
+	if len(got.MissingShops) != 0 {
+		t.Errorf("MissingShops = %v, muốn rỗng — CLEVY cố ý không quy đổi nên không được đếm", got.MissingShops)
+	}
+
+	khopSheet := kiemSheetHaravan(t, got.SheetRows)
 
 	_, want := readCSV(t, "expected_dondathang.csv")
 	if len(got.OrderRows) != len(want) {
@@ -180,9 +192,16 @@ func TestBuildGoldenAgainstMauChuan(t *testing.T) {
 		}
 		if hit < 0 {
 			if len(lechSo) < 5 {
-				// Chỉ báo con số của dòng mẫu chuẩn đầu tiên cùng khoá — đủ để
-				// thấy công thức Số lượng / Đơn giá sai ở đâu.
+				// Lấy dòng mẫu chuẩn CHƯA khớp đầu tiên cùng khoá chữ — dòng
+				// đã khớp rồi thì thuộc về dòng Build khác, in ra sẽ gây hiểu
+				// nhầm. Không còn dòng nào chưa khớp thì đành lấy idxs[0].
 				j := idxs[0]
+				for _, k := range idxs {
+					if !wants[k].matched {
+						j = k
+						break
+					}
+				}
 				lechSo = append(lechSo, strconv.Itoa(i+1)+": "+strings.ReplaceAll(k, "\x1f", " | ")+
 					" — được X="+strconv.FormatFloat(g.Qty, 'f', -1, 64)+
 					" Y="+strconv.FormatFloat(g.UnitPrice, 'f', -1, 64)+
@@ -195,7 +214,8 @@ func TestBuildGoldenAgainstMauChuan(t *testing.T) {
 		matched++
 	}
 
-	t.Logf("khớp %d/%d dòng mẫu chuẩn", matched, len(want))
+	t.Logf("khớp %d/%d dòng mẫu chuẩn (dondathang) và %d/%d dòng sheet Haravan",
+		matched, len(want), khopSheet, len(got.SheetRows))
 	if matched != len(want) {
 		t.Errorf("khớp %d/%d dòng mẫu chuẩn", matched, len(want))
 		for _, s := range lechChu {
@@ -206,10 +226,81 @@ func TestBuildGoldenAgainstMauChuan(t *testing.T) {
 		}
 		for j, w := range wants {
 			if !w.matched {
+				// Cắt an toàn: bản ghi CSV ngắn hơn 11 cột sẽ làm panic, mà
+				// test đỏ thì phải TỰ GIẢI THÍCH, không được nổ.
+				n := len(want[j])
+				if n > 11 {
+					n = 11
+				}
 				t.Errorf("dòng mẫu chuẩn %d KHÔNG được dòng Build nào khớp: %s | X=%v Y=%v",
-					j+1, strings.Join(want[j][:11], " | "), w.qty, w.price)
+					j+1, strings.Join(want[j][:n], " | "), w.qty, w.price)
 				break
 			}
 		}
 	}
+}
+
+// kiemSheetHaravan so từng ô 9 cột của sheet "Haravan" với
+// expected_haravan_sheet.csv — chính giá trị mà công thức Excel trong sheet
+// "Đơn hàng haravan" của workbook thật tính ra (MÃ TP 1..4, SLTP1..4, Mã misa).
+//
+// So theo VỊ TRÍ, khác hẳn phía dondathang: sheet Haravan giữ đúng thứ tự dòng
+// hàng đầu vào theo thiết kế, còn fixture cũng được ghi trong cùng vòng lặp
+// sinh orders.csv nên hai bên thẳng hàng dòng-với-dòng, không cần đối sánh tập hợp.
+//
+// Trả về số dòng khớp trọn cả 9 ô.
+func kiemSheetHaravan(t *testing.T, rows []SheetRow) int {
+	t.Helper()
+	head, want := readCSV(t, "expected_haravan_sheet.csv")
+	if len(want) != 1585 {
+		t.Fatalf("fixture expected_haravan_sheet.csv có %d dòng, muốn 1585 — sinh lại fixture", len(want))
+	}
+	if len(rows) != len(want) {
+		t.Fatalf("SheetRows = %d, muốn %d", len(rows), len(want))
+	}
+	if got := strings.Join(head, ","); got != "tp1,sl1,tp2,sl2,tp3,sl3,tp4,sl4,misa" {
+		t.Fatalf("header fixture = %q, không đúng bộ cột", got)
+	}
+
+	khop, lech := 0, 0
+	for i, w := range want {
+		if len(w) < 9 {
+			t.Fatalf("dòng %d của fixture chỉ có %d cột, muốn 9", i+1, len(w))
+		}
+		g := rows[i]
+		// Fixture mang NGUYÊN VĂN ô của workbook (bảng tra cứu có một ô dính ký
+		// tự xuống dòng ở cuối), còn code cắt khoảng trắng khi đọc bảng tra cứu
+		// — nên TrimSpace phía fixture rồi mới so.
+		oks := true
+		for j := 0; j < 4; j++ {
+			if strings.TrimSpace(w[j*2]) != g.TP[j] {
+				oks = false
+				if lech < 10 {
+					lech++
+					t.Errorf("sheet dòng %d MÃ TP %d: được %q, muốn %q", i+1, j+1, g.TP[j], strings.TrimSpace(w[j*2]))
+				}
+			}
+			if strings.TrimSpace(w[j*2+1]) != g.SL[j] {
+				oks = false
+				if lech < 10 {
+					lech++
+					t.Errorf("sheet dòng %d SLTP%d: được %q, muốn %q", i+1, j+1, g.SL[j], strings.TrimSpace(w[j*2+1]))
+				}
+			}
+		}
+		if strings.TrimSpace(w[8]) != g.Misa {
+			oks = false
+			if lech < 10 {
+				lech++
+				t.Errorf("sheet dòng %d Mã misa: được %q, muốn %q", i+1, g.Misa, strings.TrimSpace(w[8]))
+			}
+		}
+		if oks {
+			khop++
+		}
+	}
+	if khop != len(want) {
+		t.Errorf("sheet Haravan khớp %d/%d dòng", khop, len(want))
+	}
+	return khop
 }

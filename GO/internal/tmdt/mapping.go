@@ -20,6 +20,26 @@ const ShopKhongQuyDoi = "CLEVY VIỆT NAM"
 // chưa thuế.
 const vatDivisor = 1.08
 
+// ShopKhongTen là nhãn thay cho tên shop rỗng trong MissingShops. Haravan
+// có đơn không mang note attribute BranchName, và Task 11 in thẳng khoá này
+// ra cảnh báo — khoá "" sẽ thành câu 'Shop "" chưa có trong sheet...', vô nghĩa.
+const ShopKhongTen = "(đơn không có tên shop)"
+
+// Hai tiền tố của khoá trong Result.NoComponent, phân biệt HAI nguyên nhân
+// khác hẳn nhau về mức nghiêm trọng — Task 11 đọc tiền tố để nói đúng chuyện:
+//
+//   - KhongKhaiThanhPham: dòng "data shop" TRA ĐƯỢC nhưng cố ý không khai mã
+//     thành phẩm nào (bảng thật đang có 6 dòng quà tặng như vậy: "QUÀ TẶNG ĐƠN
+//     TỪ 200K"...). Đúng thiết kế, chỉ báo cho biết, KHÔNG phải lỗi.
+//   - SLTPKhongDocDuoc: dòng có khai MÃ TP nhưng không đọc được SLTP nào
+//     (ô trống, chữ, hay dấu phẩy thập phân kiểu "1,5"). Đây là LỖI DỮ LIỆU
+//     trong bảng tra cứu, người dùng cần sửa, vì đơn hàng thật bị bỏ khỏi file
+//     hạch toán.
+const (
+	KhongKhaiThanhPham = "khong-khai-tp:"
+	SLTPKhongDocDuoc   = "sltp-khong-doc-duoc:"
+)
+
 // OrderLine là MỘT dòng hàng đã tách khỏi kiểu dữ liệu của Haravan. Tầng
 // quy đổi cố ý KHÔNG nhận *haravan.Order: nhờ vậy golden test nạp được
 // 1.585 dòng thật từ CSV mà không cần mạng, và tầng này không phụ thuộc
@@ -83,6 +103,14 @@ type Result struct {
 	OrderRows    []excelwriter.TMDTRow
 	Missing      []MissingCombo
 	MissingShops map[string]int
+
+	// NoComponent đếm những dòng hàng TRA ĐƯỢC bảng "data shop" nhưng không
+	// sinh ra dòng hạch toán nào. Nếu không đếm thì đây là đường bỏ dòng ÂM
+	// THẦM: không #N/A, không cảnh báo, đơn hàng chỉ đơn giản biến mất khỏi
+	// file gửi AMIS. Khoá = tiền tố nguyên nhân (KhongKhaiThanhPham hoặc
+	// SLTPKhongDocDuoc) + MissingKey, nên vẫn gom unique đúng một dòng bảng
+	// tra cứu như Missing, mà Task 11 đọc tiền tố là biết nên báo hay chỉ ghi log.
+	NoComponent map[string]int
 }
 
 // MissingKey là khoá gom nhóm mã thiếu: có Mã sản phẩm thì dùng nó, không
@@ -118,15 +146,16 @@ func warehouseOf(khoBan string) (shipTo, maKho, maDonVi string) {
 }
 
 func Build(lines []OrderLine, tables *lookup.Tables, opt Options) Result {
-	res := Result{MissingShops: map[string]int{}}
+	res := Result{MissingShops: map[string]int{}, NoComponent: map[string]int{}}
 	missingIdx := map[string]int{} // khoá → vị trí trong res.Missing
 
 	for _, line := range lines {
 		shop := strings.TrimSpace(line.Shop)
+		noConvert := strings.EqualFold(shop, ShopKhongQuyDoi)
+
 		misa, ok := tables.MisaCode(shop)
 		if !ok {
 			misa = lookup.NotAvailable
-			res.MissingShops[shop]++
 		}
 
 		sheet := SheetRow{
@@ -138,7 +167,21 @@ func Build(lines []OrderLine, tables *lookup.Tables, opt Options) Result {
 			Shop: shop, Misa: misa,
 		}
 
-		noConvert := strings.EqualFold(shop, ShopKhongQuyDoi)
+		if !ok && !noConvert {
+			// GIÁ TRỊ và BỘ ĐẾM chia tay nhau ở đây, cố ý: sheet "Haravan"
+			// của workbook thật vẫn ghi #N/A vào cột Mã misa cho shop không
+			// quy đổi, nên misa phải giữ #N/A. Nhưng shop đó KHÔNG sinh dòng
+			// hạch toán nào, nên đếm nó vào MissingShops sẽ khiến Task 11
+			// cảnh báo "chưa có trong sheet Mã misa (169 dòng → Mã khách hàng
+			// = #N/A)" ở MỌI lần chạy — báo động giả vĩnh viễn, mà nửa sau
+			// còn sai: không có dòng nào để mang #N/A cả.
+			ten := shop
+			if ten == "" {
+				ten = ShopKhongTen
+			}
+			res.MissingShops[ten]++
+		}
+
 		var combo *lookup.ComboRow
 		found := false
 		if !noConvert {
@@ -175,7 +218,11 @@ func Build(lines []OrderLine, tables *lookup.Tables, opt Options) Result {
 			// Cố ý không sinh dòng đặt hàng: không có mã thành phẩm để ghi.
 			continue
 		}
-		res.OrderRows = append(res.OrderRows, orderRowsFor(line, sheet, opt)...)
+		rows, nguyenNhan := orderRowsFor(line, sheet, opt)
+		if nguyenNhan != "" {
+			res.NoComponent[nguyenNhan+MissingKey(line.SKU, line.Title, line.VariantTitle)]++
+		}
+		res.OrderRows = append(res.OrderRows, rows...)
 	}
 	return res
 }
@@ -184,8 +231,12 @@ func Build(lines []OrderLine, tables *lookup.Tables, opt Options) Result {
 // thành phẩm có mã. Mã chưa khai báo (#N/A) vẫn sinh ĐÚNG MỘT dòng mang
 // #N/A — bỏ âm thầm vài trăm dòng khỏi file hạch toán nguy hiểm hơn nhiều
 // so với một ô #N/A mà AMIS sẽ báo lỗi ngay khi import.
-func orderRowsFor(line OrderLine, sheet SheetRow, opt Options) []excelwriter.TMDTRow {
-	channel := ChannelLabel(firstNonEmptyStr(line.KenhBanHang, sheet.KenhBanHang))
+//
+// Giá trị thứ hai là NGUYÊN NHÂN không sinh được dòng nào (một trong hai tiền
+// tố KhongKhaiThanhPham / SLTPKhongDocDuoc), rỗng khi có sinh dòng. Build đếm
+// nó vào Result.NoComponent để không còn đường bỏ dòng âm thầm nào.
+func orderRowsFor(line OrderLine, sheet SheetRow, opt Options) ([]excelwriter.TMDTRow, string) {
+	channel := ChannelLabel(line.KenhBanHang)
 	shipTo, maKho, maDonVi := warehouseOf(line.KhoBan)
 	date := line.CreatedAt.Format("02/01/2006")
 	desc := fmt.Sprintf("TMĐT-%s - %s - %s - Ngày đổ %s - %s",
@@ -217,7 +268,7 @@ func orderRowsFor(line OrderLine, sheet SheetRow, opt Options) []excelwriter.TMD
 		// Chưa biết SLTP nên giữ nguyên số lượng đặt và giá của dòng hàng.
 		row.Qty = line.Quantity
 		row.UnitPrice = line.Price / vatDivisor
-		return []excelwriter.TMDTRow{row}
+		return []excelwriter.TMDTRow{row}, ""
 	}
 
 	// tongSL = TỔNG SLTP của các thành phẩm dòng hàng này sinh ra. Giá sản
@@ -256,7 +307,17 @@ func orderRowsFor(line OrderLine, sheet SheetRow, opt Options) []excelwriter.TMD
 		row.UnitPrice = line.Price / tongSL / vatDivisor
 		out = append(out, row)
 	}
-	return out
+	if len(out) == 0 {
+		// Có khai MÃ TP mà vẫn không ra dòng nào ⇒ SLTP không đọc được; không
+		// khai MÃ TP nào ⇒ dòng cố ý không có thành phẩm (quà tặng).
+		for i := 0; i < 4; i++ {
+			if sheet.TP[i] != "" {
+				return nil, SLTPKhongDocDuoc
+			}
+		}
+		return nil, KhongKhaiThanhPham
+	}
+	return out, ""
 }
 
 // parseSL đọc SLTP. Bảng tra cứu là do người dùng gõ tay nên giá trị có
@@ -279,13 +340,4 @@ func blankIfZero(s string) string {
 		return ""
 	}
 	return s
-}
-
-func firstNonEmptyStr(vals ...string) string {
-	for _, v := range vals {
-		if strings.TrimSpace(v) != "" {
-			return v
-		}
-	}
-	return ""
 }
