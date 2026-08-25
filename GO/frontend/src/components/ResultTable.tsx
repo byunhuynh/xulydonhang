@@ -116,13 +116,19 @@ function stripeClass(row: OrderRow): string {
 // trạng thái tiếng Việt - mono đọc chậm hơn và ngốn chiều ngang mà không
 // đổi lại được gì ở những cột đó.
 const cellClassByColumn: Partial<Record<(typeof columns)[number]['key'], string>> = {
+  status: 'max-w-[168px]',
   page: 'font-mono tabular-nums text-muted',
+  priceMismatchCount: 'max-w-[136px]',
   maKhachHang: 'font-mono',
   po: 'font-mono',
   donGia: 'text-right font-mono tabular-nums',
 }
 
 function formatMoney(value: string): string {
+  // Ô đơn giá rỗng KHÔNG phải là 0 đồng: một đơn thất bại chưa hề có giá.
+  // Number('') trả về 0 nên trước đây dòng lỗi hiện "0" ngay dưới cột
+  // tiền, đọc như thể đơn đó trị giá không đồng.
+  if (value.trim() === '') return '—'
   const n = Number(value)
   if (Number.isNaN(n)) return value
   return n.toLocaleString('vi-VN')
@@ -363,8 +369,7 @@ export function ResultTable() {
         <table className="w-full border-collapse text-xs">
           <thead>
             <tr>
-              <th className="sticky top-0 z-10 w-[3px] border-b border-border bg-bg p-0" aria-hidden="true" />
-              <th className="sticky top-0 z-10 w-9 border-b border-border bg-bg px-3 py-2 text-center">
+              <th className="sticky top-0 z-10 w-9 border-b border-border bg-bg px-2.5 py-2 text-center">
                 <input
                   type="checkbox"
                   className="cursor-pointer accent-accent"
@@ -376,18 +381,18 @@ export function ResultTable() {
                   title="Chọn tất cả"
                 />
               </th>
-              <th className="sticky top-0 z-10 w-12 border-b border-border bg-bg px-3 py-2 text-center font-sans text-[10px] font-bold uppercase tracking-wider text-muted">
+              <th className="sticky top-0 z-10 w-12 border-b border-border bg-bg px-2.5 py-2 text-center font-sans text-[10px] font-bold uppercase tracking-wider text-muted">
                 STT
               </th>
               {columns.map((c) => (
                 <th
                   key={c.key}
-                  className="sticky top-0 z-10 border-b border-border bg-bg px-3 py-2 text-left font-sans text-[10px] font-bold uppercase tracking-wider text-muted"
+                  className="sticky top-0 z-10 border-b border-border bg-bg px-2.5 py-2 text-left font-sans text-[10px] font-bold uppercase tracking-wider text-muted"
                 >
                   {c.label}
                 </th>
               ))}
-              <th className="sticky top-0 z-10 border-b border-border bg-bg px-3 py-2 text-left font-sans text-[10px] font-bold uppercase tracking-wider text-muted">
+              <th className="sticky top-0 z-10 border-b border-border bg-bg px-2.5 py-2 text-left font-sans text-[10px] font-bold uppercase tracking-wider text-muted">
                 Nội dung
               </th>
             </tr>
@@ -395,7 +400,7 @@ export function ResultTable() {
           <tbody ref={tbodyRef}>
             {rows.length === 0 && (
               <tr>
-                <td colSpan={columns.length + 4} className="p-0">
+                <td colSpan={columns.length + 3} className="p-0">
                   <div className="m-3 rounded-lg border border-dashed border-border px-5 py-9 text-center">
                     <p className="text-[13px] font-semibold text-ink">Chưa xử lý file nào</p>
                     <p className="mx-auto mt-1.5 max-w-[46ch] text-xs leading-relaxed text-muted">
@@ -419,8 +424,11 @@ export function ResultTable() {
                     data-row-entry
                     className={`transition-colors hover:bg-white/[0.03] ${isPOSelected ? 'bg-accent/[0.06]' : ''}`}
                   >
-                    <td className={`border-b border-border p-0 ${stripeClass(row)}`} aria-hidden="true" />
-                    <td className="border-b border-border px-3 py-2 text-center" onClick={(e) => e.stopPropagation()}>
+                    <td
+                      className="relative border-b border-border px-2.5 py-2 text-center"
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      <span className={`absolute inset-y-0 left-0 w-[3px] ${stripeClass(row)}`} aria-hidden="true" />
                       {rowGroupKey !== '' && (
                         <input
                           type="checkbox"
@@ -430,7 +438,7 @@ export function ResultTable() {
                         />
                       )}
                     </td>
-                    <td className="border-b border-border px-3 py-2 text-center font-mono font-semibold tabular-nums text-muted">
+                    <td className="border-b border-border px-2.5 py-2 text-center font-mono font-semibold tabular-nums text-muted">
                       {i + 1}
                     </td>
                     {columns.map((c) => {
@@ -447,7 +455,7 @@ export function ResultTable() {
                           key={c.key}
                           onClick={() => handleCopy(cellKey, copyValue)}
                           title="Nhấp để copy"
-                          className={`relative cursor-pointer border-b border-border px-3 py-2 text-ink transition-colors ${
+                          className={`relative cursor-pointer border-b border-border px-2.5 py-2 text-ink transition-colors ${
                             cellClassByColumn[c.key] ?? ''
                           } ${isCopied ? 'bg-accent/20' : 'hover:bg-accent/[0.08]'}`}
                         >
@@ -466,10 +474,11 @@ export function ResultTable() {
                             />
                           ) : c.key === 'status' ? (
                             <span
-                              className={`inline-flex items-center gap-1.5 whitespace-nowrap rounded-full px-2.5 py-0.5 font-sans font-semibold ${meta.classes}`}
+                              title={meta.label}
+                              className={`inline-flex max-w-full items-center gap-1.5 rounded-full px-2.5 py-0.5 font-sans font-semibold ${meta.classes}`}
                             >
-                              <FaCircle size={5} />
-                              {meta.label}
+                              <FaCircle size={5} className="shrink-0" />
+                              <span className="truncate">{meta.label}</span>
                             </span>
                           ) : c.key === 'priceMismatchCount' ? (
                             row.priceMismatchCount > 0 ? (
@@ -494,7 +503,7 @@ export function ResultTable() {
                               </span>
                             )
                           ) : c.key === 'fileName' ? (
-                            <span className="block max-w-[168px] truncate" title={row.fileName}>
+                            <span className="block max-w-[124px] truncate" title={row.fileName}>
                               {row.fileName}
                             </span>
                           ) : c.key === 'donGia' ? (
@@ -513,7 +522,7 @@ export function ResultTable() {
                       )
                     })}
                     <td
-                      className="border-b border-border px-3 py-2 text-ink"
+                      className="border-b border-border px-2.5 py-2 text-ink"
                       onClick={(e) => e.stopPropagation()}
                     >
                       <button
@@ -527,7 +536,7 @@ export function ResultTable() {
                   </tr>
                   {expandedRow === i && row.priceMismatchDetails.length > 0 && (
                     <tr key={`${i}-detail`} className="bg-bg/60">
-                      <td colSpan={columns.length + 4} className="p-0">
+                      <td colSpan={columns.length + 3} className="p-0">
                         {poMismatches.length > 1 && (
                           <div className="flex items-center gap-2 border-b border-border bg-panel/60 px-3 py-2">
                             <span className="font-sans text-[10px] font-semibold uppercase tracking-wide text-muted">
