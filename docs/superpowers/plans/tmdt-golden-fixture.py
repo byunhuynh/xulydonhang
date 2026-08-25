@@ -40,10 +40,28 @@ print("orders.csv:", n, "dòng")
 # --- lookup.xlsx: chỉ 2 bảng tra cứu, lấy từ CHÍNH master đã sinh golden ---
 out_wb = openpyxl.Workbook()
 out_wb.remove(out_wb.active)
+# Chỉ sao tới DÒNG CÓ DỮ LIỆU CUỐI CÙNG của mỗi sheet. Sheet "data shop"
+# của workbook gốc khai dimension tận A1:K1048576 (hơn một triệu phần tử
+# <row>) trong khi chỉ ~291 dòng có dữ liệu. Sao nguyên khối thì lookup.xlsx
+# phình lên 2,7 MB và excelize.GetRows phải quét cả triệu dòng rỗng mỗi lần
+# golden test nạp bảng — chậm vô ích. Dòng trống không mang dữ liệu tra cứu
+# nên cắt phần đuôi trống không đổi ngữ nghĩa fixture. Dòng trống Ở GIỮA
+# vẫn phải giữ (sheet "Mã misa" có dòng 2 trống, vùng tra cứu bắt đầu từ dòng 3),
+# nên đếm dồn rồi chỉ xả ra khi phía sau còn dữ liệu.
+def _co_du_lieu(row):
+    return any(c is not None and str(c).strip() != "" for c in row)
+
 for name in ("Mã misa", "data shop"):
     src, dst = wb[name], out_wb.create_sheet(name)
+    trong_cho = 0
     for row in src.iter_rows(values_only=True):
-        dst.append(list(row))
+        if _co_du_lieu(row):
+            for _ in range(trong_cho):
+                dst.append([])
+            trong_cho = 0
+            dst.append(list(row))
+        else:
+            trong_cho += 1
 out_wb.save(os.path.join(OUT, "lookup.xlsx"))
 print("lookup.xlsx: đã sao 2 sheet tra cứu")
 
