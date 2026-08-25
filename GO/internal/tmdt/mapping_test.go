@@ -1,0 +1,251 @@
+package tmdt
+
+import (
+	"math"
+	"testing"
+	"time"
+
+	"order-processor/internal/tmdt/lookup"
+)
+
+func vnTime(t *testing.T, s string) time.Time {
+	t.Helper()
+	v, err := time.Parse(time.RFC3339, s)
+	if err != nil {
+		t.Fatalf("parse %q: %v", s, err)
+	}
+	return v
+}
+
+// fakeTables dựng bảng tra cứu nhỏ trong bộ nhớ để test quy tắc, không
+// phải mở file Excel.
+func fakeTables(t *testing.T) *lookup.Tables {
+	t.Helper()
+	tb, err := lookup.FromRows(
+		// data shop: Tên sản phẩm | Phân loại | Mã combo | TP1 | SL1 | ...
+		[][]string{
+			{"Tên sản phẩm", "Phân loại", "Mã combo", "MÃ TP 1", "SLTP1", "MÃ TP 2", "SLTP2", "MÃ TP 3", "SLTP3", "MÃ TP 4", "SLTP4"},
+			{"Bột tẩy lồng", "Combo 5 Túi", "SP000443", "TP10127", "5", "", "", "", "", "", ""},
+			{"Combo đôi", "Bộ 2 món", "SP999", "TP111", "1", "TP222", "2", "", "", "", ""},
+			{"Không mã combo", "Loại A", "", "TP333", "1", "", "", "", "", "", ""},
+		},
+		// Mã misa: cột B = tên kênh, cột D = mã MISA, dữ liệu từ dòng 3
+		[][]string{
+			{"", "Tên Kênh", "KÊNH BÁN", "Mã MISA"},
+			{"", "", "", ""},
+			{"", "Tẩy lồng máy giặt Blue", "TIKTOK", "MN_TMDT_00016"},
+		},
+	)
+	if err != nil {
+		t.Fatalf("lookup.FromRows: %v", err)
+	}
+	return tb
+}
+
+func baseLine() OrderLine {
+	return OrderLine{
+		OrderCode:    "585694423512745362",
+		Shop:         "Tẩy lồng máy giặt Blue",
+		KhoBan:       "Kho Hà Nội",
+		KenhBanHang:  "tiktokshop",
+		Quantity:     1,
+		Title:        "Bột tẩy lồng",
+		VariantTitle: "Combo 5 Túi",
+		Price:        88999,
+		SKU:          "SP000443",
+	}
+}
+
+func TestChannelLabel(t *testing.T) {
+	cases := map[string]string{
+		"tiktokshop":  "TikTok",
+		"TikTok Shop": "TikTok",
+		"shopee":      "Shopee",
+		"Shopee":      "Shopee",
+		"web":         "web",
+		"":            "",
+	}
+	for in, want := range cases {
+		if got := ChannelLabel(in); got != want {
+			t.Errorf("ChannelLabel(%q) = %q, muốn %q", in, got, want)
+		}
+	}
+}
+
+func TestBuildQtyAndUnitPrice(t *testing.T) {
+	line := baseLine()
+	line.CreatedAt = vnTime(t, "2026-08-23T23:54:05+07:00")
+
+	res := Build([]OrderLine{line}, fakeTables(t), Options{ProductName: func(tp string) string { return "tên " + tp }})
+
+	if len(res.OrderRows) != 1 {
+		t.Fatalf("có %d dòng dondathang, muốn 1", len(res.OrderRows))
+	}
+	row := res.OrderRows[0]
+	// SLTP = 5 → Số lượng = 1 × 5 = 5; Đơn giá = 88999 ÷ 5 ÷ 1.08.
+	if row.Qty != 5 {
+		t.Errorf("Qty = %v, muốn 5", row.Qty)
+	}
+	const wantPrice = 88999.0 / 5 / 1.08
+	if row.UnitPrice != wantPrice {
+		t.Errorf("UnitPrice = %v, muốn %v", row.UnitPrice, wantPrice)
+	}
+	if row.SKU != "TP10127" {
+		t.Errorf("SKU = %q, muốn TP10127", row.SKU)
+	}
+	if row.ProductName != "tên TP10127" {
+		t.Errorf("ProductName = %q — Build phải gọi Options.ProductName với mã thành phẩm", row.ProductName)
+	}
+	if row.EntryDate != "23/08/2026" {
+		t.Errorf("EntryDate = %q, muốn 23/08/2026", row.EntryDate)
+	}
+	if row.OrderNumber != "ĐĐHTMĐT-TikTok-585694423512745362" {
+		t.Errorf("OrderNumber = %q", row.OrderNumber)
+	}
+	wantDesc := "TMĐT-TikTok - Tẩy lồng máy giặt Blue - 585694423512745362 - Ngày đổ 23/08/2026 - HN"
+	if row.Description != wantDesc {
+		t.Errorf("Description = %q,\nmuốn                %q", row.Description, wantDesc)
+	}
+	if row.ShipTo != "HN" || row.Warehouse != "TP_HN_12" || row.RegionCode != "TMĐT_MB" || row.StatCode != "HN" {
+		t.Errorf("cụm kho = %q/%q/%q/%q, muốn HN/TP_HN_12/TMĐT_MB/HN",
+			row.ShipTo, row.Warehouse, row.RegionCode, row.StatCode)
+	}
+	if row.CustomerCode != "MN_TMDT_00016" {
+		t.Errorf("CustomerCode = %q, muốn MN_TMDT_00016", row.CustomerCode)
+	}
+	if row.Note != "585694423512745362" {
+		t.Errorf("Note = %q, muốn mã đơn gốc", row.Note)
+	}
+}
+
+func TestBuildLongAnWarehouse(t *testing.T) {
+	line := baseLine()
+	line.KhoBan = "Miền Nam - Kho mặc định"
+	res := Build([]OrderLine{line}, fakeTables(t), Options{})
+	row := res.OrderRows[0]
+	if row.ShipTo != "LA" || row.Warehouse != "LA_KHOTMDT" || row.RegionCode != "TMĐT_MN" || row.StatCode != "LA" {
+		t.Errorf("cụm kho = %q/%q/%q/%q, muốn LA/LA_KHOTMDT/TMĐT_MN/LA",
+			row.ShipTo, row.Warehouse, row.RegionCode, row.StatCode)
+	}
+}
+
+func TestBuildPromoRowWhenPriceZero(t *testing.T) {
+	line := baseLine()
+	line.Price = 0
+	res := Build([]OrderLine{line}, fakeTables(t), Options{})
+	if !res.OrderRows[0].IsPromoItem {
+		t.Errorf("giá 0 phải đánh dấu Hàng khuyến mại = Có")
+	}
+	if res.OrderRows[0].UnitPrice != 0 {
+		t.Errorf("UnitPrice = %v, muốn 0", res.OrderRows[0].UnitPrice)
+	}
+}
+
+func TestBuildComboWithTwoComponents(t *testing.T) {
+	line := baseLine()
+	line.Title, line.VariantTitle, line.SKU = "Combo đôi", "Bộ 2 món", "SP999"
+	line.Quantity, line.Price = 2, 100000
+
+	res := Build([]OrderLine{line}, fakeTables(t), Options{})
+	if len(res.OrderRows) != 2 {
+		t.Fatalf("có %d dòng, muốn 2 (một dòng cho mỗi thành phẩm)", len(res.OrderRows))
+	}
+	if res.OrderRows[0].SKU != "TP111" || res.OrderRows[0].Qty != 2 {
+		t.Errorf("thành phẩm 1 = %q × %v, muốn TP111 × 2", res.OrderRows[0].SKU, res.OrderRows[0].Qty)
+	}
+	if res.OrderRows[1].SKU != "TP222" || res.OrderRows[1].Qty != 4 {
+		t.Errorf("thành phẩm 2 = %q × %v, muốn TP222 × 4", res.OrderRows[1].SKU, res.OrderRows[1].Qty)
+	}
+	// Giá sản phẩm là giá CẢ combo nên chia cho TỔNG SLTP (1 + 2 = 3), không
+	// phải cho SLTP của riêng từng thành phẩm — mẫu chuẩn buộc phải như vậy.
+	// Tính bằng biến float64 chứ không phải hằng số: hằng số Go được rút gọn
+	// với độ chính xác vô hạn rồi mới làm tròn một lần, lệch chữ số cuối so
+	// với hai phép chia float64 mà mapping.go thực sự làm.
+	gia, tongSLTP := 100000.0, 3.0
+	wantUnit := gia / tongSLTP / 1.08
+	if res.OrderRows[0].UnitPrice != wantUnit || res.OrderRows[1].UnitPrice != wantUnit {
+		t.Errorf("Đơn giá = %v / %v, muốn cả hai bằng %v (÷ tổng SLTP = 3)",
+			res.OrderRows[0].UnitPrice, res.OrderRows[1].UnitPrice, wantUnit)
+	}
+	// Hệ quả phải giữ: Σ(Số lượng × Đơn giá) = SL đặt × Giá sản phẩm ÷ 1.08.
+	tong := res.OrderRows[0].Qty*res.OrderRows[0].UnitPrice + res.OrderRows[1].Qty*res.OrderRows[1].UnitPrice
+	if muon := 2 * 100000.0 / 1.08; math.Abs(tong-muon) > 1e-6 {
+		t.Errorf("tổng tiền dòng hàng = %v, muốn %v", tong, muon)
+	}
+	// Sheet Haravan vẫn CHỈ 1 dòng cho dòng hàng này.
+	if len(res.SheetRows) != 1 {
+		t.Errorf("có %d dòng sheet, muốn 1", len(res.SheetRows))
+	}
+}
+
+func TestBuildLooksUpByProductVariantWhenNoSKU(t *testing.T) {
+	line := baseLine()
+	line.SKU = ""
+	line.Title, line.VariantTitle = "Không mã combo", "Loại A"
+	res := Build([]OrderLine{line}, fakeTables(t), Options{})
+	if len(res.OrderRows) != 1 || res.OrderRows[0].SKU != "TP333" {
+		t.Fatalf("không tra được theo Tên sản phẩm + Phân loại: %+v", res.OrderRows)
+	}
+}
+
+func TestBuildCollectsMissingComboUnique(t *testing.T) {
+	a := baseLine()
+	a.SKU, a.Title, a.VariantTitle = "SP-CHUA-KHAI", "Sản phẩm lạ", "Loại lạ"
+	b := a // đúng mã đó, dòng thứ hai
+	res := Build([]OrderLine{a, b}, fakeTables(t), Options{})
+
+	if len(res.Missing) != 1 {
+		t.Fatalf("có %d mục thiếu, muốn 1 (gom unique theo khoá)", len(res.Missing))
+	}
+	m := res.Missing[0]
+	if m.Key != MissingKey("SP-CHUA-KHAI", "Sản phẩm lạ", "Loại lạ") {
+		t.Errorf("Key = %q", m.Key)
+	}
+	if m.LineCount != 2 {
+		t.Errorf("LineCount = %d, muốn 2", m.LineCount)
+	}
+	if m.Combo != "SP-CHUA-KHAI" || m.Product != "Sản phẩm lạ" || m.Variant != "Loại lạ" {
+		t.Errorf("mục thiếu thiếu thông tin điền sẵn: %+v", m)
+	}
+	// Vẫn phải sinh dòng dondathang mang #N/A, không được bỏ âm thầm.
+	if len(res.OrderRows) != 2 {
+		t.Fatalf("có %d dòng dondathang, muốn 2", len(res.OrderRows))
+	}
+	if res.OrderRows[0].SKU != lookup.NotAvailable {
+		t.Errorf("SKU = %q, muốn %q", res.OrderRows[0].SKU, lookup.NotAvailable)
+	}
+	if res.SheetRows[0].TP[0] != lookup.NotAvailable {
+		t.Errorf("sheet TP1 = %q, muốn %q", res.SheetRows[0].TP[0], lookup.NotAvailable)
+	}
+}
+
+func TestBuildMissingShopKeepsNAAndCounts(t *testing.T) {
+	line := baseLine()
+	line.Shop = "Shop lạ chưa khai"
+	res := Build([]OrderLine{line}, fakeTables(t), Options{})
+	if res.OrderRows[0].CustomerCode != lookup.NotAvailable {
+		t.Errorf("CustomerCode = %q, muốn %q", res.OrderRows[0].CustomerCode, lookup.NotAvailable)
+	}
+	if res.MissingShops["Shop lạ chưa khai"] != 1 {
+		t.Errorf("MissingShops = %v, muốn đếm 1 dòng", res.MissingShops)
+	}
+}
+
+func TestBuildClevyStaysInSheetButNotInDondathang(t *testing.T) {
+	line := baseLine()
+	line.Shop = ShopKhongQuyDoi
+	res := Build([]OrderLine{line}, fakeTables(t), Options{})
+
+	if len(res.SheetRows) != 1 {
+		t.Fatalf("có %d dòng sheet, muốn 1 — đơn CLEVY vẫn nằm trong sheet Haravan", len(res.SheetRows))
+	}
+	if res.SheetRows[0].TP[0] != "" {
+		t.Errorf("TP1 = %q, muốn TRỐNG (không quy đổi theo thiết kế, khác #N/A)", res.SheetRows[0].TP[0])
+	}
+	if len(res.OrderRows) != 0 {
+		t.Errorf("có %d dòng dondathang, muốn 0", len(res.OrderRows))
+	}
+	if len(res.Missing) != 0 {
+		t.Errorf("CLEVY không phải mã thiếu, không được hỏi người dùng: %+v", res.Missing)
+	}
+}

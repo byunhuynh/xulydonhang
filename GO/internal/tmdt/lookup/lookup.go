@@ -51,20 +51,38 @@ func Load(path string) (*Tables, error) {
 	}
 	defer f.Close()
 
+	rows, err := f.GetRows(SheetDataShop)
+	if err != nil {
+		return nil, fmt.Errorf("đọc sheet %q trong %q: %w", SheetDataShop, path, err)
+	}
+	misaRows, err := f.GetRows(SheetMisa)
+	if err != nil {
+		return nil, fmt.Errorf("đọc sheet %q trong %q: %w", SheetMisa, path, err)
+	}
+
+	t, err := FromRows(rows, misaRows)
+	if err != nil {
+		// Bọc kèm tên file: bảng tra cứu nằm trong workbook người dùng tự chọn,
+		// nên biết SAI Ở FILE NÀO mới sửa được.
+		return nil, fmt.Errorf("workbook %q: %w", path, err)
+	}
+	return t, nil
+}
+
+// FromRows dựng bảng tra cứu từ dữ liệu thô của hai sheet — cùng logic
+// Load dùng, tách ra để test dựng bảng mà không cần file Excel thật.
+// dataShop và misa là kết quả GetRows của hai sheet tương ứng, KỂ CẢ
+// dòng tiêu đề.
+func FromRows(dataShop, misa [][]string) (*Tables, error) {
 	t := &Tables{
 		byProductVariant: map[string]*ComboRow{},
 		byCombo:          map[string]*ComboRow{},
 		misa:             map[string]string{},
 	}
-
-	rows, err := f.GetRows(SheetDataShop)
-	if err != nil {
-		return nil, fmt.Errorf("đọc sheet %q trong %q: %w", SheetDataShop, path, err)
+	if len(dataShop) < 2 {
+		return nil, fmt.Errorf("sheet %q không có dữ liệu", SheetDataShop)
 	}
-	if len(rows) < 2 {
-		return nil, fmt.Errorf("sheet %q trong %q không có dữ liệu", SheetDataShop, path)
-	}
-	for _, r := range rows[1:] {
+	for _, r := range dataShop[1:] {
 		cell := func(i int) string {
 			if i < len(r) {
 				return strings.TrimSpace(r[i])
@@ -95,14 +113,10 @@ func Load(path string) (*Tables, error) {
 		}
 	}
 
-	misaRows, err := f.GetRows(SheetMisa)
-	if err != nil {
-		return nil, fmt.Errorf("đọc sheet %q trong %q: %w", SheetMisa, path, err)
-	}
 	// Vùng tra cứu trong công thức cũ là 'Mã misa'!$B$3:$D$12 — bỏ dòng tiêu đề
 	// và dòng trống, cột B là tên kênh, cột D là mã MISA.
-	for i := 2; i < len(misaRows); i++ {
-		r := misaRows[i]
+	for i := 2; i < len(misa); i++ {
+		r := misa[i]
 		cell := func(n int) string {
 			if n < len(r) {
 				return strings.TrimSpace(r[n])
@@ -120,8 +134,8 @@ func Load(path string) (*Tables, error) {
 	}
 
 	if t.Combos == 0 || t.Misa == 0 {
-		return nil, fmt.Errorf("workbook %q thiếu dữ liệu tra cứu (data shop: %d dòng, Mã misa: %d dòng)",
-			path, t.Combos, t.Misa)
+		return nil, fmt.Errorf("thiếu dữ liệu tra cứu (data shop: %d dòng, Mã misa: %d dòng)",
+			t.Combos, t.Misa)
 	}
 	return t, nil
 }
