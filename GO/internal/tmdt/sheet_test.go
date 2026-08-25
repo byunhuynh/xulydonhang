@@ -2,6 +2,7 @@ package tmdt
 
 import (
 	"path/filepath"
+	"slices"
 	"testing"
 	"time"
 
@@ -123,5 +124,76 @@ func TestWriteHaravanSheetCreatesSheetWhenMissing(t *testing.T) {
 	defer got.Close()
 	if v, _ := got.GetCellValue(SheetHaravan, "A1"); v != HaravanHeaders[0] {
 		t.Errorf("sheet Haravan chưa được tạo kèm tiêu đề, A1 = %q", v)
+	}
+}
+
+func TestWriteHaravanSheetKeepsMiddlePosition(t *testing.T) {
+	// "Haravan" nằm GIỮA hai bảng tra cứu — người dùng có thể đã tự kéo tab
+	// sang vị trí này trong Excel. WriteHaravanSheet xoá rồi tạo lại sheet
+	// (excelize.NewSheet luôn thêm vào CUỐI), nên phải tự khôi phục đúng vị
+	// trí cũ, không được lặng lẽ kéo tab ra cuối workbook mỗi lần chạy.
+	f := excelize.NewFile()
+	for _, s := range []string{"Mã misa", SheetHaravan, "data shop"} {
+		if _, err := f.NewSheet(s); err != nil {
+			t.Fatalf("NewSheet(%q): %v", s, err)
+		}
+	}
+	f.DeleteSheet("Sheet1")
+	path := filepath.Join(t.TempDir(), "haravan-o-giua.xlsx")
+	if err := f.SaveAs(path); err != nil {
+		t.Fatalf("SaveAs: %v", err)
+	}
+	f.Close()
+
+	rows := []SheetRow{{OrderCode: "ĐH001", Title: "Sản phẩm test"}}
+	if err := WriteHaravanSheet(path, rows); err != nil {
+		t.Fatalf("WriteHaravanSheet: %v", err)
+	}
+
+	got, err := excelize.OpenFile(path)
+	if err != nil {
+		t.Fatalf("mở lại: %v", err)
+	}
+	defer got.Close()
+
+	wantOrder := []string{"Mã misa", SheetHaravan, "data shop"}
+	if gotOrder := got.GetSheetList(); !slices.Equal(gotOrder, wantOrder) {
+		t.Errorf("thứ tự sheet = %v, muốn %v — Haravan bị kéo khỏi vị trí cũ", gotOrder, wantOrder)
+	}
+	// Vị trí đúng nhưng dữ liệu sai thì cũng vô nghĩa — kiểm luôn cả hai.
+	if v, _ := got.GetCellValue(SheetHaravan, "A2"); v != "ĐH001" {
+		t.Errorf("A2 = %q, muốn ĐH001 — dữ liệu chưa ghi đúng dù đã khôi phục vị trí sheet", v)
+	}
+}
+
+func TestWriteHaravanSheetKeepsLastPositionWhenAlreadyLast(t *testing.T) {
+	// Trường hợp file thật hiện tại: "Haravan" đã là sheet cuối cùng — thứ
+	// tự này phải giữ nguyên, không tự dưng đổi.
+	f := excelize.NewFile()
+	for _, s := range []string{"Mã misa", "data shop", SheetHaravan} {
+		if _, err := f.NewSheet(s); err != nil {
+			t.Fatalf("NewSheet(%q): %v", s, err)
+		}
+	}
+	f.DeleteSheet("Sheet1")
+	path := filepath.Join(t.TempDir(), "haravan-cuoi.xlsx")
+	if err := f.SaveAs(path); err != nil {
+		t.Fatalf("SaveAs: %v", err)
+	}
+	f.Close()
+
+	if err := WriteHaravanSheet(path, nil); err != nil {
+		t.Fatalf("WriteHaravanSheet: %v", err)
+	}
+
+	got, err := excelize.OpenFile(path)
+	if err != nil {
+		t.Fatalf("mở lại: %v", err)
+	}
+	defer got.Close()
+
+	wantOrder := []string{"Mã misa", "data shop", SheetHaravan}
+	if gotOrder := got.GetSheetList(); !slices.Equal(gotOrder, wantOrder) {
+		t.Errorf("thứ tự sheet = %v, muốn %v không đổi", gotOrder, wantOrder)
 	}
 }
