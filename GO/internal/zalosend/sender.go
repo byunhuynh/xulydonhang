@@ -46,17 +46,37 @@ type ZaloSender interface {
 // đó.
 var ErrNoContact = errors.New("zalosend: no zalo contact configured for this system")
 
-// coopSystemKey là NGOẠI LỆ DUY NHẤT khi ghép key: OrderRow.System hiện
-// tại luôn là "Coop" (không phân biệt Co-opmart/Co-op Food ở tầng xử lý
-// PDF — xem coop_processor.go, chỉ có đúng 1 nhánh "Coop"), nhưng key
-// thật trong Cài đặt > Zalo (kế thừa từ settings.ini gốc) là "COOPMART"
-// (vd "MNCOOPMART"), không phải "COOP". Mọi hệ thống khác khớp thẳng
-// bằng cách viết hoa (BigC→BIGC, Satra→SATRA, FujiMart→FUJIMART, ...).
-const coopSystemKey = "COOPMART"
+// systemKeyOverrides là những hệ thống mà OrderRow.System KHÁC tên dùng
+// làm key trong Cài đặt > Zalo (key kế thừa từ settings.ini gốc). Mọi hệ
+// thống còn lại khớp thẳng bằng cách viết hoa: BigC→BIGC, Satra→SATRA,
+// FujiMart→FUJIMART, Kingfood→KINGFOOD, JMart→JMART, Winmart→WINMART,
+// Lotte→LOTTE, Emart→EMART.
+//
+//   - "Coop": tầng xử lý PDF chỉ có đúng 1 nhánh "Coop" (không tách
+//     Co-opmart/Co-op Food — xem coop_processor.go), key thật là
+//     "COOPMART" (vd "MNCOOPMART").
+//
+// "JIT-CHOICE" CỐ Ý không nằm đây: key ghép ra là "MNJIT-CHOICE" và
+// người dùng đã chọn đổi tên key trong Cài đặt cho khớp thay vì thêm một
+// ánh xạ ẩn nữa vào code (quyết định 25/08/2026). Một ánh xạ càng ít thì
+// key trong Cài đặt càng nói đúng thứ nó thật sự là.
+var systemKeyOverrides = map[string]string{
+	"COOP": "COOPMART",
+}
 
 // ResolveContact tra map settings.Zalo (đã có sẵn, sửa được qua popup
-// Cài đặt) theo TỔ HỢP miền + hệ thống, khớp đúng key thật trong Cài đặt
-// > Zalo (vd "MNBIGC", "MBCOOPMART", "MNSATRA") — 2 ký tự đầu của
+// Cài đặt) theo hai key, THEO THỨ TỰ:
+//
+//  1. miền + phân khúc + hệ thống (vd "MBGCBIGC") — cho phép tách đích
+//     đến theo phân khúc: BigC Gia Công ("MB_GC_*") và BigC Modern Trade
+//     ("MB_MT_*") là hai loại đơn khác nhau và đi về hai group Zalo khác
+//     nhau. Chỉ cần thêm key này vào Cài đặt > Zalo là tách được, không
+//     phải sửa code.
+//  2. miền + hệ thống (vd "MNBIGC", "MBCOOPMART", "MNSATRA") — key chung
+//     như trước, dùng khi không có key phân khúc nào khớp.
+//
+// Nhờ thứ tự đó, mọi cấu hình cũ chạy y hệt trước: key phân khúc là thứ
+// người dùng chủ động thêm để ghi đè, không thêm thì không đổi gì. — 2 ký tự đầu của
 // customerCode (OrderRow.MaKhachHang) là miền ("MN" = Miền Nam, "MB" =
 // Miền Bắc, quy tắc do người dùng xác nhận trực tiếp), nối với tên hệ
 // thống viết hoa. Giá trị rỗng trong map bị coi như CHƯA cấu hình (không
@@ -66,21 +86,59 @@ const coopSystemKey = "COOPMART"
 // xác định" khi không tra được mã khách hàng thật) khi tra cứu thất bại
 // phía trên, cắt theo byte có thể cắt giữa 1 ký tự UTF-8 nhiều byte.
 func ResolveContact(system, customerCode string, zaloMap map[string]string) (string, error) {
-	region := ""
-	runes := []rune(strings.ToUpper(customerCode))
-	if len(runes) >= 2 {
-		region = string(runes[:2])
-	}
+	region, segment := splitCustomerCode(customerCode)
 
 	systemKey := strings.ToUpper(system)
-	if systemKey == "COOP" {
-		systemKey = coopSystemKey
+	if override, ok := systemKeyOverrides[systemKey]; ok {
+		systemKey = override
 	}
 
-	key := region + systemKey
-	contact, ok := zaloMap[key]
-	if !ok || contact == "" {
-		return "", fmt.Errorf("%w: %s", ErrNoContact, key)
+	keys := make([]string, 0, 2)
+	if segment != "" {
+		keys = append(keys, region+segment+systemKey)
 	}
-	return contact, nil
+	keys = append(keys, region+systemKey)
+
+	for _, key := range keys {
+		if contact := lookupContact(zaloMap, key); contact != "" {
+			return contact, nil
+		}
+	}
+	return "", fmt.Errorf("%w: %s", ErrNoContact, strings.Join(keys, " hoặc "))
+}
+
+// splitCustomerCode tách mã khách hàng thành miền và PHÂN KHÚC. Mã có
+// dạng <miền>_<phân khúc>_<mã NCC> (vd "MB_GC_bgc06" = BigC Gia Công
+// miền Bắc, "MB_MT_bgc06" = BigC Modern Trade miền Bắc, "MN_MT_cop120" =
+// Co-op Modern Trade miền Nam). Miền vẫn là 2 ký tự đầu như trước, đọc
+// theo rune chứ không theo byte vì customerCode có thể là chuỗi tiếng
+// Việt có dấu khi tra cứu mã khách hàng thất bại (vd "Không xác định").
+// Phân khúc rỗng khi mã không có đủ 3 phần - mọi mã như vậy chạy y hệt
+// trước khi có hàm này.
+func splitCustomerCode(customerCode string) (region, segment string) {
+	upper := strings.ToUpper(customerCode)
+	if runes := []rune(upper); len(runes) >= 2 {
+		region = string(runes[:2])
+	}
+	if parts := strings.Split(upper, "_"); len(parts) >= 3 {
+		segment = parts[1]
+	}
+	return region, segment
+}
+
+// lookupContact tra map theo key, khớp đúng trước rồi mới bỏ qua
+// hoa/thường. Key trong Cài đặt > Zalo do người dùng gõ tay nên viết hoa
+// không đồng nhất là chuyện thường (config thật có cả "MBBIGC" lẫn
+// "MBGCBigC"); ưu tiên khớp đúng để hai key chỉ khác nhau hoa/thường
+// không tráo chỗ cho nhau. Giá trị rỗng vẫn bị coi như CHƯA cấu hình.
+func lookupContact(zaloMap map[string]string, key string) string {
+	if contact := zaloMap[key]; contact != "" {
+		return contact
+	}
+	for mapKey, contact := range zaloMap {
+		if contact != "" && strings.EqualFold(mapKey, key) {
+			return contact
+		}
+	}
+	return ""
 }
