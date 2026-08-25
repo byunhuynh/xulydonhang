@@ -24,18 +24,33 @@ def s(v):
 ORDER_COLS = [0, 84, 69, 70, 16, 18, 19, 21, 26, 28]
 ORDER_HEAD = ["order_code", "shop", "kho_ban", "kenh_ban_hang", "ngay_dat_hang",
               "so_luong", "ten_san_pham", "gia_tri_thuoc_tinh_1", "gia_san_pham", "ma_san_pham"]
+# --- expected_haravan_sheet.csv: 9 cột mà công thức Excel tự tính ra trong
+# CHÍNH sheet "Đơn hàng haravan" (BY..CF = MÃ TP 1..4 / SLTP1..4, CH = Mã misa).
+# Đây là đầu ra mà tầng quy đổi phải sinh cho sheet "Haravan", nên nó khoá
+# được phía sheet — thứ người dùng đọc — chứ không chỉ phía file hạch toán.
+# Cột CG (Shop) bỏ vì orders.csv đã mang. Ghi ra ĐÚNG THỨ TỰ và ĐÚNG BỘ LỌC
+# của orders.csv (cùng một vòng lặp) để test so được theo vị trí, dòng-với-dòng.
+SHEET_COLS = [76, 77, 78, 79, 80, 81, 82, 83, 85]
+SHEET_HEAD = ["tp1", "sl1", "tp2", "sl2", "tp3", "sl3", "tp4", "sl4", "misa"]
 wb = openpyxl.load_workbook(MASTER, read_only=True, data_only=True)
 ws = wb["Đơn hàng haravan"]
 n = 0
-with open(os.path.join(OUT, "orders.csv"), "w", newline="", encoding="utf-8") as fh:
+with open(os.path.join(OUT, "orders.csv"), "w", newline="", encoding="utf-8") as fh,      open(os.path.join(OUT, "expected_haravan_sheet.csv"), "w", newline="", encoding="utf-8") as sh:
     w = csv.writer(fh)
     w.writerow(ORDER_HEAD)
+    ws2 = csv.writer(sh)
+    ws2.writerow(SHEET_HEAD)
     for row in ws.iter_rows(min_row=2, values_only=True):
         if not row or not row[0]:
             continue
         w.writerow([s(row[c]) if c < len(row) else "" for c in ORDER_COLS])
+        # Ghi NGUYÊN VĂN ô trong workbook, kể cả ô dính ký tự xuống dòng ở cuối
+        # (bảng "data shop" có một ô như vậy) — test tự TrimSpace phía fixture rồi
+        # mới so, đúng cách code cắt khoảng trắng khi đọc bảng tra cứu.
+        ws2.writerow([s(row[c]) if c < len(row) else "" for c in SHEET_COLS])
         n += 1
 print("orders.csv:", n, "dòng")
+print("expected_haravan_sheet.csv:", n, "dòng")
 
 # --- lookup.xlsx: chỉ 2 bảng tra cứu, lấy từ CHÍNH master đã sinh golden ---
 out_wb = openpyxl.Workbook()
