@@ -33,6 +33,17 @@ export function MisaPushModal({ onClose }: MisaPushModalProps) {
   const [skipped, setSkipped] = useState<{ key: string; po: string; system: string }[]>([])
   const [remember, setRemember] = useState(true)
   const [error, setError] = useState('')
+  // Nhánh đã ghi THÀNH CÔNG vào sổ, cộng dồn qua các lượt bấm trong CÙNG
+  // một phiên mở modal. PHẢI tách khỏi misaResults: handlePush gọi
+  // clearMisaResults() ở đầu mỗi lượt đẩy để màn hình kết quả không trộn
+  // lượt cũ/mới, nhưng nếu locked/pendingGroups/canPush suy trực tiếp từ
+  // misaResults thì cùng một lần xoá đó cũng xoá luôn "trí nhớ" nhánh đã
+  // vào sổ - đẩy lần 2 mà nhánh kia lỗi sẽ khiến nhánh đã ok tự tick lại
+  // và mở khoá, đẩy lần 3 ghi TRÙNG toàn bộ chứng từ của nhánh đó vào sổ
+  // kế toán. doneBranches chỉ được CỘNG THÊM, không bao giờ bị xoá trong
+  // suốt vòng đời modal - đóng modal (component unmount) mới mất, đúng
+  // ý nghĩa "phiên mới thì phải hỏi lại từ đầu".
+  const [doneBranches, setDoneBranches] = useState<string[]>([])
   const backdropRef = useRef<HTMLDivElement>(null)
   const cardRef = useRef<HTMLDivElement>(null)
   useModalEntrance(backdropRef, cardRef, [!!groups])
@@ -62,7 +73,24 @@ export function MisaPushModal({ onClose }: MisaPushModalProps) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  const pushedBranches = misaResults.filter((r) => r.ok).map((r) => r.branch)
+  useEffect(() => {
+    // Cộng dồn nhánh ok mới xuất hiện trong misaResults vào doneBranches -
+    // xem comment khai báo doneBranches ở trên vì sao hai thứ này không
+    // được gộp làm một.
+    const newlyOk = misaResults.filter((r) => r.ok).map((r) => r.branch)
+    if (newlyOk.length === 0) return
+    setDoneBranches((cur) => {
+      const merged = new Set(cur)
+      let changed = false
+      for (const b of newlyOk) {
+        if (!merged.has(b)) {
+          merged.add(b)
+          changed = true
+        }
+      }
+      return changed ? [...merged] : cur
+    })
+  }, [misaResults])
 
   function setGroupBranch(key: string, branch: string) {
     setGroups((cur) => cur && cur.map((g) => (g.key === key ? { ...g, branch } : g)))
@@ -74,7 +102,7 @@ export function MisaPushModal({ onClose }: MisaPushModalProps) {
 
   async function handlePush() {
     if (!groups) return
-    const jobs = pendingGroups(groups, pushedBranches).map((g) => ({
+    const jobs = pendingGroups(groups, doneBranches).map((g) => ({
       po: g.po,
       routeKey: g.routeKey,
       branch: g.branch,
@@ -106,7 +134,7 @@ export function MisaPushModal({ onClose }: MisaPushModalProps) {
   }
 
   const totals = groups ? branchTotals(groups) : null
-  const ready = groups ? canPush(groups, pushedBranches, skipped.length) : false
+  const ready = groups ? canPush(groups, doneBranches, skipped.length) : false
 
   return (
     <div ref={backdropRef} className="fixed inset-0 z-50 flex items-center justify-center bg-black/60" onClick={onClose}>
@@ -153,7 +181,7 @@ export function MisaPushModal({ onClose }: MisaPushModalProps) {
                 <span>Nhánh</span>
               </div>
               {groups.map((g) => {
-                const locked = pushedBranches.includes(g.branch)
+                const locked = doneBranches.includes(g.branch)
                 return (
                   <div key={g.key} className="grid grid-cols-[auto_1fr_1fr_auto_auto] items-center gap-2 py-1">
                     <input
