@@ -28,6 +28,9 @@ export function MisaPushModal({ onClose }: MisaPushModalProps) {
   const appendLog = useAppStore((s) => s.appendLog)
 
   const [groups, setGroups] = useState<MisaGroup[] | null>(null)
+  // Đơn bị bỏ vì không có dòng nào trong sổ đặt hàng (xem buildMisaGroups)
+  // — modal PHẢI cảnh báo rõ, không được để chúng âm thầm biến mất.
+  const [skipped, setSkipped] = useState<{ key: string; po: string; system: string }[]>([])
   const [remember, setRemember] = useState(true)
   const [error, setError] = useState('')
   const backdropRef = useRef<HTMLDivElement>(null)
@@ -37,7 +40,8 @@ export function MisaPushModal({ onClose }: MisaPushModalProps) {
   useEffect(() => {
     // groupKeyFor truyền vào đây là chỗ DUY NHẤT nối modal với định
     // nghĩa khoá nhóm dùng chung của bảng kết quả và nút gửi Zalo.
-    const seeds = buildMisaGroups(rows, groupKeyFor)
+    const { groups: seeds, skipped: skippedSeeds } = buildMisaGroups(rows, groupKeyFor)
+    setSkipped(skippedSeeds)
     MisaResolveRoutes(
       seeds.map((s) => ({ system: s.system, customerCode: s.customerCode, shipTo: s.shipTo })),
     )
@@ -102,7 +106,7 @@ export function MisaPushModal({ onClose }: MisaPushModalProps) {
   }
 
   const totals = groups ? branchTotals(groups) : null
-  const ready = groups ? canPush(groups, pushedBranches) : false
+  const ready = groups ? canPush(groups, pushedBranches, skipped.length) : false
 
   return (
     <div ref={backdropRef} className="fixed inset-0 z-50 flex items-center justify-center bg-black/60" onClick={onClose}>
@@ -122,6 +126,21 @@ export function MisaPushModal({ onClose }: MisaPushModalProps) {
 
         {error && <p className="font-sans text-xs text-danger">Không phân giải được nhánh: {error}</p>}
         {!groups && !error && <p className="font-sans text-xs text-muted">Đang tải…</p>}
+
+        {groups && skipped.length > 0 && (
+          <div className="mb-3 flex-shrink-0 rounded-lg border border-danger bg-panel px-3 py-2 font-sans text-xs text-danger">
+            <p className="font-bold">
+              {skipped.length} đơn không đẩy được: chưa có dòng nào trong sổ đặt hàng.
+            </p>
+            <p className="mt-1 text-muted">
+              {skipped
+                .slice(0, 5)
+                .map((s) => `${s.po} (${s.system})`)
+                .join(', ')}
+              {skipped.length > 5 ? ` … và ${skipped.length - 5} đơn nữa` : ''}
+            </p>
+          </div>
+        )}
 
         {groups && (
           <>

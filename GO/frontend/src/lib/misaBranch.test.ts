@@ -45,7 +45,7 @@ test('hai nhánh, đúng khoá lưu trữ và nhãn hiển thị', () => {
 })
 
 test('gom nhóm theo cùng khoá mà bảng kết quả và nút Zalo đang dùng', () => {
-  const groups = buildMisaGroups([
+  const { groups } = buildMisaGroups([
     row({ po: 'PO-A', excelRows: [9, 10] }),
     row({ po: 'PO-A', excelRows: [11] }),
     row({ po: 'PO-B', excelRows: [12] }),
@@ -56,7 +56,7 @@ test('gom nhóm theo cùng khoá mà bảng kết quả và nút Zalo đang dùn
 })
 
 test('gom JIT theo file chứ không theo từng trang', () => {
-  const groups = buildMisaGroups([
+  const { groups } = buildMisaGroups([
     row({ system: 'JIT-CHOICE', sourceId: 'awb.pdf', po: 'PO-1', excelRows: [9], shipTo: 'WH6_HN' }),
     row({ system: 'JIT-CHOICE', sourceId: 'awb.pdf', po: 'PO-2', excelRows: [10], shipTo: 'WH6_HN' }),
   ], testGroupKey)
@@ -65,16 +65,46 @@ test('gom JIT theo file chứ không theo từng trang', () => {
   assert.equal(groups[0].shipTo, 'WH6_HN')
 })
 
-test('bỏ qua dòng không ghi được vào Excel', () => {
-  // Dòng hỏng (không trích xuất được) không có excelRows — không có gì để
-  // đẩy, và đưa vào modal chỉ tổ khiến người dùng tưởng nó sẽ vào sổ.
-  const groups = buildMisaGroups([row({ po: 'PO-A', excelRows: [] }), row({ po: 'PO-B', excelRows: [9] })], testGroupKey)
+test('đơn mà MỌI dòng đều thiếu excelRows bị đưa vào skipped, không vào groups', () => {
+  // Mười vendor ngoài BigC/JIT chưa điền OrderRow.ExcelRows (xem
+  // internal/processing) — một lô thuần các vendor đó phải hiện cảnh báo
+  // "bị bỏ", không được âm thầm biến mất khỏi modal.
+  const { groups, skipped } = buildMisaGroups(
+    [row({ po: 'PO-A', system: 'Coop', excelRows: [] }), row({ po: 'PO-B', excelRows: [9] })],
+    testGroupKey,
+  )
   assert.equal(groups.length, 1)
   assert.equal(groups[0].po, 'PO-B')
+  assert.deepEqual(skipped, [{ key: 'PO-A', po: 'PO-A', system: 'Coop' }])
+})
+
+test('đơn có dòng hợp lệ lẫn dòng thiếu vẫn vào groups, chỉ gộp dòng hợp lệ, không vào skipped', () => {
+  const { groups, skipped } = buildMisaGroups(
+    [row({ po: 'PO-A', excelRows: [] }), row({ po: 'PO-A', excelRows: [9] })],
+    testGroupKey,
+  )
+  assert.equal(groups.length, 1)
+  assert.deepEqual(groups[0].excelRows, [9])
+  assert.deepEqual(skipped, [])
+})
+
+test('skipped giữ đúng thứ tự xuất hiện', () => {
+  const { skipped } = buildMisaGroups(
+    [
+      row({ po: 'PO-A', system: 'Coop', excelRows: [] }),
+      row({ po: 'PO-B', system: 'Satra', excelRows: [9] }),
+      row({ po: 'PO-C', system: 'Lotte', excelRows: [] }),
+    ],
+    testGroupKey,
+  )
+  assert.deepEqual(
+    skipped.map((s) => s.po),
+    ['PO-A', 'PO-C'],
+  )
 })
 
 test('giữ thông tin định tuyến của dòng đầu mỗi nhóm', () => {
-  const groups = buildMisaGroups([
+  const { groups } = buildMisaGroups([
     row({ po: 'PO-A', system: 'BigC', maKhachHang: 'MB_GC_BIGC', excelRows: [9] }),
   ], testGroupKey)
   assert.equal(groups[0].system, 'BigC')
@@ -92,15 +122,15 @@ test('đếm đơn và dòng theo nhánh, chỉ tính đơn đang tick', () => {
 })
 
 test('không cho đẩy khi còn đơn đã tick mà chưa có nhánh', () => {
-  assert.equal(canPush([group({ branch: '' })], []), false)
+  assert.equal(canPush([group({ branch: '' })], [], 0), false)
 })
 
 test('không cho đẩy khi không tick đơn nào', () => {
-  assert.equal(canPush([group({ selected: false })], []), false)
+  assert.equal(canPush([group({ selected: false })], [], 0), false)
 })
 
 test('cho đẩy khi mọi đơn đã tick đều có nhánh', () => {
-  assert.equal(canPush([group({ branch: 'htla' }), group({ key: 'b', selected: false, branch: '' })], []), true)
+  assert.equal(canPush([group({ branch: 'htla' }), group({ key: 'b', selected: false, branch: '' })], [], 0), true)
 })
 
 test('nhánh đã vào sổ bị loại khỏi lượt đẩy sau, nhánh lỗi thì không', () => {
@@ -110,8 +140,17 @@ test('nhánh đã vào sổ bị loại khỏi lượt đẩy sau, nhánh lỗi 
   ]
   const pending = pendingGroups(groups, ['htla'])
   assert.deepEqual(pending.map((g) => g.key), ['b'])
-  assert.equal(canPush(groups, ['htla']), true)
-  assert.equal(canPush(groups, ['htla', 'ha_thanh']), false)
+  assert.equal(canPush(groups, ['htla'], 0), true)
+  assert.equal(canPush(groups, ['htla', 'ha_thanh'], 0), false)
+})
+
+test('còn đơn bị bỏ thì luôn chặn đẩy, dù mọi thứ khác đều hợp lệ', () => {
+  // Đơn bị bỏ (skippedCount > 0) không nằm trong `groups` nên không đơn
+  // nào trong groups thiếu nhánh hay chưa tick — nếu canPush chỉ nhìn
+  // groups thì sẽ trả true và đẩy một phần trong im lặng.
+  const groups = [group({ key: 'a', branch: 'htla' })]
+  assert.equal(canPush(groups, [], 1), false)
+  assert.equal(canPush(groups, [], 0), true)
 })
 
 test('ghi nhớ dựng map khoá định tuyến -> nhánh', () => {

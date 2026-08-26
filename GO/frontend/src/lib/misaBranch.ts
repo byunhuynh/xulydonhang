@@ -25,6 +25,12 @@ export interface MisaGroup extends MisaGroupSeed {
   selected: boolean
 }
 
+export interface MisaBuildResult {
+  groups: MisaGroupSeed[]
+  /** Số đơn (theo khoá nhóm) bị bỏ vì không có dòng nào trong sổ đặt hàng. */
+  skipped: { key: string; po: string; system: string }[]
+}
+
 // buildMisaGroups gom các dòng kết quả thành đơn vị "1 đơn".
 //
 // groupKey được TRUYỀN VÀO chứ không import: file này phải nạp được bằng
@@ -35,35 +41,58 @@ export interface MisaGroup extends MisaGroupSeed {
 // khoá nhóm cho cả bảng kết quả, nút Zalo lẫn modal này; chữ ký ép phải
 // truyền một cái gì đó, không có đường quên.
 //
-// Dòng không có excelRows bị bỏ hẳn: không trích xuất được thì không có
-// gì trong sổ đặt hàng để đẩy, và để nó hiện lên chỉ tổ khiến người dùng
-// tưởng nó sẽ vào sổ.
-export function buildMisaGroups(rows: OrderRow[], groupKey: (row: OrderRow) => string): MisaGroupSeed[] {
+// Một đơn có excelRows là rỗng ở MỌI dòng (mười vendor ngoài BigC/JIT
+// hiện chưa điền OrderRow.ExcelRows - xem internal/processing) không có
+// gì trong sổ đặt hàng để tách ra mà đẩy. Trước đây những đơn này bị
+// `continue` âm thầm ngay trong vòng lặp: biến mất khỏi modal không một
+// lời cảnh báo, MISA vẫn báo ✅ cho phần còn lại, và lô thuần các vendor
+// đó thì modal hiện "0 đơn" mà không giải thích gì. Giờ trả về riêng
+// trong `skipped` để gọi nơi hiển thị BẮT BUỘC phải cảnh báo và canPush
+// BẮT BUỘC phải chặn - xem canPush bên dưới.
+//
+// Một đơn có ÍT NHẤT một dòng hợp lệ vẫn vào `groups` như cũ, chỉ gộp
+// những dòng hợp lệ (dòng thiếu excelRows của đơn đó không đóng góp gì
+// vào excelRows của nhóm, nhưng không làm cả đơn bị coi là bỏ).
+export function buildMisaGroups(rows: OrderRow[], groupKey: (row: OrderRow) => string): MisaBuildResult {
   const order: string[] = []
   const byKey = new Map<string, MisaGroupSeed>()
+  const hasValidRow = new Set<string>()
 
   for (const row of rows) {
-    if (!row.excelRows || row.excelRows.length === 0) continue
     const key = groupKey(row)
-    const existing = byKey.get(key)
-    if (existing) {
-      existing.excelRows.push(...row.excelRows)
-      continue
+    let seed = byKey.get(key)
+    if (!seed) {
+      order.push(key)
+      seed = {
+        key,
+        po: row.po,
+        // Thông tin định tuyến lấy từ dòng ĐẦU của nhóm: mọi dòng trong
+        // một đơn đều cùng hệ thống, cùng mã khách hàng, cùng kho giao.
+        system: row.system,
+        customerCode: row.maKhachHang,
+        shipTo: row.shipTo,
+        excelRows: [],
+      }
+      byKey.set(key, seed)
     }
-    order.push(key)
-    byKey.set(key, {
-      key,
-      po: row.po,
-      // Thông tin định tuyến lấy từ dòng ĐẦU của nhóm: mọi dòng trong
-      // một đơn đều cùng hệ thống, cùng mã khách hàng, cùng kho giao.
-      system: row.system,
-      customerCode: row.maKhachHang,
-      shipTo: row.shipTo,
-      excelRows: [...row.excelRows],
-    })
+    if (row.excelRows && row.excelRows.length > 0) {
+      seed.excelRows.push(...row.excelRows)
+      hasValidRow.add(key)
+    }
   }
 
-  return order.map((key) => byKey.get(key)!)
+  const groups: MisaGroupSeed[] = []
+  const skipped: MisaBuildResult['skipped'] = []
+  for (const key of order) {
+    const seed = byKey.get(key)!
+    if (hasValidRow.has(key)) {
+      groups.push(seed)
+    } else {
+      skipped.push({ key: seed.key, po: seed.po, system: seed.system })
+    }
+  }
+
+  return { groups, skipped }
 }
 
 // branchTotals đếm số đơn và số dòng Excel của từng nhánh, chỉ tính các
@@ -93,7 +122,15 @@ export function pendingGroups(groups: MisaGroup[], pushedBranches: string[]): Mi
 // canPush khoá nút đẩy cho tới khi mọi đơn đang tick đều có nhánh. Không
 // đoán bừa một nhánh cho khoá chưa map: đoán sai là đơn vào sổ của pháp
 // nhân khác.
-export function canPush(groups: MisaGroup[], pushedBranches: string[]): boolean {
+//
+// skippedCount > 0 luôn khoá nút, bất kể các đơn còn lại sẵn sàng đến
+// đâu: đẩy phần còn lại rồi để MISA báo ✅ là cách chắc chắn nhất khiến
+// sổ kế toán ghi thiếu những đơn bị bỏ (không có dòng nào trong sổ đặt
+// hàng) mà không ai biết - người dùng phải thấy băng cảnh báo và tự
+// quyết định (chấp nhận bỏ đơn đó, hay quay lại kiểm tra sổ đặt hàng)
+// trước khi được phép bấm đẩy, chứ không được đẩy một phần trong im lặng.
+export function canPush(groups: MisaGroup[], pushedBranches: string[], skippedCount: number): boolean {
+  if (skippedCount > 0) return false
   const pending = groups.filter((g) => g.selected)
   if (pending.length === 0) return false
   if (pending.some((g) => !g.branch)) return false
