@@ -173,9 +173,11 @@ func (p *RealProcessor) processJITAirWaybillDocument(filePath, warehouseCode, or
 
 		excelRows := make([]excelwriter.Row, 0, len(products))
 		productLogs := make([]string, 0, len(products))
+		skus := make([]string, 0, len(products))
 		totalValue := 0.0
 		totalWeight := 0.0
 		totalPackages := 0
+		totalQty := 0
 		for _, product := range products {
 			sku, mapped := resolveJITProductSku(p.Store, product.Barcode)
 			if !mapped {
@@ -201,6 +203,8 @@ func (p *RealProcessor) processJITAirWaybillDocument(filePath, warehouseCode, or
 			totalValue += unitPrice * product.Qty
 			totalWeight += lineWeight
 			totalPackages += caseCount
+			totalQty += int(product.Qty)
+			skus = append(skus, sku)
 			productLogs = append(productLogs, fmt.Sprintf("✅ %s %s | SL: %s | Giá: %.0f", sku, info.Name, strconv.FormatFloat(product.Qty, 'f', -1, 64), unitPrice))
 			excelRows = append(excelRows, excelwriter.Row{
 				EntryDate: orderDate, DebtDays: jitDebtDays, OrderNumber: orderNumber,
@@ -220,7 +224,7 @@ func (p *RealProcessor) processJITAirWaybillDocument(filePath, warehouseCode, or
 			MaKhachHang: "MN_JIT_01512", PO: po, MaVanDon: tracking, DonGia: fmt.Sprintf("%.0f", totalValue),
 			Status: StatusDone, StatusKind: StatusKindDone, ShipTo: warehouseCode,
 			EntryDate: orderDate, CancelDate: orderDate, TotalWeightKg: coop.FormatWeightKg(totalWeight),
-			TotalPackages: totalPackages, PromoItems: make([]PromoItemSummary, 0),
+			TotalPackages: totalPackages, TotalQty: totalQty, SKUs: skus, PromoItems: make([]PromoItemSummary, 0),
 			JITPeriod: period,
 		}
 		provisional := finalRow

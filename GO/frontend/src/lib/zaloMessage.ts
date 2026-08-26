@@ -411,17 +411,21 @@ export function buildZaloMessageForJITFile(
   const totalWeightKg = formatWeightKg(
     rows.reduce((sum, r) => sum + parseWeightKg(r.totalWeightKg || '0 kg'), 0),
   );
-  // Đếm SỐ MÃ SẢN PHẨM bằng excelRows (số dòng Excel thật đã ghi cho mỗi
-  // trang) gộp qua Set để loại trùng - khớp đúng cách groupJITFiles
-  // (lib/jitFileGroups.ts) đã đếm cho phần chọn buổi giao, không tự bịa
-  // cách đếm khác cho cùng 1 khái niệm "số mã sản phẩm trong file".
-  const excelRowSet = new Set<number>();
-  for (const r of rows) for (const er of r.excelRows) excelRowSet.add(er);
+  // 2 con số KHÁC NHAU, dễ nhầm nên tách rõ: số MÃ HÀNG khác nhau (loại
+  // trùng theo ĐÚNG mã SKU thật qua Set, KHÔNG dùng excelRows - mỗi lần
+  // ghi luôn ra 1 số dòng Excel mới nên cộng dồn qua nhiều PO chỉ ra
+  // tổng số DÒNG sản phẩm, không phải số SKU khác nhau - xác nhận sai
+  // qua thực tế: 170 PO gần như 1 SKU/đơn từng báo nhầm "173 mã hàng")
+  // KHÁC với tổng SỐ LƯỢNG sản phẩm (cộng dồn Qty qua totalQty - vd 10
+  // mã có thể lên tới 15 sản phẩm nếu vài mã có Qty > 1).
+  const skuSet = new Set<string>();
+  for (const r of rows) for (const sku of r.skus) skuSet.add(sku);
+  const totalQty = rows.reduce((sum, r) => sum + (r.totalQty || 0), 0);
 
   const header = `**🔔 ĐƠN HÀNG JIT-CHOICE**\n${DIVIDER}`;
   const identityLine = `🏪 {orange:${first.shipTo}} · 🗓️ ${first.entryDate} (**${period}**)`;
-  const countsLine = `🎫 Tổng số đơn: **${rows.length} PO** · 📦 Tổng số sản phẩm: **${excelRowSet.size} mã**`;
-  const totalsLine = `💰 **${formatMoney(totalDonGia)}đ** · ⚖️ ${totalWeightKg}`;
+  const countsLine = `🎫 Tổng số đơn: **${rows.length} PO** · 🏷️ Tổng số mã hàng: **${skuSet.size} mã**`;
+  const totalsLine = `💰 **${formatMoney(totalDonGia)}đ** · 📦 ${totalQty} sản phẩm · ⚖️ ${totalWeightKg}`;
 
   const paragraphs = [[header, identityLine].join('\n'), [countsLine, totalsLine].join('\n')];
   if (processedAt) paragraphs.push(`⏱️ Xử lý lúc ${processedAt}`);

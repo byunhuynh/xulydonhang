@@ -105,6 +105,25 @@ type OrderRow struct {
 	CancelDate    string `json:"cancelDate"`
 	TotalWeightKg string `json:"totalWeightKg"`
 	TotalPackages int    `json:"totalPackages"`
+	// TotalQty is the running sum of each product line's Qty (physical
+	// unit count) - only JIT's processor currently populates this (its
+	// Zalo message needs BOTH "N mã hàng khác nhau" and "M sản phẩm tổng
+	// cộng" as two genuinely different numbers, e.g. 10 mã could total 15
+	// sản phẩm if some lines have Qty>1) - zero for every other vendor,
+	// unused by anything of theirs.
+	TotalQty int `json:"totalQty"`
+	// SKUs is every product SKU this page/row wrote (NOT deduplicated
+	// here - one page can legitimately repeat a SKU across its own
+	// promo/invoice bonus rows, that's real data). Deduplication across
+	// SEVERAL rows (e.g. the same SKU ordered on two different JIT PO
+	// pages of the same PDF) is the CALLER's job once rows are grouped -
+	// len(ExcelRows) is NOT a stand-in for "distinct SKU count": every
+	// write gets its own new Excel row number, so summing it across a
+	// group of pages just counts total LINE ENTRIES, not distinct SKUs
+	// (a SKU repeated across 5 different PO pages inflates it by 5, not
+	// 1) - confirmed wrong in production (170 PO / mostly 1 SKU each
+	// e-commerce order reported "173 mã hàng", not a real distinct count).
+	SKUs []string `json:"skus"`
 
 	// PromoItems is every promotional/bonus SKU this order earned,
 	// totaled across the whole order (see PromoItemSummary's own doc

@@ -37,6 +37,18 @@ export interface OrderRow {
   cancelDate: string
   totalWeightKg: string
   totalPackages: number
+  // Tổng SỐ LƯỢNG sản phẩm (Qty cộng dồn qua mọi dòng) - chỉ JIT gán giá
+  // trị này (xem OrderRow.TotalQty, types.go), 0 ở mọi vendor khác.
+  totalQty: number
+  // Mọi mã SKU dòng này đã ghi, CHƯA loại trùng (1 dòng/PO có thể lặp
+  // lại 1 SKU ở dòng khuyến mãi riêng - đó là dữ liệu thật). Loại trùng
+  // qua NHIỀU dòng (vd 1 SKU xuất hiện ở nhiều PO khác nhau trong CÙNG 1
+  // file JIT) là việc của bên gọi sau khi đã gộp nhóm - excelRows.length
+  // KHÔNG phải số mã khác nhau (mỗi lần ghi luôn ra 1 số dòng Excel mới,
+  // cộng dồn qua nhiều PO chỉ ra tổng số DÒNG, không phải số SKU khác
+  // nhau - đã xác nhận sai qua thực tế: 170 PO gần như 1 SKU/đơn báo
+  // "173 mã hàng" trong khi số SKU khác nhau thật ít hơn nhiều).
+  skus: string[]
   promoItems: PromoItem[]
 }
 
