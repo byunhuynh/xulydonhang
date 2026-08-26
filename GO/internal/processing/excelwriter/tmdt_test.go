@@ -117,15 +117,39 @@ func TestWriteTMDTRows(t *testing.T) {
 		t.Errorf("Y9 = %v, muốn %v (lệch %v)", gotY9, wantY9, diff)
 	}
 
-	// Z (Thành tiền), AT (Trọng lượng), AU (số thùng) PHẢI trống — mẫu
-	// chuẩn TMĐT để trống cả ba, khác hẳn writeRow của nhánh vendor.
-	for _, cell := range []string{"Z9", "AT9", "AU9", "Z10", "AT10", "AU10"} {
+	// Z (Thành tiền) mang CÔNG THỨC "Y{n}*X{n}", đúng như writeRow của
+	// nhánh vendor và đúng như mẫu chuẩn TMĐT.
+	//
+	// Bẫy đã sập một lần: GetCellValue trả "" cho ô công thức chưa có giá
+	// trị cache, nên đọc mẫu chuẩn bằng GetCellValue làm cả spec lẫn bản
+	// cài đặt đầu tiên tưởng cột Z để trống. Phải hỏi GetCellFormula.
+	for _, tc := range []struct{ cell, want string }{{"Z9", "Y9*X9"}, {"Z10", "Y10*X10"}} {
+		got, err := f.GetCellFormula(sheetName, tc.cell)
+		if err != nil {
+			t.Fatalf("GetCellFormula(%s): %v", tc.cell, err)
+		}
+		if got != tc.want {
+			t.Errorf("công thức %s = %q, muốn %q", tc.cell, got, tc.want)
+		}
+	}
+
+	// AT (Trọng lượng) và AU (số thùng) PHẢI trống HẲN — không giá trị,
+	// cũng không công thức. Đã tra lại mẫu chuẩn ở cả 5 dòng rải rác:
+	// hai cột này thực sự rỗng, khác hẳn cột Z.
+	for _, cell := range []string{"AT9", "AU9", "AT10", "AU10"} {
 		got, err := f.GetCellValue(sheetName, cell)
 		if err != nil {
 			t.Fatalf("GetCellValue(%s): %v", cell, err)
 		}
 		if got != "" {
 			t.Errorf("%s = %q, muốn trống", cell, got)
+		}
+		fx, err := f.GetCellFormula(sheetName, cell)
+		if err != nil {
+			t.Fatalf("GetCellFormula(%s): %v", cell, err)
+		}
+		if fx != "" {
+			t.Errorf("công thức %s = %q, muốn trống", cell, fx)
 		}
 	}
 }

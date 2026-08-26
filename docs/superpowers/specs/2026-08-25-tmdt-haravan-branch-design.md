@@ -38,9 +38,9 @@ lần sau không hỏi lại.
   (`GO/internal/processing/excelwriter/dondathang.go:346`) ghi các cột
   A, B, C, D, E, G, K, L, Q, S, T, U, V, X, Y, Z, AE, AJ, AM, AN, AO,
   AP, AQ, AT, AU, AV của sheet `Don dat hang`. Đây đúng là tập cột đơn
-  TMĐT cần — nhưng `writeRow` **luôn** ghi `Z` (công thức hoặc 0) và ghi
-  `AT`/`AU` cho mọi dòng không phải dòng ghi chú, trong khi mẫu chuẩn
-  TMĐT để trống cả ba ô đó.
+  TMĐT cần — riêng `AT`/`AU` thì `writeRow` ghi cho mọi dòng không phải
+  dòng ghi chú, trong khi mẫu chuẩn TMĐT để trống hai ô đó. Cột `Z` thì
+  giống nhau: cả hai đều là công thức `Y{n}*X{n}`.
 - `productdata.Store.GetProductInfo(sku)` trả `ProductInfo{Name,
   WeightKg, PackSize}` — nguồn duy nhất cho cột `Tên hàng` (S) theo mã
   thành phẩm. Store nạp từ Google Sheets lúc `InitializeApp`.
@@ -330,15 +330,22 @@ hàng (không tách theo thành phẩm).
 | AM | Mã thống kê | `kho` |
 | AO | Ghi Chú | `Mã đơn hàng` |
 | AV | Số ngày được nợ | `15` |
-| Z, AT, AU | Thành tiền, Trọng lượng, (AU) | **để trống** |
+| Z | Thành tiền | công thức `Y{n}*X{n}` |
+| AT, AU | Trọng lượng, (AU) | **để trống** |
 
-Ba ô cuối là lý do cần hàm ghi riêng: `writeRow` hiện có luôn ghi `Z`
-(công thức `=Y*X` hoặc số 0) và ghi `AT`/`AU` cho mọi dòng không phải
-dòng ghi chú, còn mẫu chuẩn TMĐT để trống cả ba. Thêm ba cờ phủ định
-nữa vào `excelwriter.Row` — vốn đã mang 6 biệt lệ riêng của từng vendor
-— sẽ làm struct đó khó đọc hơn là đáng. Nên thêm
-`excelwriter.WriteTMDTRows(path, rows []TMDTRow)` dùng chung phần
-"mở file / tìm dòng kế tiếp / lưu" với `WriteOrderRows`.
+> **Đính chính 26/08/2026:** bản đầu của tài liệu này ghi cả `Z` là "để
+> trống". Sai. `GetCellValue` trả chuỗi rỗng cho ô công thức chưa có giá
+> trị cache, nên khi đọc mẫu chuẩn bằng `GetCellValue` cột `Z` trông như
+> ô rỗng; hỏi `GetCellFormula` thì mọi dòng dữ liệu đều mang `Y{n}*X{n}`.
+> Người dùng phát hiện khi chạy thật: dondathang.xlsx không có thành tiền.
+
+Hai ô `AT`/`AU` là lý do cần hàm ghi riêng: `writeRow` hiện có ghi
+`AT`/`AU` cho mọi dòng không phải dòng ghi chú, còn mẫu chuẩn TMĐT để
+trống cả hai. Thêm cờ phủ định nữa vào `excelwriter.Row` — vốn đã mang 6
+biệt lệ riêng của từng vendor — sẽ làm struct đó khó đọc hơn là đáng.
+Nên thêm `excelwriter.WriteTMDTRows(path, rows []TMDTRow)` dùng chung
+phần "mở file / tìm dòng kế tiếp / lưu" với `WriteOrderRows`. Cột `Z`
+thì dùng lại y nguyên công thức của `writeRow`.
 
 Xác minh công thức Y và X trên đơn nhiều dòng `2608235QED370T` (tổng
 139.000, dòng 2 là hàng tặng giá 0): `139000 ÷ 1 ÷ 1,08 = 128.703,7037`
@@ -421,8 +428,10 @@ nên `config.txt` sau batch vẫn tăng đúng bằng tổng số dòng đã ph�
    nay/tương lai, chặn khoảng > 7 ngày, các preset ra đúng khoảng.
 3. **`lookup.AppendComboRows`** — ghi đúng cột A–K, đúng dòng kế tiếp,
    không đụng dòng có sẵn; nạp lại bảng thì tra được ngay.
-4. **`excelwriter.WriteTMDTRows`** — Z/AT/AU trống, các cột khác đúng,
-   ghi nối tiếp sau dòng cuối (không đè dòng vendor PDF cùng batch).
+4. **`excelwriter.WriteTMDTRows`** — `Z` mang công thức `Y{n}*X{n}`
+   (hỏi bằng `GetCellFormula`, không phải `GetCellValue`), `AT`/`AU`
+   trống hẳn, các cột khác đúng, ghi nối tiếp sau dòng cuối (không đè
+   dòng vendor PDF cùng batch).
 5. **Nhận diện workbook** — file có đủ 3 sheet là TMĐT; workbook khác và
    PDF thì không.
 6. **Chờ/huỷ** — fake `Emitter` + gọi `CancelTMDTMissing`, kiểm rằng
