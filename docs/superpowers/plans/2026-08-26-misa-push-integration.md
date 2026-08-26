@@ -3321,7 +3321,12 @@ Run:
 cd "c:/Users/Admin/Desktop/code py/Xử lý đơn hàng"
 git diff 1d70886e..HEAD --stat -- misa/ GO/internal/processing/
 ```
-Expected: **không in ra gì**.
+Expected: **không in ra gì** cho `misa/`.
+
+Lưu ý: repo này đang được một agent khác (codex) dùng song song và nó **có** sửa
+file trong `GO/internal/processing/`. Nếu lệnh trên in ra thay đổi ở thư mục đó,
+đối chiếu `git log --oneline -- GO/internal/processing/` xem commit đó có thuộc
+kế hoạch này không. Không thuộc thì bỏ qua, **không hoàn tác**.
 
 - [ ] **Step 5: Chạy app thật và soát bằng mắt**
 
