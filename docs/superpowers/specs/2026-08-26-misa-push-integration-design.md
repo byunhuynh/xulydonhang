@@ -179,8 +179,7 @@ phép tách mà `zalosend.splitCustomerCode` đã dùng. Mã không đủ 3 ph�
 khúc rỗng và khoá rơi về `BigC` trần (không bao giờ xảy ra với BigC thật, nhưng
 không được panic).
 
-**Giá trị mặc định gieo sẵn** (`misapush.SeedRouting`) — dùng khi
-`misa_routing` chưa có khoá đó, ghi vào Cài đặt ngay lần chạy đầu:
+**Giá trị mặc định gieo sẵn** (`misapush.SeedRouting`):
 
 | → HTLA | → Hà Thành |
 |---|---|
@@ -202,6 +201,23 @@ sinh ra) vẫn để trống — đoán thay là đoán vào sổ kế toán. Ch
 dò ra nên không liệt kê hết được (`TMĐT-Shopee`, `TMĐT-TikTok Shop`, sàn mới mai
 sau). Tra theo thứ tự: khớp đúng khoá trước, không có thì thử tiền tố `TMĐT-`.
 Mọi hệ thống khác chỉ khớp đúng.
+
+**Bảng gieo chỉ điền vào chỗ trống, không bao giờ ghi đè.** `App` gọi
+`misapush.ApplySeed(settings.MisaRouting)` một lần lúc khởi động: khoá nào **chưa
+có** trong `misa_routing` thì thêm vào và lưu xuống `settings.bhconfig`; khoá đã
+có thì **không đụng tới**, kể cả khi giá trị hiện tại khác bảng gieo.
+
+Hệ quả có chủ ý — và đây là lý do phải vật chất hoá bảng gieo xuống file thay vì
+để nó làm giá trị dự phòng trong code: sau này sửa `SeedRouting` trong mã nguồn
+**không** làm xê dịch một cấu hình nào đang chạy. Nếu bảng gieo chỉ sống trong
+code, một lần sửa hằng số sẽ lặng lẽ đổi nhánh của mọi mục người dùng chưa từng
+chạm vào — tức là đẩy đơn vào sổ của pháp nhân khác mà không ai bấm gì. Đổi lại,
+phiên bản sau thêm hệ thống mới vào bảng gieo thì hệ thống đó vẫn tự xuất hiện,
+vì nó là khoá chưa có.
+
+Muốn quay về mặc định thì xoá khoá đó khỏi `settings.bhconfig` rồi mở lại app —
+không làm nút "khôi phục mặc định" trong giao diện, vì một cú bấm nhầm ở đó là
+đẩy nhầm sổ cả lô.
 
 ### 5. Cấu hình — `appsettings.Settings` thêm 2 map
 
@@ -251,6 +267,12 @@ Winmart                  │*Hà Thành*│ HTLA │
 Nhãn hiển thị do frontend dựng từ khoá (`BigC/GC` → "BigC · gia công",
 `JIT-CHOICE/WH6_HN` → "JIT · kho WH6_HN"), khoá lưu xuống file vẫn là chuỗi máy
 đọc. Sắp xếp theo nhãn để danh sách không nhảy chỗ khi có khoá mới.
+
+**Mọi dòng đều đổi được, bất cứ lúc nào** — kể cả những dòng do bảng gieo tạo ra.
+Bấm nút bên kia là đổi ngay, bấm Lưu là có hiệu lực cho lượt push kế tiếp; không
+phải khởi động lại app (`SaveAppSettings` đã nạp lại cấu hình tại chỗ, đúng cách
+tab GID/Zalo đang làm). Đây là chỗ duy nhất cần sửa khi nghiệp vụ đổi — ví dụ mai
+sau Lotte chuyển từ HTLA về Hà Thành, hay tách thêm một kho JIT mới.
 
 **Danh sách khoá lấy từ đâu.** Không hardcode hết được: `OrderRow.System` của Coop
 lấy từ cột A sheet MAKH (`GetSystemForCustomer` → `COOPMART`/`COOPFOOD`), của TMĐT
