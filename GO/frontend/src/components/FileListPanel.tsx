@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { FaArrowsRotate, FaFolderOpen, FaMagnifyingGlass, FaXmark, FaUpRightAndDownLeftFromCenter, FaDownLeftAndUpRightToCenter } from 'react-icons/fa6'
+import { FaArrowsRotate, FaFolderOpen, FaMagnifyingGlass, FaXmark, FaTrash, FaUpRightAndDownLeftFromCenter, FaDownLeftAndUpRightToCenter } from 'react-icons/fa6'
 import { useAppStore } from '../store/appStore'
 import { SelectFiles, ScanOrderFolder } from '../../wailsjs/go/main/App'
 import { SectionHeader } from './SectionHeader'
@@ -129,6 +129,19 @@ export function FileListPanel({
     appendLog(`Đã xóa 1 file khỏi danh sách.`)
   }
 
+  // Không hỏi xác nhận: nút Tải lại ngay cạnh dựng lại được danh sách
+  // trong một cú bấm, và nút X từng dòng lẫn phím Delete hiện cũng không
+  // hỏi — thêm hộp xác nhận riêng ở đây sẽ lệch với chính panel này.
+  // Xoá luôn ô lọc: bỏ sót nó thì lần thêm file sau danh sách trông vẫn
+  // rỗng vì bộ lọc cũ đang giấu hết.
+  function clearAll() {
+    const count = files.length
+    setFiles([])
+    setSelected(new Set())
+    setFilter('')
+    appendLog(`Đã xóa toàn bộ ${count} file khỏi danh sách.`)
+  }
+
   function handleKeyDown(e: React.KeyboardEvent) {
     if (e.key === 'Delete' && selected.size > 0) {
       removeFiles([...selected])
@@ -159,6 +172,14 @@ export function FileListPanel({
               className="rounded p-1 text-muted transition-colors hover:text-accent disabled:opacity-40"
             >
               <FaArrowsRotate size={11} />
+            </button>
+            <button
+              onClick={clearAll}
+              disabled={isProcessing || files.length === 0}
+              title="Xóa toàn bộ danh sách"
+              className="rounded p-1 text-muted transition-colors hover:text-danger disabled:opacity-40 disabled:hover:text-muted"
+            >
+              <FaTrash size={11} />
             </button>
             <button
               onClick={onToggleExpand}
