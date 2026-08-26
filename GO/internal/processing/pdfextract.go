@@ -23,6 +23,11 @@ import (
 // for that lookup — see extractWinmartPageTextFromFile's caller in
 // coop_processor.go for a concrete case this matters for.
 func extractPageTexts(path string) ([]string, []int, error) {
+	// Bao cao dang .txt khong phai PDF - doc thang bang textextract.go.
+	if isTextReport(path) {
+		return extractTextFilePages(path)
+	}
+
 	file, r, err := pdfOpen(path)
 	if err != nil {
 		return nil, nil, err

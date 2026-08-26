@@ -65,7 +65,7 @@ func (p *RealProcessor) process(ctx context.Context, filePath string, emit func(
 	if err != nil {
 		row := emitIdentifiedOrderRow(emit, filePath, "file", OrderRow{
 			FileName:   filepath.Base(filePath),
-			Status:     StatusFailed + " - không đọc được PDF: " + err.Error(),
+			Status:     StatusFailed + " - không đọc được file: " + err.Error(),
 			StatusKind: StatusKindFailed,
 		})
 		return []OrderRow{row}, nil
