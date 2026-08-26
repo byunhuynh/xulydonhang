@@ -132,7 +132,7 @@ func TestRunBatch_EmitsLogRowPerFileThenDone(t *testing.T) {
 	a := &App{cfg: cfg, processor: &stubProcessor{}, excelPath: freshOrderWorkbook(t)}
 	emitter := &fakeEmitter{}
 
-	a.runBatch(emitter, []string{"a.pdf", "b.pdf"}, 10)
+	a.runBatch(emitter, []string{"a.pdf", "b.pdf"}, 10, nil)
 
 	wantNames := []string{
 		"process:progress",
@@ -180,7 +180,7 @@ func TestApp_RunBatchStreamsRowsWithoutDuplicates(t *testing.T) {
 		a := &App{cfg: cfg, processor: processor, excelPath: freshOrderWorkbook(t)}
 		emitter := &fakeEmitter{}
 
-		a.runBatch(emitter, []string{"jit.pdf"}, 7)
+		a.runBatch(emitter, []string{"jit.pdf"}, 7, nil)
 
 		var rows []processing.OrderRow
 		for _, event := range emitter.events {
@@ -222,7 +222,7 @@ func TestApp_RunBatchStreamsRowsWithoutDuplicates(t *testing.T) {
 		}
 		emitter := &fakeEmitter{}
 
-		a.runBatch(emitter, []string{"a.pdf"}, 1)
+		a.runBatch(emitter, []string{"a.pdf"}, 1, nil)
 
 		if processor.streamCalls != 1 || processor.processCalls != 0 {
 			t.Fatalf("calls = streaming %d, regular %d; want streaming 1, regular 0", processor.streamCalls, processor.processCalls)
@@ -270,7 +270,7 @@ func TestApp_RunBatchStreamsRowsWithoutDuplicates(t *testing.T) {
 		}
 		emitter := &fakeEmitter{}
 
-		a.runBatch(emitter, []string{"legacy.pdf"}, 1)
+		a.runBatch(emitter, []string{"legacy.pdf"}, 1, nil)
 
 		var rows []processing.OrderRow
 		for _, event := range emitter.events {
@@ -295,7 +295,7 @@ func TestRunBatch_FileErrorEmitsLogAndContinues(t *testing.T) {
 	a := &App{cfg: cfg, processor: &stubProcessor{failOn: "bad.pdf"}, excelPath: freshOrderWorkbook(t)}
 	emitter := &fakeEmitter{}
 
-	a.runBatch(emitter, []string{"bad.pdf", "good.pdf"}, 1)
+	a.runBatch(emitter, []string{"bad.pdf", "good.pdf"}, 1, nil)
 
 	wantNames := []string{
 		"process:progress",
@@ -516,7 +516,7 @@ func TestApp_WorkbookMutationCannotOverlapNewBatch(t *testing.T) {
 	<-mutationEntered
 
 	go func() {
-		a.runBatch(&fakeEmitter{}, []string{"batch.pdf"}, 1)
+		a.runBatch(&fakeEmitter{}, []string{"batch.pdf"}, 1, nil)
 		close(batchDone)
 	}()
 
@@ -978,7 +978,7 @@ func TestApp_RunBatchReportsProgressPerFile(t *testing.T) {
 	a := &App{cfg: cfg, processor: &stubProcessor{}, excelPath: freshOrderWorkbook(t)}
 	emitter := &fakeEmitter{}
 
-	a.runBatch(emitter, []string{"a.pdf", "b.pdf", "c.pdf"}, 1)
+	a.runBatch(emitter, []string{"a.pdf", "b.pdf", "c.pdf"}, 1, nil)
 
 	var got []BatchProgress
 	for _, event := range emitter.events {
@@ -1007,7 +1007,7 @@ func TestApp_RunBatchReportsProgressEvenWhenAFileFails(t *testing.T) {
 	a := &App{cfg: cfg, processor: &stubProcessor{failOn: "b.pdf"}, excelPath: freshOrderWorkbook(t)}
 	emitter := &fakeEmitter{}
 
-	a.runBatch(emitter, []string{"a.pdf", "b.pdf"}, 1)
+	a.runBatch(emitter, []string{"a.pdf", "b.pdf"}, 1, nil)
 
 	last := BatchProgress{}
 	for _, event := range emitter.events {

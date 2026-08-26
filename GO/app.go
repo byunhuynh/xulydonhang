@@ -23,6 +23,7 @@ import (
 	"order-processor/internal/processing/excelwriter"
 	"order-processor/internal/processing/pricing"
 	"order-processor/internal/processing/productdata"
+	"order-processor/internal/tmdt"
 	"order-processor/internal/zalosend"
 )
 
@@ -71,6 +72,13 @@ type App struct {
 	initMu              sync.Mutex
 	dataLoader          func() (processing.Processor, error)
 	updateJITPeriodFn   func(string, []int, string, string, string) error
+	// tmdtResolve nhận phản hồi của modal sửa mã thiếu. Đệm 1 để
+	// ResolveTMDTMissing/CancelTMDTMissing không bị chặn nếu nhánh TMĐT
+	// vừa hết giờ chờ đúng lúc người dùng bấm.
+	tmdtResolve chan tmdtResolution
+	// tmdtWaiting cho biết đang có nhánh TMĐT chờ phản hồi — dùng để từ
+	// chối lời gọi Resolve/Cancel lạc (người dùng bấm khi không có modal).
+	tmdtWaiting atomic.Bool
 }
 
 // resolveRepoFile looks for filename starting in the current working
@@ -156,6 +164,7 @@ func NewApp() (*App, error) {
 		zaloSender: &zalosend.ChromedpSender{
 			ProfileDir: filepath.Join(resolveRepoDir("settings.ini"), "zalo_profile"),
 		},
+		tmdtResolve: make(chan tmdtResolution, 1),
 	}
 
 	app.dataLoader = func() (processing.Processor, error) {
@@ -432,24 +441,26 @@ func (a *App) SelectFiles() ([]string, error) {
 }
 
 // ProcessFiles chạy xử lý các file đã chọn trong nền, phát sự kiện
-// process:log / process:row / process:done về frontend.
-func (a *App) ProcessFiles(files []string, stt int) {
+// process:log / process:row / process:done về frontend. ranges gắn khoảng
+// ngày cho từng file TMĐT (khoá là đúng đường dẫn file); batch không có
+// file TMĐT thì truyền map rỗng hoặc nil.
+func (a *App) ProcessFiles(files []string, stt int, ranges map[string]TMDTDateRange) {
 	if !a.reserveBatch() {
 		a.emitter.Emit("process:log", "⚠️ Đã có một batch đang xử lý, vui lòng đợi hoàn tất.")
 		return
 	}
-	go a.runReservedBatch(a.emitter, files, stt)
+	go a.runReservedBatch(a.emitter, files, stt, ranges)
 }
 
-func (a *App) runBatch(emitter Emitter, files []string, stt int) {
+func (a *App) runBatch(emitter Emitter, files []string, stt int, ranges map[string]TMDTDateRange) {
 	if !a.reserveBatch() {
 		emitter.Emit("process:log", "⚠️ Đã có một batch đang xử lý, vui lòng đợi hoàn tất.")
 		return
 	}
-	a.runReservedBatch(emitter, files, stt)
+	a.runReservedBatch(emitter, files, stt, ranges)
 }
 
-func (a *App) runReservedBatch(emitter Emitter, files []string, stt int) {
+func (a *App) runReservedBatch(emitter Emitter, files []string, stt int, ranges map[string]TMDTDateRange) {
 	current := stt
 	a.excelMu.Lock()
 	defer func() {
@@ -493,7 +504,17 @@ func (a *App) runReservedBatch(emitter Emitter, files []string, stt int) {
 				current++
 			}
 		}
-		rows, err := a.processOne(f, current, emitRow)
+		// Nhánh rẽ TMĐT: cùng một lô có thể trộn file PDF vendor với
+		// workbook TMĐT, nên rẽ theo NỘI DUNG file (tmdt.IsWorkbook đọc
+		// hai sheet tra cứu) chứ không theo tên file hay lựa chọn của
+		// người dùng.
+		var rows []processing.OrderRow
+		var err error
+		if tmdt.IsWorkbook(f) {
+			rows, err = a.processTMDTFile(emitter, f, ranges[f], emitRow)
+		} else {
+			rows, err = a.processOne(f, current, emitRow)
+		}
 		if err != nil {
 			emitter.Emit("process:log", fmt.Sprintf("❌ Lỗi xử lý %s: %v", filepath.Base(f), err))
 			emitProcessRow(emitter, ensureResultIdentity(processing.OrderRow{

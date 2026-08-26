@@ -23,6 +23,28 @@ export namespace appsettings {
 
 export namespace main {
 	
+	export class TMDTComboEntry {
+	    key: string;
+	    product: string;
+	    variant: string;
+	    combo: string;
+	    tp: string[];
+	    sl: string[];
+	
+	    static createFrom(source: any = {}) {
+	        return new TMDTComboEntry(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.key = source["key"];
+	        this.product = source["product"];
+	        this.variant = source["variant"];
+	        this.combo = source["combo"];
+	        this.tp = source["tp"];
+	        this.sl = source["sl"];
+	    }
+	}
 	export class ZaloJob {
 	    po: string;
 	    system: string;

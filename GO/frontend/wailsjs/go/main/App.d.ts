@@ -3,6 +3,8 @@
 import {appsettings} from '../models';
 import {main} from '../models';
 
+export function CancelTMDTMissing():Promise<void>;
+
 export function CancelZaloLogin():Promise<void>;
 
 export function ConfirmPrice(arg1:number,arg2:number):Promise<void>;
@@ -13,9 +15,13 @@ export function GetSTT():Promise<number>;
 
 export function InitializeApp():Promise<void>;
 
-export function ProcessFiles(arg1:Array<string>,arg2:number):Promise<void>;
+export function InspectTMDTFiles(arg1:Array<string>):Promise<Array<string>>;
+
+export function ProcessFiles(arg1:Array<string>,arg2:number,arg3:Record<string, main.TMDTDateRange>):Promise<void>;
 
 export function RefreshZaloQR():Promise<void>;
+
+export function ResolveTMDTMissing(arg1:Array<main.TMDTComboEntry>):Promise<void>;
 
 export function SaveAppSettings(arg1:appsettings.Settings):Promise<void>;
 
