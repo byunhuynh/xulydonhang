@@ -3,7 +3,9 @@ package main
 import (
 	"context"
 	"fmt"
+	"math"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -137,7 +139,10 @@ func parseTMDTRange(r TMDTDateRange, today time.Time) (from, to time.Time, err e
 	return from, to, nil
 }
 
-// summaryKeyCount là số liệu gộp của một nhóm (shop, ngày).
+// summaryKeyCount là số liệu gộp của một nhóm (shop, ngày). Bốn trường
+// money/qty/skus/orders tồn tại vì tin Zalo cần chúng: dòng tóm tắt là
+// thứ DUY NHẤT frontend nhìn thấy về đơn TMĐT (từng dòng hàng không đổ
+// lên bảng), nên số liệu nào tin nhắn cần thì phải đi kèm dòng này.
 type summaryKeyCount struct {
 	shop    string
 	date    string
@@ -147,6 +152,9 @@ type summaryKeyCount struct {
 	orders  int
 	lines   int
 	hasNA   bool
+	money   float64  // Σ(X×Y) — TRƯỚC VAT, đúng bằng tổng cột Z vừa ghi
+	qty     float64  // Σ cột X
+	skus    []string // mã thành phẩm KHÁC NHAU, đã bỏ #N/A
 }
 
 // summaryTMDTRows đổi số liệu gộp thành dòng cho bảng kết quả. Đơn TMĐT
@@ -162,13 +170,33 @@ func summaryTMDTRows(fileName string, groups []summaryKeyCount) []processing.Ord
 			status = fmt.Sprintf("%s - %d đơn / %d dòng, còn mã #N/A", processing.StatusWarning, g.orders, g.lines)
 		}
 		rows = append(rows, processing.OrderRow{
-			FileName:    fileName,
+			FileName: fileName,
+			// SourceID gom MỌI NGÀY của cùng một shop về một khoá: frontend
+			// (groupKeyFor) dùng đúng trường này để quyết định "một tin
+			// Zalo", y hệt cách JIT gom nhiều trang PDF về một file. Bảng
+			// kết quả vẫn giữ từng ngày một dòng để còn đối chiếu.
+			SourceID: "tmdt|" + g.shop,
+			// Page mang mã kho vì cột shipTo KHÔNG hiện trên bảng kết quả
+			// (xem COLUMNS trong ResultTable.tsx); ShipTo bên dưới mới là
+			// trường tin nhắn đọc.
 			Page:        g.shipTo,
 			System:      "TMĐT-" + g.channel,
 			MaKhachHang: g.misa,
 			PO:          fmt.Sprintf("%s · %s", g.shop, g.date),
 			Status:      status,
 			StatusKind:  kind,
+			// DonGia mang TỔNG tiền của nhóm, không phải đơn giá một mã —
+			// giống hệt điều nhánh JIT đã làm với cột này, và frontend cộng
+			// dồn qua các ngày bằng đúng một phép cộng cho cả hai nhánh.
+			DonGia:      strconv.FormatFloat(g.money, 'f', 0, 64),
+			ShipTo:      g.shipTo,
+			EntryDate:   g.date,
+			// Làm tròn thay vì cắt: qty là float64 vì Số lượng × SLTP đi qua
+			// phép nhân số thực, và 7 cộng dồn có thể ra 6,999999999999999 —
+			// int() sẽ cắt xuống 6, sai một sản phẩm trong tin nhắn.
+			TotalQty:    int(math.Round(g.qty)),
+			SKUs:        g.skus,
+			TotalOrders: g.orders,
 		})
 	}
 	return rows
@@ -483,6 +511,8 @@ func groupTMDTSummary(res tmdt.Result) []summaryKeyCount {
 	agg := map[key]*summaryKeyCount{}
 	seenOrder := map[string]bool{}
 
+	seenSKU := map[string]bool{}
+
 	for _, r := range res.OrderRows {
 		// EntryDate là "dd/mm/yyyy"; PO của dòng tóm tắt cần đúng dạng đó.
 		shop := shopFromDescription(r.Description)
@@ -497,9 +527,17 @@ func groupTMDTSummary(res tmdt.Result) []summaryKeyCount {
 			agg[k] = g
 		}
 		g.lines++
+		g.money += r.Qty * r.UnitPrice
+		g.qty += r.Qty
 		if !seenOrder[k.shop+k.date+r.Note] {
 			seenOrder[k.shop+k.date+r.Note] = true
 			g.orders++
+		}
+		// #N/A không phải một mã hàng: đếm nó vào sẽ báo cho người nhận số
+		// mã cao hơn thực tế, đúng lúc dữ liệu đang có vấn đề.
+		if r.SKU != "" && r.SKU != lookup.NotAvailable && !seenSKU[k.shop+k.date+r.SKU] {
+			seenSKU[k.shop+k.date+r.SKU] = true
+			g.skus = append(g.skus, r.SKU)
 		}
 		if r.SKU == lookup.NotAvailable || r.CustomerCode == lookup.NotAvailable {
 			g.hasNA = true

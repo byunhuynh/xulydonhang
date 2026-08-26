@@ -124,6 +124,12 @@ type OrderRow struct {
 	// 1) - confirmed wrong in production (170 PO / mostly 1 SKU each
 	// e-commerce order reported "173 mã hàng", not a real distinct count).
 	SKUs []string `json:"skus"`
+	// TotalOrders is how many DISTINCT platform orders this row summarises
+	// - only the TMĐT branch populates it, where one result row stands for
+	// a whole (shop, day) group rather than a single order. Every other
+	// vendor writes one row per order, so their Zalo message counts rows
+	// (len(rows)) and leaves this zero.
+	TotalOrders int `json:"totalOrders"`
 
 	// PromoItems is every promotional/bonus SKU this order earned,
 	// totaled across the whole order (see PromoItemSummary's own doc

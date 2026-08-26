@@ -270,3 +270,97 @@ func TestProcessTMDTFileKhongCoKhoangNgay(t *testing.T) {
 		t.Errorf("phải ghi log cho người dùng thấy lý do")
 	}
 }
+
+// TestGroupTMDTSummaryGomSoLieuChoTinZalo khoá bốn con số mà tin Zalo TMĐT
+// dựng lên: tiền TRƯỚC VAT (đúng bằng tổng cột Z vừa ghi), tổng số lượng,
+// số mã thành phẩm KHÁC NHAU, và số đơn duy nhất trên sàn.
+//
+// Mã "#N/A" KHÔNG được tính là một mã hàng: nó là dấu hiệu tra cứu thất
+// bại, đếm nó vào sẽ báo cho người nhận một con số mã hàng cao hơn thực tế.
+func TestGroupTMDTSummaryGomSoLieuChoTinZalo(t *testing.T) {
+	row := func(sku string, qty, price float64, order string) excelwriter.TMDTRow {
+		return excelwriter.TMDTRow{
+			EntryDate:    "23/08/2026",
+			OrderNumber:  "ĐĐHTMĐT-TikTok-" + order,
+			ShipTo:       "HN",
+			CustomerCode: "MB_TMDT_00001",
+			Description:  "TMĐT-TikTok - Blue HN - " + order + " - Ngày đổ 23/08/2026 - HN",
+			SKU:          sku,
+			Qty:          qty,
+			UnitPrice:    price,
+			Note:         order,
+		}
+	}
+	res := tmdt.Result{OrderRows: []excelwriter.TMDTRow{
+		row("TP1", 2, 1000, "A"),
+		row("TP2", 3, 500, "A"), // cùng đơn A → vẫn 1 đơn
+		row("TP1", 1, 1000, "B"), // TP1 lặp lại → vẫn 1 mã
+		row(lookup.NotAvailable, 4, 0, "C"),
+	}}
+
+	groups := groupTMDTSummary(res)
+	if len(groups) != 1 {
+		t.Fatalf("có %d nhóm, muốn 1", len(groups))
+	}
+	g := groups[0]
+	if g.orders != 3 {
+		t.Errorf("orders = %d, muốn 3 (A, B, C)", g.orders)
+	}
+	if g.lines != 4 {
+		t.Errorf("lines = %d, muốn 4", g.lines)
+	}
+	if want := 2*1000.0 + 3*500.0 + 1*1000.0; g.money != want {
+		t.Errorf("money = %v, muốn %v", g.money, want)
+	}
+	if g.qty != 10 {
+		t.Errorf("qty = %v, muốn 10 (2+3+1+4)", g.qty)
+	}
+	if len(g.skus) != 2 {
+		t.Errorf("skus = %v, muốn đúng 2 mã (TP1, TP2 — không tính #N/A)", g.skus)
+	}
+	if !g.hasNA {
+		t.Errorf("có dòng #N/A mà không báo hasNA")
+	}
+}
+
+// TestSummaryRowsMangSoLieuChoTinZalo: một tin Zalo = MỘT SHOP, gộp mọi
+// ngày. Bảng kết quả vẫn hiện từng ngày riêng để đối chiếu, nên việc gộp
+// nằm ở SourceID — groupKeyFor (frontend) gom theo đúng trường này, y hệt
+// cách JIT gom nhiều trang PDF về một file.
+func TestSummaryRowsMangSoLieuChoTinZalo(t *testing.T) {
+	rows := summaryTMDTRows("XUẤT HÀNG HN-LA MỚI.xlsx", []summaryKeyCount{
+		{shop: "Blue HN", date: "23/08/2026", channel: "TikTok", misa: "MB_TMDT_00001",
+			shipTo: "HN", orders: 3, lines: 5, money: 1500, qty: 7, skus: []string{"TP1", "TP2"}},
+		{shop: "Blue HN", date: "22/08/2026", channel: "TikTok", misa: "MB_TMDT_00001",
+			shipTo: "HN", orders: 1, lines: 1, money: 400, qty: 1, skus: []string{"TP2"}},
+		{shop: "Blue LA", date: "22/08/2026", channel: "Shopee", misa: "MN_TMDT_00002",
+			shipTo: "LA", orders: 2, lines: 2, money: 900, qty: 2, skus: []string{"TP9"}},
+	})
+	if len(rows) != 3 {
+		t.Fatalf("có %d dòng, muốn 3", len(rows))
+	}
+	if rows[0].SourceID != rows[1].SourceID {
+		t.Errorf("hai ngày của cùng shop phải chung SourceID, được %q và %q", rows[0].SourceID, rows[1].SourceID)
+	}
+	if rows[0].SourceID == rows[2].SourceID {
+		t.Errorf("hai shop khác nhau không được chung SourceID (%q)", rows[0].SourceID)
+	}
+	if rows[0].DonGia != "1500" {
+		t.Errorf("DonGia = %q, muốn \"1500\"", rows[0].DonGia)
+	}
+	if rows[0].TotalQty != 7 {
+		t.Errorf("TotalQty = %d, muốn 7", rows[0].TotalQty)
+	}
+	if rows[0].TotalOrders != 3 {
+		t.Errorf("TotalOrders = %d, muốn 3", rows[0].TotalOrders)
+	}
+	if len(rows[0].SKUs) != 2 {
+		t.Errorf("SKUs = %v, muốn 2 mã", rows[0].SKUs)
+	}
+	if rows[0].ShipTo != "HN" {
+		t.Errorf("ShipTo = %q, muốn HN", rows[0].ShipTo)
+	}
+	if rows[0].EntryDate != "23/08/2026" {
+		t.Errorf("EntryDate = %q, muốn 23/08/2026", rows[0].EntryDate)
+	}
+}

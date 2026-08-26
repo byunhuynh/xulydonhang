@@ -26,6 +26,7 @@ import { useListEntrance } from '../lib/useListEntrance'
 import { mismatchesForPO } from '../lib/orderMismatchScope'
 import { groupJITFiles, skipsPriceReconciliation } from '../lib/jitFileGroups'
 import { groupKeyFor } from '../lib/zaloGrouping'
+import { tmdtShopFromGroupKey } from '../lib/zaloMessage'
 import { belowSystemPriceDetails } from '../lib/poPriceWarning'
 import { JITPeriodMenu } from './JITPeriodMenu'
 import { isJITPeriodMenuDisabled } from '../lib/jitPeriodState'
@@ -288,11 +289,13 @@ export function ResultTable() {
     const groups: POContentGroup[] = [...selectedPOs].map((key) => {
       const groupRows = rowsForGroupKey(key).map((idx) => rows[idx])
       const isJIT = groupRows[0]?.system === 'JIT-CHOICE'
+      const tmdtShop = tmdtShopFromGroupKey(key)
       return {
         // Nhãn hiển thị của nhóm: JIT không có 1 po đại diện (mỗi trang
-        // 1 po khác nhau) nên dùng tên file PDF thay thế - vẫn là po
-        // thật cho mọi vendor khác.
-        po: isJIT ? (groupRows[0]?.fileName ?? key) : key,
+        // 1 po khác nhau) nên dùng tên file PDF thay thế; TMĐT gom theo
+        // shop nên dùng tên shop (key thô là "tmdt|{shop}", không đọc
+        // được) - vẫn là po thật cho mọi vendor khác.
+        po: tmdtShop || (isJIT ? (groupRows[0]?.fileName ?? key) : key),
         rows: groupRows,
         period: isJIT ? (jitPeriodState.periodBySource[key] ?? groupRows[0]?.jitPeriod) : undefined,
       }

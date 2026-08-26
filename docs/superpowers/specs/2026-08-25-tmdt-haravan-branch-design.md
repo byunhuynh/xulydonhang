@@ -100,7 +100,10 @@ sheet `Đơn hàng haravan` (1.585 dòng) trong workbook gốc của người d�
 
 **Không làm:**
 
-- Không gửi Zalo cho đơn TMĐT.
+- ~~Không gửi Zalo cho đơn TMĐT.~~ **Đổi 26/08/2026** theo yêu cầu người
+  dùng: có gửi Zalo, **mỗi shop một tin** gộp mọi ngày trong đợt vừa
+  chạy, dựng theo khuôn tin JIT. Xem mục "Tin Zalo cho đơn TMĐT" cuối
+  tài liệu.
 - Không đổi bất kỳ nhánh vendor PDF nào đang chạy.
 - Không bổ sung shop thiếu vào sheet `Mã misa` (chỉ cảnh báo — người
   dùng chốt như vậy).
@@ -362,6 +365,44 @@ Zalo. Thay vào đó phát **một `process:row` tóm tắt cho mỗi (shop, ng�
 - `System` = `TMĐT-{kênh}`, `PO` = `{shop} · {ngày}`, `MaKhachHang` = mã
   MISA, `Page` = `{kho}`, `Status` = số đơn / số dòng đã ghi.
 - Dòng tóm tắt có `StatusKind` = `warning` khi nhóm đó còn `#N/A`.
+- Dòng tóm tắt còn mang số liệu cho tin Zalo: `SourceID` = `tmdt|{shop}`
+  (khoá gom tin), `DonGia` = tổng tiền trước VAT của nhóm, `TotalQty` =
+  tổng số lượng, `SKUs` = mã thành phẩm khác nhau, `TotalOrders` = số
+  đơn duy nhất, `ShipTo` = kho, `EntryDate` = ngày.
+
+## Tin Zalo cho đơn TMĐT
+
+Một tin = **một shop**, gộp mọi ngày của đợt vừa chạy. Bảng kết quả vẫn
+hiện mỗi shop mỗi ngày một dòng để đối chiếu, nhưng `groupKeyFor` trả
+`SourceID` cho dòng TMĐT nên cả cụm dòng của một shop chỉ có MỘT ô tick
+và MỘT tin — đúng cơ chế JIT đã dùng để gom nhiều trang PDF về một file.
+
+`buildZaloMessageForTMDTShop` (lib/zaloMessage.ts) dựng tin theo khuôn
+tin JIT:
+
+```
+**🔔 ĐƠN HÀNG TMĐT-TikTok**
+━━━━━━━━━━━━
+🏪 {orange:Blue Việt Nam} · 🗓️ 23/08 → 25/08/2026 · 📍 HN
+
+🎫 Tổng số đơn: **312 đơn** · 🏷️ Tổng số mã hàng: **11 mã**
+💰 **8.104.500đ** · 📦 418 sản phẩm
+
+⏱️ Xử lý lúc 08:45
+```
+
+- Tiền **trước VAT** — đúng bằng tổng cột `Z` vừa ghi, đối chiếu thẳng
+  được với `dondathang.xlsx` mà không phải tự quy đổi 8%.
+- `#N/A` **không** được tính là một mã hàng; nhóm nào còn `#N/A` thì tin
+  có thêm một đoạn cảnh báo màu đỏ.
+- Shop bán trên hai sàn thì tiêu đề lùi về `ĐƠN HÀNG TMĐT` thay vì nhận
+  vơ sàn của dòng đầu; shop giao từ hai kho thì nêu cả hai (`HN + LA`).
+- Nhóm Zalo nhận tin tra bằng `ResolveContact` như mọi hệ thống khác:
+  mã MISA `MB_TMDT_00001` + `System` `TMĐT-TikTok` → khoá
+  `MBTMĐT-TikTok` trong Cài đặt ▸ Zalo. **Không** thêm ánh xạ ẩn vào
+  `systemKeyOverrides` — giữ đúng quyết định 25/08/2026. Muốn hai sàn về
+  cùng một nhóm thì đặt hai khoá cùng giá trị; muốn tách thì đổi một
+  khoá, không phải sửa code.
 
 Tiến độ tải API đi qua `process:log` (theo từng trang 50 đơn) để người
 dùng thấy app đang chạy chứ không đứng hình.

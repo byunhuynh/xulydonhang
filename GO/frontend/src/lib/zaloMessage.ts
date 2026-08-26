@@ -17,6 +17,30 @@
 // choice is exactly what changes what they'll actually be charged.
 import type { OrderRow, PriceMismatchDetail } from "../types";
 
+// Tiền tố SourceID của dòng tóm tắt TMĐT (backend đặt "tmdt|{shop}" —
+// xem summaryTMDTRows trong GO/app_tmdt.go); phần sau tiền tố là tên shop.
+//
+// Khai ở ĐÂY chứ không ở zaloGrouping.ts (nơi hợp lý hơn về mặt ý nghĩa)
+// vì file này phải nạp được bằng `node --test`: tsconfig loại test khỏi
+// tsc nên test import kèm đuôi ".ts", còn mã nguồn thì không được — nghĩa
+// là zaloMessage.ts không thể import runtime từ file khác trong lib mà
+// vẫn chạy được dưới node. Chiều ngược lại (zaloGrouping import từ đây)
+// thì an toàn: không test nào nạp zaloGrouping trực tiếp.
+export const TMDT_SOURCE_PREFIX = "tmdt|";
+
+/**
+ * tmdtShopFromGroupKey trả tên shop của một nhóm TMĐT, hoặc chuỗi rỗng khi
+ * key không phải nhóm TMĐT — dùng chung ở mọi nơi cần hỏi "nhóm này có
+ * phải TMĐT không" (ResultTable dựng nhãn, ControlPanel dựng job gửi,
+ * OrderContentModal dựng bản xem trước) để ba nơi đó không tự cắt chuỗi
+ * mỗi nơi một kiểu.
+ */
+export function tmdtShopFromGroupKey(key: string): string {
+  return key.startsWith(TMDT_SOURCE_PREFIX)
+    ? key.slice(TMDT_SOURCE_PREFIX.length)
+    : "";
+}
+
 function formatMoney(n: number): string {
   return n.toLocaleString("vi-VN");
 }
@@ -431,4 +455,84 @@ export function buildZaloMessageForJITFile(
   if (processedAt) paragraphs.push(`⏱️ Xử lý lúc ${processedAt}`);
 
   return paragraphs.join('\n\n');
+}
+
+// formatTMDTDateSpan gộp danh sách ngày "dd/mm/yyyy" thành một nhãn: một
+// ngày thì in nguyên ngày, nhiều ngày thì in khoảng đầu → cuối. Bỏ năm ở
+// đầu khoảng khi hai đầu cùng năm — dòng tiêu đề đã đủ dài rồi.
+function formatTMDTDateSpan(dates: string[]): string {
+  const seen = [...new Set(dates.filter((d) => d.trim() !== ""))];
+  if (seen.length === 0) return "";
+  // "23/08/2026" -> "20260823": so được bằng phép so chuỗi, không cần Date
+  // (và không dính bẫy múi giờ như new Date("23/08/2026")).
+  const sortKey = (d: string) => d.split("/").reverse().join("");
+  seen.sort((a, b) => sortKey(a).localeCompare(sortKey(b)));
+  const first = seen[0];
+  const last = seen[seen.length - 1];
+  if (first === last) return first;
+  const sameYear = first.slice(6) === last.slice(6);
+  return `${sameYear ? first.slice(0, 5) : first} → ${last}`;
+}
+
+// buildZaloMessageForTMDTShop gộp MỘT SHOP (mọi ngày trong đợt vừa chạy)
+// thành một tin — đơn vị gom do groupKeyFor quyết định, xem
+// lib/zaloGrouping.ts.
+//
+// Không dùng chung assembleOrderMessage/buildZaloMessageForPO được, cùng
+// lý do như JIT: mỗi dòng ở đây đã là số liệu ĐÃ GỘP của cả một nhóm
+// (shop, ngày) chứ không phải một đơn, nên "po đại diện" của
+// assembleOrderMessage sẽ vô nghĩa và link tra cứu đơn cũng không tồn tại
+// cho đơn sàn. Cũng không có sai giá / khuyến mãi: nhánh TMĐT lấy giá
+// thẳng từ API sàn, không đối soát với bảng giá nội bộ.
+//
+// Tiền là TRƯỚC VAT — đúng bằng tổng cột Z (Thành tiền) vừa ghi vào
+// dondathang.xlsx, để người nhận đối chiếu thẳng với file thay vì phải
+// tự quy đổi 8%.
+export function buildZaloMessageForTMDTShop(
+  rows: OrderRow[],
+  processedAt: string,
+): string {
+  if (rows.length === 0) return "";
+  const first = rows[0];
+
+  const shop = tmdtShopFromGroupKey(first.sourceId) || (first.po.split(" · ")[0] ?? "");
+
+  // Một shop gần như luôn nằm trên đúng một sàn, nhưng nếu không thì tiêu
+  // đề phải lùi về "TMĐT" chứ không nhận vơ sàn của dòng đầu tiên.
+  const systems = [...new Set(rows.map((r) => r.system).filter(Boolean))];
+  const heading = systems.length === 1 ? systems[0] : "TMĐT";
+
+  const warehouses = [...new Set(rows.map((r) => r.shipTo).filter(Boolean))];
+  const dateSpan = formatTMDTDateSpan(rows.map((r) => r.entryDate));
+
+  const totalMoney = rows.reduce((sum, r) => sum + (Number(r.donGia) || 0), 0);
+  const totalOrders = rows.reduce((sum, r) => sum + (r.totalOrders || 0), 0);
+  const totalQty = rows.reduce((sum, r) => sum + (r.totalQty || 0), 0);
+  const skuSet = new Set<string>();
+  for (const r of rows) for (const sku of r.skus) skuSet.add(sku);
+  const hasNA = rows.some((r) => r.statusKind === "warning");
+
+  const header = `**🔔 ĐƠN HÀNG ${heading}**\n${DIVIDER}`;
+  const identityLine = [
+    `🏪 {orange:${shop}}`,
+    dateSpan && `🗓️ ${dateSpan}`,
+    warehouses.length > 0 && `📍 ${warehouses.join(" + ")}`,
+  ]
+    .filter(Boolean)
+    .join(" · ");
+  const countsLine = `🎫 Tổng số đơn: **${totalOrders} đơn** · 🏷️ Tổng số mã hàng: **${skuSet.size} mã**`;
+  const totalsLine = `💰 **${formatMoney(totalMoney)}đ** · 📦 ${totalQty} sản phẩm`;
+
+  const paragraphs = [
+    [header, identityLine].join("\n"),
+    [countsLine, totalsLine].join("\n"),
+  ];
+  if (hasNA) {
+    paragraphs.push(
+      '⚠️ {red:Còn mã chưa khai báo (#N/A)} — kiểm lại sheet "data shop" trước khi đẩy lên MISA.',
+    );
+  }
+  if (processedAt) paragraphs.push(`⏱️ Xử lý lúc ${processedAt}`);
+
+  return paragraphs.join("\n\n");
 }

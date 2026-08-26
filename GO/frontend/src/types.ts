@@ -49,6 +49,10 @@ export interface OrderRow {
   // nhau - đã xác nhận sai qua thực tế: 170 PO gần như 1 SKU/đơn báo
   // "173 mã hàng" trong khi số SKU khác nhau thật ít hơn nhiều).
   skus: string[]
+  // Số ĐƠN duy nhất một dòng tóm tắt đại diện — chỉ nhánh TMĐT gán (1
+  // dòng = 1 nhóm shop+ngày, không phải 1 đơn), 0 ở mọi vendor khác vì
+  // ở đó số đơn chính là số dòng.
+  totalOrders: number
   promoItems: PromoItem[]
 }
 

@@ -2,7 +2,13 @@ import { useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { FaXmark, FaCopy, FaCheck, FaPaperPlane } from 'react-icons/fa6'
 import type { OrderRow } from '../types'
-import { buildZaloMessageForPO, buildZaloMessageForJITFile, type PriceBasis } from '../lib/zaloMessage'
+import {
+  buildZaloMessageForPO,
+  buildZaloMessageForJITFile,
+  buildZaloMessageForTMDTShop,
+  tmdtShopFromGroupKey,
+  type PriceBasis,
+} from '../lib/zaloMessage'
 import { markupToHtml } from '../lib/richtext'
 import { useModalEntrance } from '../lib/useModalEntrance'
 
@@ -39,8 +45,11 @@ export function OrderContentModal({
   useModalEntrance(backdropRef, cardRef)
   const messages = groups.map((g) => ({
     po: g.po,
-    text:
-      g.rows[0]?.system === 'JIT-CHOICE'
+    // Ba nhánh phải khớp ĐÚNG ba nhánh của ControlPanel.handleSendZalo:
+    // bản xem trước và bản gửi đi lệch nhau là lỗi tệ nhất ở chỗ này.
+    text: tmdtShopFromGroupKey(g.rows[0]?.sourceId ?? '')
+      ? buildZaloMessageForTMDTShop(g.rows, processedAt)
+      : g.rows[0]?.system === 'JIT-CHOICE'
         ? buildZaloMessageForJITFile(g.rows, g.period ?? g.rows[0]?.jitPeriod ?? '', processedAt)
         : buildZaloMessageForPO(g.rows, processedAt, priceBasisBySku),
   }))

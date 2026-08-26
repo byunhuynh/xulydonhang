@@ -4,7 +4,13 @@ import { useAppStore } from '../store/appStore'
 import { GetSTT, InspectTMDTFiles, ProcessFiles, SendZaloMessages } from '../../wailsjs/go/main/App'
 import { TMDTDateRangeModal } from './TMDTDateRangeModal'
 import type { TMDTDateRange } from '../lib/tmdtDateRange'
-import { buildZaloMessageForPO, buildZaloMessageForJITFile, buildPriceBasisForPO } from '../lib/zaloMessage'
+import {
+  buildZaloMessageForPO,
+  buildZaloMessageForJITFile,
+  buildZaloMessageForTMDTShop,
+  buildPriceBasisForPO,
+  tmdtShopFromGroupKey,
+} from '../lib/zaloMessage'
 import { groupKeyFor } from '../lib/zaloGrouping'
 
 export function ControlPanel() {
@@ -85,6 +91,8 @@ export function ControlPanel() {
       const indices = rowsForGroupKey(key)
       const groupRows = indices.map((idx) => rows[idx])
       const isJIT = groupRows[0]?.system === 'JIT-CHOICE'
+      // Nhóm TMĐT gom theo shop: key thô là "tmdt|{shop}".
+      const tmdtShop = tmdtShopFromGroupKey(key)
       // Đúng mốc giờ đã được đóng dấu lúc dòng đầu tiên của nhóm này xuất
       // hiện trên bảng - CÙNG giá trị OrderContentModal dùng cho bản xem
       // trước (nó cũng lấy theo dòng đầu của nhóm). Không được tính
@@ -92,7 +100,9 @@ export function ControlPanel() {
       // dùng vừa duyệt, và dòng "Xử lý lúc" sẽ thành giờ GỬI chứ không
       // phải giờ xử lý.
       const processedAt = receivedAt[indices[0]] ?? ''
-      const message = isJIT
+      const message = tmdtShop
+        ? buildZaloMessageForTMDTShop(groupRows, processedAt)
+        : isJIT
         ? buildZaloMessageForJITFile(
             groupRows,
             // Buổi giao THEO GIÁ TRỊ NGƯỜI DÙNG ĐANG CHỌN, không phải giá
@@ -112,7 +122,7 @@ export function ControlPanel() {
         // po ở trên giờ là sourceId (hash) cho JIT, không đọc được - gửi
         // kèm tên file PDF để log Go hiện thứ có ý nghĩa thay vì hash
         // (xem ZaloJob.DisplayLabel, app.go).
-        displayLabel: isJIT ? (groupRows[0]?.fileName ?? '') : '',
+        displayLabel: tmdtShop || (isJIT ? (groupRows[0]?.fileName ?? '') : ''),
       }
     })
     appendLog(`📨 Bắt đầu gửi ${jobs.length} tin Zalo...`)
