@@ -117,10 +117,18 @@ function formatMismatchLine(d: PriceMismatchDetail, basis: PriceBasis): string {
   const promoNote = d.promoText ? ` (KM: ${d.promoText}${dateSuffix})` : "";
 
   const poText = `PO ${formatMoney(d.invoicePrice)}đ`;
-  const systemText = `Hệ thống ${formatMoney(d.systemPrice)}đ${promoNote}`;
+  const systemText = `Hệ thống ${formatMoney(d.systemPrice)}đ`;
   const poSide = basis === "po" ? `{green:✅ ${poText}}` : `~~${poText}~~`;
+  // promoNote nằm NGOÀI dấu định dạng, cả nhánh gạch ngang lẫn nhánh tô
+  // xanh. Dấu định dạng ở đây nói về CÁI GIÁ - gạch ngang = "giá này bị
+  // bỏ", tô xanh = "giá này được áp dụng" - còn "(KM: ...)" chỉ giải
+  // thích con số đó ở đâu ra. Gộp nó vào trong dấu gạch khiến cả chương
+  // trình khuyến mãi trông như cũng bị bỏ theo, đúng thứ người dùng báo
+  // lỗi. Để ngoài cả hai nhánh thì vị trí ghi chú không nhảy chỗ tuỳ
+  // theo người dùng chọn giá nào - đọc hai đơn cạnh nhau không bị lệch.
   const systemSide =
-    basis === "system" ? `{green:✅ ${systemText}}` : `~~${systemText}~~`;
+    (basis === "system" ? `{green:✅ ${systemText}}` : `~~${systemText}~~`) +
+    promoNote;
 
   return (
     `${code(d.sku)} — **${d.productName}**\n` +

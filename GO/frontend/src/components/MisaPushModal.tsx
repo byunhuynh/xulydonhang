@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { FaXmark, FaCloudArrowUp, FaSpinner } from 'react-icons/fa6'
 import { GetAppSettings, MisaResolveRoutes, PushMisa, SaveAppSettings } from '../../wailsjs/go/main/App'
 import { useAppStore } from '../store/appStore'
@@ -136,8 +137,15 @@ export function MisaPushModal({ onClose }: MisaPushModalProps) {
   const totals = groups ? branchTotals(groups) : null
   const ready = groups ? canPush(groups, doneBranches, skipped.length) : false
 
-  return (
-    <div ref={backdropRef} className="fixed inset-0 z-50 flex items-center justify-center bg-black/60" onClick={onClose}>
+  // Portal thẳng ra document.body, giống TMDTDateRangeModal và
+  // OrderContentModal. ProcessTab.tsx bọc ControlPanel trong div
+  // "animate-rise", mà animation đó dùng CSS transform với fill-mode
+  // "both" nên transform KHÔNG BAO GIỜ trở lại none. Một tổ tiên có
+  // transform là containing block mới cho con "position: fixed", nên modal
+  // này bị nhốt trong dải toolbar cao ~60px thay vì phủ kín cửa sổ —
+  // đúng triệu chứng "modal nằm trong app, khuất không chọn được".
+  return createPortal(
+    <div ref={backdropRef} className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" onClick={onClose}>
       <div
         ref={cardRef}
         className="flex max-h-[80vh] w-[720px] flex-col rounded-xl border border-border bg-panel p-4"
@@ -249,6 +257,7 @@ export function MisaPushModal({ onClose }: MisaPushModalProps) {
           </>
         )}
       </div>
-    </div>
+    </div>,
+    document.body,
   )
 }

@@ -2,6 +2,7 @@ import { strict as assert } from 'node:assert'
 import { test } from 'node:test'
 import {
   buildZaloMessageForJITFile,
+  buildZaloMessageForPO,
   buildZaloMessageForTMDTShop,
   tmdtShopFromGroupKey,
 } from './zaloMessage.ts'
@@ -185,4 +186,93 @@ test('thiếu danh sách mã (null từ Go) thì đếm 0, không được ném 
     '',
   )
   assert.match(jit, /Tổng số mã hàng: \*\*0 mã\*\*/)
+})
+
+// --- dòng báo sai giá: gạch ngang chỉ được phủ GIÁ, không phủ ghi chú KM ---
+
+function mismatchRow() {
+  return row({
+    po: 'PO-1',
+    priceMismatchCount: 1,
+    priceMismatchDetails: [
+      {
+        sku: 'TP30022',
+        productName: 'Nước lau kính Blue',
+        invoicePrice: 45082,
+        systemPrice: 40000,
+        qty: 10,
+        excelRow: 9,
+        promoText: 'giảm 40% toàn ngành hàng',
+        promoDateRange: '01/08 - 31/08',
+      },
+    ],
+  })
+}
+
+test('áp giá PO: chỉ gạch ngang phần giá hệ thống, ghi chú KM nằm ngoài', () => {
+  const msg = buildZaloMessageForPO([mismatchRow()], '10:00', { 9: 'po' })
+
+  // Ghi chú KM là lời giải thích giá ở đâu ra — nó không phải cái giá bị
+  // thay thế, nên không được nằm trong dấu gạch. Gạch cả cụm khiến người
+  // nhận tưởng cả chương trình khuyến mãi cũng bị bỏ.
+  assert.ok(
+    msg.includes('~~Hệ thống 40.000đ~~'),
+    `gạch ngang phải bao đúng phần giá. Nhận được:
+${msg}`,
+  )
+  assert.ok(
+    msg.includes('(KM: giảm 40% toàn ngành hàng (áp dụng 01/08 - 31/08))'),
+    `ghi chú KM phải còn nguyên và nằm NGOÀI dấu gạch. Nhận được:
+${msg}`,
+  )
+  // Khẳng định nguyên cụm thay vì dùng regex "không chứa": một regex
+  // kiểu /~~[^~]*KM:/ sẽ khớp nhầm vào dấu ~~ ĐÓNG rồi tới " (KM:", nên
+  // báo đỏ ngay cả khi code đúng.
+  assert.ok(
+    msg.includes(
+      '~~Hệ thống 40.000đ~~ (KM: giảm 40% toàn ngành hàng (áp dụng 01/08 - 31/08))',
+    ),
+    `ghi chú KM phải đứng ngay sau dấu gạch đóng, không nằm trong. Nhận được:
+${msg}`,
+  )
+})
+
+test('áp giá PO: giá PO được tô xanh, không bị gạch', () => {
+  const msg = buildZaloMessageForPO([mismatchRow()], '10:00', { 9: 'po' })
+  assert.ok(msg.includes('{green:✅ PO 45.082đ}'), msg)
+  assert.ok(!msg.includes('~~PO 45.082đ~~'), msg)
+})
+
+test('áp giá hệ thống: tô xanh chỉ phủ giá, ghi chú KM nằm ngoài', () => {
+  const msg = buildZaloMessageForPO([mismatchRow()], '10:00', { 9: 'system' })
+
+  // Cùng một quy tắc cho cả hai chiều: dấu định dạng bao GIÁ, ghi chú KM
+  // đứng ngoài. Nếu chỉ sửa nhánh gạch ngang thì vị trí ghi chú sẽ nhảy
+  // chỗ tuỳ theo người dùng chọn giá nào — đọc hai đơn cạnh nhau sẽ thấy
+  // lệch.
+  assert.ok(
+    msg.includes('{green:✅ Hệ thống 40.000đ}'),
+    `tô xanh phải bao đúng phần giá. Nhận được:
+${msg}`,
+  )
+  assert.ok(
+    msg.includes('(KM: giảm 40% toàn ngành hàng (áp dụng 01/08 - 31/08))'),
+    `ghi chú KM phải còn nguyên. Nhận được:
+${msg}`,
+  )
+  assert.ok(
+    !/\{green:[^}]*KM:/.test(msg),
+    `ghi chú KM bị lọt vào trong thẻ màu. Nhận được:
+${msg}`,
+  )
+  assert.ok(msg.includes('~~PO 45.082đ~~'), msg)
+})
+
+test('không có khuyến mãi thì không sinh ghi chú KM rỗng', () => {
+  const r = mismatchRow()
+  r.priceMismatchDetails[0].promoText = ''
+  r.priceMismatchDetails[0].promoDateRange = ''
+  const msg = buildZaloMessageForPO([r], '10:00', { 9: 'po' })
+  assert.ok(msg.includes('~~Hệ thống 40.000đ~~'), msg)
+  assert.ok(!msg.includes('KM:'), msg)
 })
