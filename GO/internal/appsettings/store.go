@@ -83,6 +83,9 @@ func (s *Store) Load(oldIniPath string) (Settings, error) {
 	if err := s.Save(settings); err != nil {
 		return Settings{}, fmt.Errorf("appsettings: write migrated %s: %w", s.path, err)
 	}
+	// Save nhận theo giá trị nên ensureMaps bên trong nó chỉ sửa bản sao cục bộ.
+	// Phải vá lại biến settings ở đây trước khi trả về.
+	ensureMaps(&settings)
 	return settings, nil
 }
 

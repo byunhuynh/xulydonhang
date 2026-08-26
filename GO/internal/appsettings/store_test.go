@@ -190,3 +190,31 @@ func TestStore_SaveLoad_GiữNguyênKhốiMisa(t *testing.T) {
 		t.Errorf("MisaRouting[BigC/MT] = %q, want %q", got.MisaRouting["BigC/MT"], "ha_thanh")
 	}
 }
+
+func TestStore_Load_MigrateTừIniCũVẫnTrảMapMisaKhôngNil(t *testing.T) {
+	// Lỗi hổng: Load từ settings.ini đời cũ (không có .bhconfig) phải trả
+	// Misa/MisaRouting không nil, vì Save nhận theo giá trị nên ensureMaps
+	// bên trong nó chỉ sửa bản sao cục bộ — biến settings ở Load vẫn giữ nil.
+	// Nếu nil, task tiếp gọi settings.MisaRouting["k"] = "v" sẽ panic khi app
+	// khởi động lần đầu migrate từ settings.ini cũ.
+	dir := t.TempDir()
+	oldIniPath := filepath.Join(dir, "settings.ini")
+	if err := os.WriteFile(oldIniPath, []byte("<gid>\nCOOP = 1741405320\n</gid>\n<zalo>\nMNCOOPMART = Đơn hàng Co-op Miền Nam\n</zalo>\n<reminder>\nMNKINGFOOD = 1\n</reminder>\n"), 0o644); err != nil {
+		t.Fatalf("ghi file cũ: %v", err)
+	}
+	newPath := filepath.Join(dir, "settings.bhconfig")
+	store := NewStore(newPath)
+
+	settings, err := store.Load(oldIniPath)
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if settings.Misa == nil {
+		t.Error("Misa = nil, want map rỗng — sẽ panic khi khởi động app")
+	}
+	if settings.MisaRouting == nil {
+		t.Error("MisaRouting = nil, want map rỗng — sẽ panic khi khởi động app")
+	}
+	// Ghi được vào map mà không panic.
+	settings.MisaRouting["Lotte"] = "htla"
+}
