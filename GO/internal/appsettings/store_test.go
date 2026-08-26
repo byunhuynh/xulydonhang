@@ -145,3 +145,48 @@ func TestLoadFillsEmptyHaravanMap(t *testing.T) {
 		t.Fatalf("Haravan = nil, muốn map rỗng")
 	}
 }
+
+func TestStore_Load_FileCũKhôngCóKhốiMisaVẫnRaMapRỗng(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "settings.bhconfig")
+	// Đúng hình dạng file .bhconfig của bản trước khi có MISA.
+	if err := os.WriteFile(path, []byte(`{"gid":{"COOP":"1"},"zalo":{},"reminder":{},"haravan":{}}`), 0o644); err != nil {
+		t.Fatalf("ghi file cũ: %v", err)
+	}
+
+	settings, err := NewStore(path).Load(filepath.Join(dir, "không-có.ini"))
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if settings.Misa == nil {
+		t.Error("Misa = nil, want map rỗng — frontend cần object thật để render bảng")
+	}
+	if settings.MisaRouting == nil {
+		t.Error("MisaRouting = nil, want map rỗng")
+	}
+}
+
+func TestStore_SaveLoad_GiữNguyênKhốiMisa(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "settings.bhconfig")
+	store := NewStore(path)
+
+	want := Settings{
+		Misa:        map[string]string{"sid_url": "https://script.google.com/x", "db_htla": "Long An"},
+		MisaRouting: map[string]string{"Lotte": "htla", "BigC/MT": "ha_thanh"},
+	}
+	if err := store.Save(want); err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+
+	got, err := store.Load(filepath.Join(dir, "không-có.ini"))
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if got.Misa["sid_url"] != want.Misa["sid_url"] {
+		t.Errorf("Misa[sid_url] = %q, want %q", got.Misa["sid_url"], want.Misa["sid_url"])
+	}
+	if got.MisaRouting["BigC/MT"] != "ha_thanh" {
+		t.Errorf("MisaRouting[BigC/MT] = %q, want %q", got.MisaRouting["BigC/MT"], "ha_thanh")
+	}
+}

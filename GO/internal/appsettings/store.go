@@ -22,6 +22,19 @@ type Settings struct {
 	// Vẫn là map[string]string như 3 nhóm còn lại để popup Cài đặt dùng
 	// lại nguyên KeyValueEditor, không phải viết form riêng.
 	Haravan map[string]string `json:"haravan"`
+	// Misa giữ cấu hình đẩy đơn lên AMIS Kế toán. Ba khoá quy ước:
+	//   sid_url      - URL Apps Script cấp phiên mới khi phiên hết hạn
+	//   db_ha_thanh  - tên (hoặc database_id) bộ dữ liệu nhánh Hà Thành
+	//   db_htla      - tên (hoặc database_id) bộ dữ liệu nhánh HTLA
+	// Vẫn là map[string]string như các nhóm khác để popup Cài đặt dùng
+	// lại nguyên KeyValueEditor.
+	Misa map[string]string `json:"misa"`
+	// MisaRouting ánh xạ khoá định tuyến -> nhánh ("ha_thanh"/"htla").
+	// Khoá do misapush.RouteKey sinh ra, ví dụ "Lotte", "BigC/GC",
+	// "JIT-CHOICE/WH6_HN", "TMĐT-*". Đây là NGUỒN CHÂN LÝ: bảng gieo
+	// trong code chỉ điền vào chỗ trống, không bao giờ ghi đè, để sửa
+	// hằng số ở bản sau không xê dịch một cài đặt nào đang chạy.
+	MisaRouting map[string]string `json:"misa_routing"`
 }
 
 // Store đọc/ghi Settings từ 1 file JSON đuôi .bhconfig (không phải
@@ -63,7 +76,9 @@ func (s *Store) Load(oldIniPath string) (Settings, error) {
 		return Settings{}, err
 	}
 	if !migrated {
-		return Settings{Gid: map[string]string{}, Zalo: map[string]string{}, Reminder: map[string]string{}, Haravan: map[string]string{}}, nil
+		empty := Settings{}
+		ensureMaps(&empty)
+		return empty, nil
 	}
 	if err := s.Save(settings); err != nil {
 		return Settings{}, fmt.Errorf("appsettings: write migrated %s: %w", s.path, err)
@@ -101,5 +116,11 @@ func ensureMaps(s *Settings) {
 	}
 	if s.Haravan == nil {
 		s.Haravan = map[string]string{}
+	}
+	if s.Misa == nil {
+		s.Misa = map[string]string{}
+	}
+	if s.MisaRouting == nil {
+		s.MisaRouting = map[string]string{}
 	}
 }
