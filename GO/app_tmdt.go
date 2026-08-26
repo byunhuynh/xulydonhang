@@ -155,6 +155,9 @@ type summaryKeyCount struct {
 	money   float64  // Σ(X×Y) — TRƯỚC VAT, đúng bằng tổng cột Z vừa ghi
 	qty     float64  // Σ cột X
 	skus    []string // mã thành phẩm KHÁC NHAU, đã bỏ #N/A
+	// excelRows là số dòng TUYỆT ĐỐI trong sổ đặt hàng của riêng nhóm này.
+	// KHÔNG liên tục: các nhóm ghi đan xen nhau theo thứ tự dòng gốc.
+	excelRows []int
 }
 
 // summaryTMDTRows đổi số liệu gộp thành dòng cho bảng kết quả. Đơn TMĐT
@@ -197,6 +200,7 @@ func summaryTMDTRows(fileName string, groups []summaryKeyCount) []processing.Ord
 			TotalQty:    int(math.Round(g.qty)),
 			SKUs:        g.skus,
 			TotalOrders: g.orders,
+			ExcelRows:   g.excelRows,
 		})
 	}
 	return rows
@@ -385,12 +389,17 @@ func (a *App) processTMDTFile(emitter Emitter, path string, rng TMDTDateRange, e
 	}
 	emitter.Emit("process:log", fmt.Sprintf("✅ Đã ghi %d dòng vào sheet %q.", len(res.SheetRows), tmdt.SheetHaravan))
 
-	if _, err := excelwriter.WriteTMDTRows(a.excelPath, res.OrderRows); err != nil {
+	// GIỮ startRow: đó là thứ duy nhất nối mỗi dòng tóm tắt với những
+	// dòng thật của nó trong sổ đặt hàng, và push MISA dựa vào đó để tách
+	// file theo nhánh kế toán. Trước đây nó bị vứt (`if _, err :=`) nên
+	// mọi đơn TMĐT đều bị modal push báo "chưa có dòng nào trong sổ đặt hàng".
+	startRow, err := excelwriter.WriteTMDTRows(a.excelPath, res.OrderRows)
+	if err != nil {
 		return fail("không ghi được dondathang.xlsx (file có đang mở trong Excel không?): %v", err)
 	}
 	emitter.Emit("process:log", fmt.Sprintf("✅ Đã ghi %d dòng vào dondathang.xlsx.", len(res.OrderRows)))
 
-	rows = summaryTMDTRows(baseNameTMDT(path), groupTMDTSummary(res))
+	rows = summaryTMDTRows(baseNameTMDT(path), groupTMDTSummary(res, startRow))
 	for _, row := range rows {
 		emit(row)
 	}
@@ -506,7 +515,7 @@ func (a *App) tmdtProductNamer() func(string) string {
 // groupTMDTSummary gộp kết quả theo (shop, ngày) — đơn vị soát tự nhiên
 // của người dùng: họ đối chiếu số đơn từng shop từng ngày với trang quản
 // trị sàn.
-func groupTMDTSummary(res tmdt.Result) []summaryKeyCount {
+func groupTMDTSummary(res tmdt.Result, startRow int) []summaryKeyCount {
 	type key struct{ shop, date string }
 	// Khoá của hai bộ đếm dưới đây là STRUCT chứ không phải chuỗi nối:
 	// shop+ngày+mã nối thẳng có thể trùng nhau khi một trong ba phần rỗng
@@ -519,7 +528,7 @@ func groupTMDTSummary(res tmdt.Result) []summaryKeyCount {
 
 	seenSKU := map[seen]bool{}
 
-	for _, r := range res.OrderRows {
+	for i, r := range res.OrderRows {
 		// EntryDate là "dd/mm/yyyy"; PO của dòng tóm tắt cần đúng dạng đó.
 		shop := shopFromDescription(r.Description)
 		k := key{shop: shop, date: r.EntryDate}
@@ -537,6 +546,9 @@ func groupTMDTSummary(res tmdt.Result) []summaryKeyCount {
 			agg[k] = g
 		}
 		g.lines++
+		// WriteTMDTRows ghi res.OrderRows theo đúng thứ tự, liên tiếp từ
+		// startRow — nên dòng Excel của res.OrderRows[i] là startRow+i.
+		g.excelRows = append(g.excelRows, startRow+i)
 		g.money += r.Qty * r.UnitPrice
 		g.qty += r.Qty
 		if ord := (seen{k.shop, k.date, r.Note}); !seenOrder[ord] {

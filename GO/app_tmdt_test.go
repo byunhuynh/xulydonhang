@@ -166,7 +166,7 @@ func TestGroupTMDTSummaryShopNameWithDash(t *testing.T) {
 			Note:         "585694438276170905",
 		},
 	}}
-	groups := groupTMDTSummary(res)
+	groups := groupTMDTSummary(res, 9)
 	if len(groups) != 1 {
 		t.Fatalf("có %d nhóm, muốn 1", len(groups))
 	}
@@ -293,12 +293,12 @@ func TestGroupTMDTSummaryGomSoLieuChoTinZalo(t *testing.T) {
 	}
 	res := tmdt.Result{OrderRows: []excelwriter.TMDTRow{
 		row("TP1", 2, 1000, "A"),
-		row("TP2", 3, 500, "A"), // cùng đơn A → vẫn 1 đơn
+		row("TP2", 3, 500, "A"),  // cùng đơn A → vẫn 1 đơn
 		row("TP1", 1, 1000, "B"), // TP1 lặp lại → vẫn 1 mã
 		row(lookup.NotAvailable, 4, 0, "C"),
 	}}
 
-	groups := groupTMDTSummary(res)
+	groups := groupTMDTSummary(res, 9)
 	if len(groups) != 1 {
 		t.Fatalf("có %d nhóm, muốn 1", len(groups))
 	}
