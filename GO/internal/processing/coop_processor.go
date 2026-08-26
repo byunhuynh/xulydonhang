@@ -525,7 +525,10 @@ func (p *RealProcessor) processSegment(filePath string, realPageNum int, text, p
 
 	return OrderRow{
 		FileName: filepath.Base(filePath), Page: pageLabel, System: system, MaKhachHang: customerCode,
-		PO: info.PONumber, DonGia: fmt.Sprintf("%.0f", totalValue), Status: statusText, StatusKind: statusKind,
+		// So dong that cua don nay trong so dat hang - push MISA dua vao
+		// day de tach file theo nhanh ke toan.
+		ExcelRows: excelRowsFrom(startRow, len(rows)),
+		PO:        info.PONumber, DonGia: fmt.Sprintf("%.0f", totalValue), Status: statusText, StatusKind: statusKind,
 		DriveURL: driveURL,
 		ShipTo:   shipTo, EntryDate: entryDate, CancelDate: cancelDate,
 		TotalWeightKg: totalWeightFormatted, TotalPackages: totalPackages,

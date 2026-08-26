@@ -299,3 +299,22 @@ func buildInvoiceBonusRow(store *productdata.Store, invoicePromo string, totalVa
 		UseZFormula: false,
 	}, true
 }
+
+// excelRowsFrom tra ve danh sach so dong TUYET DOI ma mot don vua chiem
+// trong so dat hang: excelwriter.WriteOrderRows ghi count dong lien tiep
+// bat dau tu startRow.
+//
+// OrderRow.ExcelRows la thu duy nhat noi mot don tren bang ket qua voi
+// nhung dong that cua no trong dondathang.xlsx. Push MISA dua vao no de
+// tach file theo nhanh ke toan; de trong thi don do bi bo qua im lang -
+// da tung xay ra voi ca 8 vendor tru BigC va JIT.
+func excelRowsFrom(startRow, count int) []int {
+	if count <= 0 {
+		return nil
+	}
+	out := make([]int, count)
+	for i := range out {
+		out[i] = startRow + i
+	}
+	return out
+}

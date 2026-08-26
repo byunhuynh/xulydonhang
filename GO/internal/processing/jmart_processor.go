@@ -299,11 +299,14 @@ func (p *RealProcessor) processJMartSegment(filePath string, realPageNum int, te
 
 	return OrderRow{
 		FileName: filepath.Base(filePath), Page: pageLabel, System: "JMart", MaKhachHang: jmartCustomerCode,
-		PO: poNumber, DonGia: fmt.Sprintf("%.0f", totalValue), Status: statusText, StatusKind: statusKind,
+		// So dong that cua don nay trong so dat hang - push MISA dua vao
+		// day de tach file theo nhanh ke toan.
+		ExcelRows: excelRowsFrom(startRow, len(rows)),
+		PO:        poNumber, DonGia: fmt.Sprintf("%.0f", totalValue), Status: statusText, StatusKind: statusKind,
 		DriveURL: driveURL,
-		ShipTo: deliveryAddress, EntryDate: entryDate, CancelDate: cancelDate,
+		ShipTo:   deliveryAddress, EntryDate: entryDate, CancelDate: cancelDate,
 		TotalWeightKg: totalWeightFormatted, TotalPackages: totalPackages,
 		PromoItems: finalizePromoItems(promoTotals),
-		SkuLog: skuLog, PriceMismatchCount: saigia, PriceMismatchDetails: mismatchDetails,
+		SkuLog:     skuLog, PriceMismatchCount: saigia, PriceMismatchDetails: mismatchDetails,
 	}, nil
 }

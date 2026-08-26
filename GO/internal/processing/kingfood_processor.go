@@ -57,14 +57,14 @@ func kingfoodOrderNumber(poNumber string) string {
 }
 
 // parseKingfoodPrice mirrors laydanhsachsanpham_kingfood's price
-// parsing (xulydonhang.py:6744): price_str.replace('.', '').replace(',', '.')
+// parsing (xulydonhang.py:6744): price_str.replace('.', ”).replace(',', '.')
 // — Vietnamese/European number format (period = thousands separator,
 // comma = decimal separator), the OPPOSITE convention from every other
 // vendor in this project (which only ever strip commas, US-style
 // thousands, with no decimal-comma). NOT a drop-in replacement for the
 // shared parseNumericField helper — scoped to Kingfood's price field
 // only; Kingfood's quantity field uses parseNumericField as usual (only
-// strips periods, matching Python's quantity.replace('.', '')).
+// strips periods, matching Python's quantity.replace('.', ”)).
 func parseKingfoodPrice(s string) float64 {
 	s = strings.ReplaceAll(s, ".", "")
 	s = strings.ReplaceAll(s, ",", ".")
@@ -343,11 +343,14 @@ func (p *RealProcessor) processKingfoodSegment(filePath string, realPageNum int,
 
 	return OrderRow{
 		FileName: filepath.Base(filePath), Page: pageLabel, System: "Kingfood", MaKhachHang: kingfoodCustomerCode,
-		PO: poNumber, DonGia: fmt.Sprintf("%.0f", totalValue), Status: statusText, StatusKind: statusKind,
+		// So dong that cua don nay trong so dat hang - push MISA dua vao
+		// day de tach file theo nhanh ke toan.
+		ExcelRows: excelRowsFrom(startRow, len(rows)),
+		PO:        poNumber, DonGia: fmt.Sprintf("%.0f", totalValue), Status: statusText, StatusKind: statusKind,
 		DriveURL: driveURL,
-		ShipTo: kingfoodDeliveryAddress, EntryDate: entryDate, CancelDate: cancelDate,
+		ShipTo:   kingfoodDeliveryAddress, EntryDate: entryDate, CancelDate: cancelDate,
 		TotalWeightKg: totalWeightFormatted, TotalPackages: totalPackages,
 		PromoItems: finalizePromoItems(promoTotals),
-		SkuLog: skuLog, PriceMismatchCount: saigia, PriceMismatchDetails: mismatchDetails,
+		SkuLog:     skuLog, PriceMismatchCount: saigia, PriceMismatchDetails: mismatchDetails,
 	}, nil
 }
