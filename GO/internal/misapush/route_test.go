@@ -101,7 +101,7 @@ func TestSeedRouting_PhủMọiHệThốngProcessorSinhRa(t *testing.T) {
 	// thì test này đỏ ngay, thay vì lặng lẽ chặn push giữa lúc cần đẩy đơn.
 	want := []string{
 		"BigC/GC", "BigC/MT",
-		"COOPFOOD", "COOPMART", "Coop",
+		"COOPFOOD", "COOPMART",
 		"Emart", "FujiMart",
 		"JIT-CHOICE/WH6_HN", "JIT-CHOICE/WH6_HTLA",
 		"JMart", "Kingfood", "Lotte", "MR.DIY", "Satra",
@@ -121,7 +121,7 @@ func TestSeedRouting_PhủMọiHệThốngProcessorSinhRa(t *testing.T) {
 
 func TestSeedRouting_ĐúngNhánhChoTừngKhoá(t *testing.T) {
 	seed := SeedRouting()
-	htla := []string{"TMĐT-*", "COOPMART", "COOPFOOD", "Coop", "Lotte", "Satra", "MR.DIY", "FujiMart", "BigC/GC", "JIT-CHOICE/WH6_HTLA"}
+	htla := []string{"TMĐT-*", "COOPMART", "COOPFOOD", "Lotte", "Satra", "MR.DIY", "FujiMart", "BigC/GC", "JIT-CHOICE/WH6_HTLA"}
 	haThanh := []string{"BigC/MT", "Emart", "Winmart", "Kingfood", "JMart", "JIT-CHOICE/WH6_HN"}
 	for _, k := range htla {
 		if seed[k] != BranchHTLA {

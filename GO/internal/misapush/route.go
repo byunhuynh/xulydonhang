@@ -87,22 +87,27 @@ func Label(key string) string {
 // thoải mái mà không đụng vào bản gốc.
 func SeedRouting() map[string]string {
 	return map[string]string{
-		TMDTRouteKey:                BranchHTLA,
-		"COOPMART":                  BranchHTLA,
-		"COOPFOOD":                  BranchHTLA,
-		"Coop":                      BranchHTLA,
-		"Lotte":                     BranchHTLA,
-		"Satra":                     BranchHTLA,
-		"MR.DIY":                    BranchHTLA,
-		"FujiMart":                  BranchHTLA,
-		systemBigC + "/GC":          BranchHTLA,
-		systemJIT + "/WH6_HTLA":     BranchHTLA,
-		systemBigC + "/MT":          BranchHaThanh,
-		"Emart":                     BranchHaThanh,
-		"Winmart":                   BranchHaThanh,
-		"Kingfood":                  BranchHaThanh,
-		"JMart":                     BranchHaThanh,
-		systemJIT + "/WH6_HN":       BranchHaThanh,
+		TMDTRouteKey: BranchHTLA,
+		// Dung HAI gia tri nay, khong co "Coop" tran: don Coop thanh cong
+		// luon lay he thong tu cot A sheet MAKH va bi ep ve COOPFOOD hoac
+		// COOPMART (xem coop_processor.go). Chuoi "Coop" chi xuat hien tren
+		// DONG THAT BAI, ma dong that bai khong co ExcelRows nen khong bao
+		// gio vao modal push - them no vao day chi lam bang Cai dat co mot
+		// dong trong nhu co nghia ma khong bao gio khop don nao.
+		"COOPMART":              BranchHTLA,
+		"COOPFOOD":              BranchHTLA,
+		"Lotte":                 BranchHTLA,
+		"Satra":                 BranchHTLA,
+		"MR.DIY":                BranchHTLA,
+		"FujiMart":              BranchHTLA,
+		systemBigC + "/GC":      BranchHTLA,
+		systemJIT + "/WH6_HTLA": BranchHTLA,
+		systemBigC + "/MT":      BranchHaThanh,
+		"Emart":                 BranchHaThanh,
+		"Winmart":               BranchHaThanh,
+		"Kingfood":              BranchHaThanh,
+		"JMart":                 BranchHaThanh,
+		systemJIT + "/WH6_HN":   BranchHaThanh,
 	}
 }
 
