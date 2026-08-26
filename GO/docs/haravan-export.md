@@ -1,5 +1,11 @@
 # haravan-order-export
 
+> **Cập nhật 25/08/2026:** logic của tool này đã được đưa vào app chính
+> thành nhánh xử lý TMĐT — thả `XUẤT HÀNG HN-LA MỚI.xlsx` vào app rồi bấm
+> "Xử lý". Xem `docs/superpowers/specs/2026-08-25-tmdt-haravan-branch-design.md`.
+> CLI ở `GO/cmd/haravan-export` vẫn giữ để đối chiếu và cho hai bố cục
+> `haravan` / `full` mà app không dùng.
+
 Lấy đơn hàng từ **Haravan Omni API** (đơn đồng bộ về từ **Shopee** và **TikTok Shop**) rồi ghi ra file **Excel**.
 
 ## 1. Access token
