@@ -157,7 +157,7 @@ export function ControlPanel() {
         ) : (
           <button
             onClick={handleProcess}
-            disabled={isProcessing}
+            disabled={isProcessing || isPushing}
             className={`ml-auto inline-flex items-center justify-center gap-2 rounded-lg bg-gradient-to-br from-accent to-[#1a9dc4] px-5 py-2.5 text-sm font-extrabold tracking-wide text-[#0a1620] transition-transform hover:brightness-110 active:scale-[0.98] disabled:opacity-60 ${
               !isProcessing ? 'animate-pulse-glow' : ''
             }`}

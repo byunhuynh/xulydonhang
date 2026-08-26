@@ -270,6 +270,18 @@ func TestPushMisa_TừChốiLờiGọiThứHaiKhiĐangĐẩy(t *testing.T) {
 	}
 }
 
+func TestReserveBatch_TừChốiKhiĐangĐẩyMisa(t *testing.T) {
+	app, _ := newTestAppForPush(t, &fakePusher{}, defaultMisaCfg())
+	app.pushing.Store(true)
+
+	if app.reserveBatch() {
+		t.Error("reserveBatch() = true dù đang có lượt đẩy MISA chạy — một batch mới sẽ ClearOrderRows/ghi đè đúng lúc pushOneBranch đang tách workbook, đơn của lô mới bị đẩy nhầm vào sổ kế toán")
+	}
+	if app.processing.Load() {
+		t.Error("processing bị bật dù reserveBatch bị từ chối — lời từ chối phải KHÔNG có tác dụng phụ nào")
+	}
+}
+
 func TestRunMisaPush_TruyềnPhiênVàSidURLXuốngPusher(t *testing.T) {
 	pusher := &fakePusher{}
 	app, _ := newTestAppForPush(t, pusher, defaultMisaCfg())

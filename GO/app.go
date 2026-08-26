@@ -412,9 +412,17 @@ func (a *App) lockWorkbookMutation(processingMessage string) error {
 	return nil
 }
 
+// reserveBatch từ chối cả khi đã có batch khác đang chạy LẪN khi đang có
+// một lượt đẩy MISA đang chạy: PushMisa/pushOneBranch đọc a.excelPath và
+// tách workbook ra file tạm cho từng nhánh - một batch mới ClearOrderRows
+// rồi ghi đè đúng lúc đó sẽ khiến SplitWorkbook đọc phải nội dung đã đổi,
+// và đơn của lô mới bị đẩy nhầm vào sổ kế toán của nhánh đang tách dở.
 func (a *App) reserveBatch() bool {
 	a.workbookAdmissionMu.Lock()
 	defer a.workbookAdmissionMu.Unlock()
+	if a.pushing.Load() {
+		return false
+	}
 	return a.processing.CompareAndSwap(false, true)
 }
 
@@ -456,7 +464,7 @@ func (a *App) SelectFiles() ([]string, error) {
 // file TMĐT thì truyền map rỗng hoặc nil.
 func (a *App) ProcessFiles(files []string, ranges map[string]TMDTDateRange) {
 	if !a.reserveBatch() {
-		a.emitter.Emit("process:log", "⚠️ Đã có một batch đang xử lý, vui lòng đợi hoàn tất.")
+		a.emitter.Emit("process:log", "⚠️ Đã có một batch đang xử lý hoặc đang đẩy lên MISA, vui lòng đợi hoàn tất rồi thử lại.")
 		return
 	}
 	go a.runReservedBatch(a.emitter, files, ranges)
@@ -464,7 +472,7 @@ func (a *App) ProcessFiles(files []string, ranges map[string]TMDTDateRange) {
 
 func (a *App) runBatch(emitter Emitter, files []string, ranges map[string]TMDTDateRange) {
 	if !a.reserveBatch() {
-		emitter.Emit("process:log", "⚠️ Đã có một batch đang xử lý, vui lòng đợi hoàn tất.")
+		emitter.Emit("process:log", "⚠️ Đã có một batch đang xử lý hoặc đang đẩy lên MISA, vui lòng đợi hoàn tất rồi thử lại.")
 		return
 	}
 	a.runReservedBatch(emitter, files, ranges)

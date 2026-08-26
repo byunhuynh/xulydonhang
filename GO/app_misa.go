@@ -179,8 +179,21 @@ func (a *App) pushOneBranch(emitter Emitter, misaCfg map[string]string, branch s
 	// để lại trong thư mục tạm là rò dữ liệu khách hàng.
 	defer os.Remove(tmpPath)
 
-	if err := misapush.SplitWorkbook(a.excelPath, tmpPath, rows); err != nil {
-		fail("không tách được đơn của nhánh: %v", err)
+	// Giữ excelMu đúng lúc đọc + tách workbook, KHÔNG giữ suốt lời gọi
+	// mạng bên dưới (đẩy lên MISA mất hàng chục giây) - giữ khoá cả quãng
+	// đó sẽ treo mọi thao tác Excel khác (ConfirmPrice, UpdateJITPeriod,
+	// và cả ProcessFiles một khi batch mới được phép chạy lại). Đây là
+	// khoá CHỐNG một batch xử lý mới ghi đè a.excelPath giữa lúc
+	// SplitWorkbook đang đọc nó - reserveBatch() đã chặn batch mới trong
+	// lúc a.pushing bật, nhưng khoá này vẫn cần cho đúng phần đọc/ghi
+	// thật sự tranh chấp, cùng khuôn ConfirmPrice/UpdateJITPeriod dùng.
+	splitErr := func() error {
+		a.excelMu.Lock()
+		defer a.excelMu.Unlock()
+		return misapush.SplitWorkbook(a.excelPath, tmpPath, rows)
+	}()
+	if splitErr != nil {
+		fail("không tách được đơn của nhánh: %v", splitErr)
 		return
 	}
 
