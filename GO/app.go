@@ -18,6 +18,7 @@ import (
 	"order-processor/internal/appsettings"
 	"order-processor/internal/driveupload"
 	"order-processor/internal/fileset"
+	"order-processor/internal/misapush"
 	"order-processor/internal/processing"
 	"order-processor/internal/processing/excelwriter"
 	"order-processor/internal/processing/pricing"
@@ -76,6 +77,17 @@ type App struct {
 	// tmdtWaiting cho biết đang có nhánh TMĐT chờ phản hồi — dùng để từ
 	// chối lời gọi Resolve/Cancel lạc (người dùng bấm khi không có modal).
 	tmdtWaiting atomic.Bool
+	// misaPusher thực hiện một lần đẩy cho một nhánh. Thay được trong
+	// test để không phải chạm mạng — cùng khuôn với zaloSender.
+	misaPusher misapush.Pusher
+	// pushing khoá lượt đẩy MISA, đúng vai trò a.sending làm cho Zalo:
+	// hai lượt đẩy chồng nhau sẽ đọc cùng một workbook trong lúc file
+	// tạm của nhau đang được cắt.
+	pushing atomic.Bool
+	// misaSessionPath là file phiên đăng nhập MISA, nằm cạnh
+	// settings.bhconfig. Nó thay được mật khẩu trong 24h nên đã được
+	// .gitignore loại ra.
+	misaSessionPath string
 }
 
 // resolveRepoFile looks for filename starting in the current working
@@ -140,6 +152,16 @@ func NewApp() (*App, error) {
 		return nil, fmt.Errorf("app: load app settings: %w", err)
 	}
 
+	// Vật chất hoá bảng định tuyến mặc định xuống settings.bhconfig ngay
+	// lần chạy đầu, chỉ điền khoá còn thiếu. Xem misapush.ApplySeed cho
+	// lý do đầy đủ: nếu bảng gieo chỉ sống trong code như giá trị dự
+	// phòng, một lần sửa hằng số ở bản sau sẽ lặng lẽ đổi nhánh của mọi
+	// mục người dùng chưa từng chạm vào. Lỗi ghi đĩa KHÔNG chặn khởi
+	// động — app vẫn chạy được đầy đủ, chỉ là lần sau gieo lại.
+	if misapush.ApplySeed(settings.MisaRouting) {
+		_ = appSettingsStore.Save(settings)
+	}
+
 	excelPath := resolveRepoFile("dondathang.xlsx")
 
 	// orderDir must be resolved the same way excelPath/appSettingsPath
@@ -160,7 +182,9 @@ func NewApp() (*App, error) {
 		zaloSender: &zalosend.ChromedpSender{
 			ProfileDir: filepath.Join(resolveRepoDir("settings.ini"), "zalo_profile"),
 		},
-		tmdtResolve: make(chan tmdtResolution, 1),
+		tmdtResolve:     make(chan tmdtResolution, 1),
+		misaPusher:      &misapush.HTTPPusher{},
+		misaSessionPath: filepath.Join(resolveRepoDir("settings.ini"), "misa-session.json"),
 	}
 
 	app.dataLoader = func() (processing.Processor, error) {
@@ -388,9 +412,17 @@ func (a *App) lockWorkbookMutation(processingMessage string) error {
 	return nil
 }
 
+// reserveBatch từ chối cả khi đã có batch khác đang chạy LẪN khi đang có
+// một lượt đẩy MISA đang chạy: PushMisa/pushOneBranch đọc a.excelPath và
+// tách workbook ra file tạm cho từng nhánh - một batch mới ClearOrderRows
+// rồi ghi đè đúng lúc đó sẽ khiến SplitWorkbook đọc phải nội dung đã đổi,
+// và đơn của lô mới bị đẩy nhầm vào sổ kế toán của nhánh đang tách dở.
 func (a *App) reserveBatch() bool {
 	a.workbookAdmissionMu.Lock()
 	defer a.workbookAdmissionMu.Unlock()
+	if a.pushing.Load() {
+		return false
+	}
 	return a.processing.CompareAndSwap(false, true)
 }
 
@@ -432,7 +464,7 @@ func (a *App) SelectFiles() ([]string, error) {
 // file TMĐT thì truyền map rỗng hoặc nil.
 func (a *App) ProcessFiles(files []string, ranges map[string]TMDTDateRange) {
 	if !a.reserveBatch() {
-		a.emitter.Emit("process:log", "⚠️ Đã có một batch đang xử lý, vui lòng đợi hoàn tất.")
+		a.emitter.Emit("process:log", "⚠️ Đã có một batch đang xử lý hoặc đang đẩy lên MISA, vui lòng đợi hoàn tất rồi thử lại.")
 		return
 	}
 	go a.runReservedBatch(a.emitter, files, ranges)
@@ -440,7 +472,7 @@ func (a *App) ProcessFiles(files []string, ranges map[string]TMDTDateRange) {
 
 func (a *App) runBatch(emitter Emitter, files []string, ranges map[string]TMDTDateRange) {
 	if !a.reserveBatch() {
-		emitter.Emit("process:log", "⚠️ Đã có một batch đang xử lý, vui lòng đợi hoàn tất.")
+		emitter.Emit("process:log", "⚠️ Đã có một batch đang xử lý hoặc đang đẩy lên MISA, vui lòng đợi hoàn tất rồi thử lại.")
 		return
 	}
 	a.runReservedBatch(emitter, files, ranges)

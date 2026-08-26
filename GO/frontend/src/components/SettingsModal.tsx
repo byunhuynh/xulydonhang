@@ -5,9 +5,10 @@ import { GetAppSettings, SaveAppSettings } from '../../wailsjs/go/main/App'
 import { useAppStore } from '../store/appStore'
 import type { AppSettings } from '../types'
 import { KeyValueEditor } from './KeyValueEditor'
+import { MisaRoutingEditor } from './MisaRoutingEditor'
 import { useModalEntrance } from '../lib/useModalEntrance'
 
-type SettingsTab = 'gid' | 'zalo' | 'reminder' | 'haravan'
+type SettingsTab = 'gid' | 'zalo' | 'reminder' | 'haravan' | 'misa' | 'misaRouting'
 
 interface SettingsModalProps {
   onClose: () => void
@@ -17,7 +18,7 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
   const [tab, setTab] = useState<SettingsTab>('gid')
   const [settings, setSettings] = useState<AppSettings | null>(null)
   const [saved, setSaved] = useState(false)
-  const [dupState, setDupState] = useState({ gid: false, zalo: false, reminder: false, haravan: false })
+  const [dupState, setDupState] = useState({ gid: false, zalo: false, reminder: false, haravan: false, misa: false })
   const appendLog = useAppStore((s) => s.appendLog)
   const backdropRef = useRef<HTMLDivElement>(null)
   const cardRef = useRef<HTMLDivElement>(null)
@@ -39,7 +40,7 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
     )
   }
 
-  const hasDuplicates = dupState.gid || dupState.zalo || dupState.reminder || dupState.haravan
+  const hasDuplicates = dupState.gid || dupState.zalo || dupState.reminder || dupState.haravan || dupState.misa
 
   async function handleSave() {
     if (!settings) return
@@ -56,6 +57,8 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
     { key: 'zalo', label: 'Zalo' },
     { key: 'reminder', label: 'Nhắc nhở' },
     { key: 'haravan', label: 'Haravan (TMĐT)' },
+    { key: 'misa', label: 'MISA' },
+    { key: 'misaRouting', label: 'MISA – Nhánh' },
   ]
 
   return (
@@ -127,6 +130,26 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
               // Chỉ access_token là bí mật; exclude_shops vẫn hiện bình
               // thường để người dùng đọc lại danh sách shop đang bỏ qua.
               secretKeys={['access_token']}
+            />
+          )}
+          {tab === 'misa' && (
+            <KeyValueEditor
+              entries={settings.misa}
+              onChange={(misa) => setSettings({ ...settings, misa })}
+              onDuplicateChange={(hasDup) => setDupState((d) => ({ ...d, misa: hasDup }))}
+              keyLabel="Khoá"
+              valueLabel="Giá trị"
+              valueType="text"
+              // sid_url mang secret trên query string — ai có nó lấy được
+              // phiên MISA. Tên bộ dữ liệu thì hiện bình thường để đọc lại
+              // được mình đang đẩy vào sổ nào.
+              secretKeys={['sid_url']}
+            />
+          )}
+          {tab === 'misaRouting' && (
+            <MisaRoutingEditor
+              entries={settings.misa_routing}
+              onChange={(misa_routing) => setSettings({ ...settings, misa_routing })}
             />
           )}
         </div>

@@ -2385,16 +2385,28 @@ thấy ngay chỗ phải bấm."
 - Modify: `GO/frontend/package.json` (thêm file test vào script `test`)
 
 **Interfaces:**
-- Consumes: `groupKeyFor` từ `lib/zaloGrouping.ts`, kiểu `OrderRow` từ `types.ts`.
+- Consumes: kiểu `OrderRow` từ `types.ts`. **Không** import `groupKeyFor` — nó được
+  truyền vào qua tham số (xem ghi chú dưới).
 - Produces:
   - `export const MISA_BRANCH_OPTIONS: readonly [{ value: 'ha_thanh'; label: 'Hà Thành' }, { value: 'htla'; label: 'HTLA' }]`
   - `export interface MisaGroupSeed { key: string; po: string; system: string; customerCode: string; shipTo: string; excelRows: number[] }`
   - `export interface MisaGroup extends MisaGroupSeed { routeKey: string; routeLabel: string; branch: string; selected: boolean }`
-  - `export function buildMisaGroups(rows: OrderRow[]): MisaGroupSeed[]`
+  - `export function buildMisaGroups(rows: OrderRow[], groupKey: (row: OrderRow) => string): MisaGroupSeed[]`
   - `export function branchTotals(groups: MisaGroup[]): Record<string, { orders: number; rows: number }>`
   - `export function pendingGroups(groups: MisaGroup[], pushedBranches: string[]): MisaGroup[]`
   - `export function canPush(groups: MisaGroup[], pushedBranches: string[]): boolean`
   - `export function rememberRouting(groups: MisaGroup[]): Record<string, string>`
+
+**Vì sao `groupKey` là tham số chứ không phải import.** `node --experimental-strip-types`
+**không** phân giải được import không có đuôi khi đó là import GIÁ TRỊ — đã dựng thử và
+xác nhận (`ERR_MODULE_NOT_FOUND` tại `src/lib/zaloMessage`). Chuỗi sẽ là
+`misaBranch.ts` → `./zaloGrouping` → `./zaloMessage`, mắt xích thứ hai là import giá trị
+(`TMDT_SOURCE_PREFIX`), nên file test chết ngay lúc nạp module. Thêm đuôi `.ts` vào
+`zaloGrouping.ts` thì `npx tsc --noEmit` đỏ, vì `tsconfig.json` đang để
+`moduleResolution: "Node"`. Chép lại quy tắc gom nhóm thì thành hai bản của một quy
+tắc — đúng thứ spec cấm. Nên `misaBranch.ts` **chỉ giữ `import type`** (bị xoá lúc
+chạy) và nhận hàm gom nhóm qua tham số; `MisaPushModal` truyền thẳng `groupKeyFor`,
+vẫn đúng một định nghĩa và chữ ký ép phải truyền.
 
 - [ ] **Step 1: Viết test đỏ**
 
@@ -2414,6 +2426,12 @@ import {
   type MisaGroup,
 } from './misaBranch.ts'
 import type { OrderRow } from '../types.ts'
+
+// Bản sao tối giản của groupKeyFor (lib/zaloGrouping.ts) CHỈ dùng trong
+// test. Bản thật được MisaPushModal truyền vào lúc chạy — ở đây chỉ cần
+// một hàm có cùng hình dạng để kiểm cơ chế gom nhóm.
+const testGroupKey = (r: OrderRow): string =>
+  r.system === 'JIT-CHOICE' || r.sourceId.startsWith('tmdt|') ? r.sourceId : r.po
 
 function row(over: Partial<OrderRow>): OrderRow {
   return {
@@ -2446,7 +2464,7 @@ test('gom nhóm theo cùng khoá mà bảng kết quả và nút Zalo đang dùn
     row({ po: 'PO-A', excelRows: [9, 10] }),
     row({ po: 'PO-A', excelRows: [11] }),
     row({ po: 'PO-B', excelRows: [12] }),
-  ])
+  ], testGroupKey)
   assert.equal(groups.length, 2)
   assert.deepEqual(groups[0].excelRows, [9, 10, 11])
   assert.deepEqual(groups[1].excelRows, [12])
@@ -2456,7 +2474,7 @@ test('gom JIT theo file chứ không theo từng trang', () => {
   const groups = buildMisaGroups([
     row({ system: 'JIT-CHOICE', sourceId: 'awb.pdf', po: 'PO-1', excelRows: [9], shipTo: 'WH6_HN' }),
     row({ system: 'JIT-CHOICE', sourceId: 'awb.pdf', po: 'PO-2', excelRows: [10], shipTo: 'WH6_HN' }),
-  ])
+  ], testGroupKey)
   assert.equal(groups.length, 1)
   assert.deepEqual(groups[0].excelRows, [9, 10])
   assert.equal(groups[0].shipTo, 'WH6_HN')
@@ -2465,7 +2483,7 @@ test('gom JIT theo file chứ không theo từng trang', () => {
 test('bỏ qua dòng không ghi được vào Excel', () => {
   // Dòng hỏng (không trích xuất được) không có excelRows — không có gì để
   // đẩy, và đưa vào modal chỉ tổ khiến người dùng tưởng nó sẽ vào sổ.
-  const groups = buildMisaGroups([row({ po: 'PO-A', excelRows: [] }), row({ po: 'PO-B', excelRows: [9] })])
+  const groups = buildMisaGroups([row({ po: 'PO-A', excelRows: [] }), row({ po: 'PO-B', excelRows: [9] })], testGroupKey)
   assert.equal(groups.length, 1)
   assert.equal(groups[0].po, 'PO-B')
 })
@@ -2473,7 +2491,7 @@ test('bỏ qua dòng không ghi được vào Excel', () => {
 test('giữ thông tin định tuyến của dòng đầu mỗi nhóm', () => {
   const groups = buildMisaGroups([
     row({ po: 'PO-A', system: 'BigC', maKhachHang: 'MB_GC_BIGC', excelRows: [9] }),
-  ])
+  ], testGroupKey)
   assert.equal(groups[0].system, 'BigC')
   assert.equal(groups[0].customerCode, 'MB_GC_BIGC')
 })
@@ -2562,7 +2580,6 @@ Create `GO/frontend/src/lib/misaBranch.ts`:
 
 ```ts
 import type { OrderRow } from '../types'
-import { groupKeyFor } from './zaloGrouping'
 
 // Khoá lưu trữ của hai nhánh — PHẢI khớp misapush.BranchHaThanh /
 // BranchHTLA phía Go. Nhãn là thứ hiện ra, khoá là thứ ghi xuống file.
@@ -2589,20 +2606,26 @@ export interface MisaGroup extends MisaGroupSeed {
   selected: boolean
 }
 
-// buildMisaGroups gom các dòng kết quả thành đơn vị "1 đơn" đúng bằng
-// groupKeyFor - cùng khoá mà bảng kết quả và nút gửi Zalo đang dùng, nên
-// một dòng trên modal là đúng một đơn người dùng nhìn thấy trên bảng.
+// buildMisaGroups gom các dòng kết quả thành đơn vị "1 đơn".
+//
+// groupKey được TRUYỀN VÀO chứ không import: file này phải nạp được bằng
+// `node --experimental-strip-types` (bộ test của repo), mà runner đó không
+// phân giải nổi import không đuôi khi là import giá trị - và
+// ./zaloGrouping có đúng một import như vậy. Chỗ gọi duy nhất
+// (MisaPushModal) truyền thẳng groupKeyFor, nên vẫn chỉ có MỘT định nghĩa
+// khoá nhóm cho cả bảng kết quả, nút Zalo lẫn modal này; chữ ký ép phải
+// truyền một cái gì đó, không có đường quên.
 //
 // Dòng không có excelRows bị bỏ hẳn: không trích xuất được thì không có
 // gì trong sổ đặt hàng để đẩy, và để nó hiện lên chỉ tổ khiến người dùng
 // tưởng nó sẽ vào sổ.
-export function buildMisaGroups(rows: OrderRow[]): MisaGroupSeed[] {
+export function buildMisaGroups(rows: OrderRow[], groupKey: (row: OrderRow) => string): MisaGroupSeed[] {
   const order: string[] = []
   const byKey = new Map<string, MisaGroupSeed>()
 
   for (const row of rows) {
     if (!row.excelRows || row.excelRows.length === 0) continue
-    const key = groupKeyFor(row)
+    const key = groupKey(row)
     const existing = byKey.get(key)
     if (existing) {
       existing.excelRows.push(...row.excelRows)
@@ -3011,6 +3034,7 @@ import {
   rememberRouting,
   type MisaGroup,
 } from '../lib/misaBranch'
+import { groupKeyFor } from '../lib/zaloGrouping'
 import { SegmentedControl } from './SegmentedControl'
 import { useModalEntrance } from '../lib/useModalEntrance'
 
@@ -3034,7 +3058,9 @@ export function MisaPushModal({ onClose }: MisaPushModalProps) {
   useModalEntrance(backdropRef, cardRef, [!!groups])
 
   useEffect(() => {
-    const seeds = buildMisaGroups(rows)
+    // groupKeyFor truyền vào đây là chỗ DUY NHẤT nối modal với định
+    // nghĩa khoá nhóm dùng chung của bảng kết quả và nút gửi Zalo.
+    const seeds = buildMisaGroups(rows, groupKeyFor)
     MisaResolveRoutes(
       seeds.map((s) => ({ system: s.system, customerCode: s.customerCode, shipTo: s.shipTo })),
     )

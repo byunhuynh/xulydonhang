@@ -5,6 +5,8 @@ export namespace appsettings {
 	    zalo: Record<string, string>;
 	    reminder: Record<string, string>;
 	    haravan: Record<string, string>;
+	    misa: Record<string, string>;
+	    misa_routing: Record<string, string>;
 	
 	    static createFrom(source: any = {}) {
 	        return new Settings(source);
@@ -16,6 +18,8 @@ export namespace appsettings {
 	        this.zalo = source["zalo"];
 	        this.reminder = source["reminder"];
 	        this.haravan = source["haravan"];
+	        this.misa = source["misa"];
+	        this.misa_routing = source["misa_routing"];
 	    }
 	}
 
@@ -23,6 +27,56 @@ export namespace appsettings {
 
 export namespace main {
 	
+	export class MisaPushJob {
+	    po: string;
+	    routeKey: string;
+	    branch: string;
+	    excelRows: number[];
+	
+	    static createFrom(source: any = {}) {
+	        return new MisaPushJob(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.po = source["po"];
+	        this.routeKey = source["routeKey"];
+	        this.branch = source["branch"];
+	        this.excelRows = source["excelRows"];
+	    }
+	}
+	export class MisaRouteInfo {
+	    key: string;
+	    label: string;
+	    branch: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new MisaRouteInfo(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.key = source["key"];
+	        this.label = source["label"];
+	        this.branch = source["branch"];
+	    }
+	}
+	export class MisaRouteInput {
+	    system: string;
+	    customerCode: string;
+	    shipTo: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new MisaRouteInput(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.system = source["system"];
+	        this.customerCode = source["customerCode"];
+	        this.shipTo = source["shipTo"];
+	    }
+	}
 	export class TMDTComboEntry {
 	    key: string;
 	    product: string;

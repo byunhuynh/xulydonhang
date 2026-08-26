@@ -15,7 +15,13 @@ export function InitializeApp():Promise<void>;
 
 export function InspectTMDTFiles(arg1:Array<string>):Promise<Array<string>>;
 
+export function MisaResolveRoutes(arg1:Array<main.MisaRouteInput>):Promise<Array<main.MisaRouteInfo>>;
+
+export function MisaRouteOptions():Promise<Array<main.MisaRouteInfo>>;
+
 export function ProcessFiles(arg1:Array<string>,arg2:Record<string, main.TMDTDateRange>):Promise<void>;
+
+export function PushMisa(arg1:Array<main.MisaPushJob>):Promise<void>;
 
 export function RefreshZaloQR():Promise<void>;
 
