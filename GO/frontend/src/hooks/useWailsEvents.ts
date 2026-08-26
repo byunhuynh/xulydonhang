@@ -1,6 +1,6 @@
 import { useEffect } from 'react'
 import { EventsOn, OnFileDrop, OnFileDropOff } from '../../wailsjs/runtime/runtime'
-import { useAppStore, type LockStatus } from '../store/appStore'
+import { useAppStore, type LockStatus, type MisaPushResult } from '../store/appStore'
 import type { OrderRow } from '../types'
 import type { BatchProgress } from '../lib/batchProgress'
 import type { TMDTMissingCombo } from '../lib/tmdtMissing'
@@ -15,6 +15,8 @@ export function useWailsEvents() {
   const deselectPO = useAppStore((s) => s.deselectPO)
   const setZaloQR = useAppStore((s) => s.setZaloQR)
   const setTMDTMissing = useAppStore((s) => s.setTMDTMissing)
+  const setPushing = useAppStore((s) => s.setPushing)
+  const appendMisaResult = useAppStore((s) => s.appendMisaResult)
 
   useEffect(() => {
     const offLog = EventsOn('process:log', (line: string) => appendLog(line))
@@ -49,6 +51,11 @@ export function useWailsEvents() {
       appendLog('🏁 Đã kết thúc lượt gửi Zalo.')
       setZaloQR(null)
     })
+    const offMisaLog = EventsOn('misa:log', (line: string) => appendLog(line))
+    // misa:pushed báo theo NHÁNH chứ không theo đơn: một nhánh là một
+    // lần đẩy nguyên khối, MISA không trả kết quả riêng cho từng đơn.
+    const offMisaPushed = EventsOn('misa:pushed', (result: MisaPushResult) => appendMisaResult(result))
+    const offMisaDone = EventsOn('misa:done', () => setPushing(false))
     // Attaches the actual dragover/dragleave/drop DOM listeners on window;
     // without this call the Go-side runtime.OnFileDrop callback never fires
     // and WebView2 falls back to navigating the window to the dropped file.
@@ -67,7 +74,10 @@ export function useWailsEvents() {
       offZaloSent()
       offZaloDone()
       offTMDTMissing()
+      offMisaLog()
+      offMisaPushed()
+      offMisaDone()
       OnFileDropOff()
     }
-  }, [appendLog, upsertRow, setBatchProgress, setProcessing, addFiles, setLockStatus, deselectPO, setZaloQR, setTMDTMissing])
+  }, [appendLog, upsertRow, setBatchProgress, setProcessing, addFiles, setLockStatus, deselectPO, setZaloQR, setTMDTMissing, setPushing, appendMisaResult])
 }

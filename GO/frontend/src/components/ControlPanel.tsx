@@ -12,6 +12,7 @@ import {
   tmdtShopFromGroupKey,
 } from '../lib/zaloMessage'
 import { groupKeyFor } from '../lib/zaloGrouping'
+import { MisaPushModal } from './MisaPushModal'
 
 export function ControlPanel() {
   const files = useAppStore((s) => s.files)
@@ -24,10 +25,14 @@ export function ControlPanel() {
   const resolvedChoice = useAppStore((s) => s.resolvedChoice)
   const receivedAt = useAppStore((s) => s.receivedAt)
   const jitPeriodState = useAppStore((s) => s.jitPeriodState)
+  const isPushing = useAppStore((s) => s.isPushing)
+  const clearMisaResults = useAppStore((s) => s.clearMisaResults)
 
   // Danh sách file TMĐT đang chờ người dùng chọn khoảng ngày. Modal chỉ
   // bật khi người dùng bấm "Xử lý" — thả file vào không hỏi gì.
   const [pendingTMDT, setPendingTMDT] = useState<string[] | null>(null)
+  // Modal chọn đơn + nhánh kế toán để đẩy lên MISA.
+  const [isMisaOpen, setIsMisaOpen] = useState(false)
 
   async function handleProcess() {
     if (files.length === 0) {
@@ -129,15 +134,18 @@ export function ControlPanel() {
   return (
     <>
       <section className="flex flex-shrink-0 items-center gap-3 rounded-xl border border-border bg-panel px-4 py-3">
-        <div
-          title="Sẽ có ở giai đoạn sau"
-          className="flex items-center gap-2 rounded-lg border border-dashed border-border px-3 py-2 text-xs font-medium text-muted opacity-60"
+        <button
+          type="button"
+          onClick={() => {
+            clearMisaResults()
+            setIsMisaOpen(true)
+          }}
+          disabled={rows.length === 0 || isProcessing || isPushing}
+          title={rows.length === 0 ? 'Xử lý đơn hàng trước đã' : 'Đẩy đơn vừa xử lý lên AMIS Kế toán'}
+          className="inline-flex items-center gap-2 rounded-lg border border-border px-3 py-2 font-sans text-xs font-semibold text-muted transition-colors hover:border-accent hover:text-accent disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:border-border disabled:hover:text-muted"
         >
           <FaCloudArrowUp /> Push MISA
-          <span className="rounded-full bg-white/5 px-1.5 py-0.5 font-mono text-[8px] font-bold tracking-wide">
-            SẮP RA MẮT
-          </span>
-        </div>
+        </button>
         {hasSelection ? (
           <button
             onClick={handleSendZalo}
@@ -178,6 +186,7 @@ export function ControlPanel() {
           }}
         />
       )}
+      {isMisaOpen && <MisaPushModal onClose={() => setIsMisaOpen(false)} />}
     </>
   )
 }

@@ -15,6 +15,14 @@ import type { TMDTMissingCombo } from '../lib/tmdtMissing'
 
 export type LockStatus = 'checking' | 'unlocked' | 'locked'
 
+export interface MisaPushResult {
+  branch: string
+  ok: boolean
+  valid: number
+  invalid: number
+  message: string
+}
+
 interface AppState {
   files: string[]
   isProcessing: boolean
@@ -22,6 +30,11 @@ interface AppState {
   logLines: LogEntry[]
   rows: OrderRow[]
   lockStatus: LockStatus
+  isPushing: boolean
+  misaResults: MisaPushResult[]
+  setPushing: (pushing: boolean) => void
+  appendMisaResult: (result: MisaPushResult) => void
+  clearMisaResults: () => void
   selectedPOs: Set<string>
   resolvedChoice: Record<string, PriceBasis>
   receivedAt: Record<number, string>
@@ -65,6 +78,11 @@ export const useAppStore = create<AppState>((set, get) => ({
   // briefly render as unlocked before the license has actually been
   // verified.
   lockStatus: 'checking',
+  isPushing: false,
+  // Kết quả từng nhánh của lượt đẩy MISA hiện tại. Modal KHÔNG tự đóng
+  // khi xong - nó chuyển sang màn hình kết quả, và nhánh đã vào sổ bị
+  // khoá lại để bấm đẩy lại chỉ gửi nhánh còn lỗi.
+  misaResults: [],
   selectedPOs: new Set(),
   resolvedChoice: {},
   // Wall-clock moment each row FIRST appeared in the results table, keyed
@@ -140,6 +158,10 @@ export const useAppStore = create<AppState>((set, get) => ({
       return { rows }
     }),
   setLockStatus: (lockStatus) => set({ lockStatus }),
+  setPushing: (isPushing) => set({ isPushing }),
+  appendMisaResult: (result) =>
+    set((state) => ({ misaResults: [...state.misaResults, result] })),
+  clearMisaResults: () => set({ misaResults: [] }),
   togglePOSelection: (po) =>
     set((state) => {
       const next = new Set(state.selectedPOs)
