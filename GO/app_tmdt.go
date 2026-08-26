@@ -523,6 +523,10 @@ func groupTMDTSummary(res tmdt.Result) []summaryKeyCount {
 				shop: shop, date: r.EntryDate,
 				channel: channelFromOrderNumber(r.OrderNumber),
 				misa:    r.CustomerCode, shipTo: r.ShipTo,
+				// Khởi tạo rỗng chứ không để nil: nhóm mà MỌI dòng đều #N/A
+				// sẽ không append mã nào, và slice nil ra JSON là `null` —
+				// frontend lặp trên null là ném lỗi giữa lúc dựng tin nhắn.
+				skus: []string{},
 			}
 			agg[k] = g
 		}

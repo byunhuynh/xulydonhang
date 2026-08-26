@@ -443,7 +443,9 @@ export function buildZaloMessageForJITFile(
   // KHÁC với tổng SỐ LƯỢNG sản phẩm (cộng dồn Qty qua totalQty - vd 10
   // mã có thể lên tới 15 sản phẩm nếu vài mã có Qty > 1).
   const skuSet = new Set<string>();
-  for (const r of rows) for (const sku of r.skus) skuSet.add(sku);
+  // `?? []`: Go trả null cho slice chưa gán (đã kiểm: `"skus":null`),
+  // đúng lý do mọi chỗ khác trong file này cũng viết `?? []`.
+  for (const r of rows) for (const sku of r.skus ?? []) skuSet.add(sku);
   const totalQty = rows.reduce((sum, r) => sum + (r.totalQty || 0), 0);
 
   const header = `**🔔 ĐƠN HÀNG JIT-CHOICE**\n${DIVIDER}`;
@@ -509,7 +511,9 @@ export function buildZaloMessageForTMDTShop(
   const totalOrders = rows.reduce((sum, r) => sum + (r.totalOrders || 0), 0);
   const totalQty = rows.reduce((sum, r) => sum + (r.totalQty || 0), 0);
   const skuSet = new Set<string>();
-  for (const r of rows) for (const sku of r.skus) skuSet.add(sku);
+  // `?? []`: Go trả null cho slice chưa gán (đã kiểm: `"skus":null`),
+  // đúng lý do mọi chỗ khác trong file này cũng viết `?? []`.
+  for (const r of rows) for (const sku of r.skus ?? []) skuSet.add(sku);
   const hasNA = rows.some((r) => r.statusKind === "warning");
 
   const header = `**🔔 ĐƠN HÀNG ${heading}**\n${DIVIDER}`;

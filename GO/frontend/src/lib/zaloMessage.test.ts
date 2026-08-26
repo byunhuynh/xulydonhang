@@ -161,3 +161,28 @@ test('tin JIT đếm mã hàng theo SKU thật, không theo số dòng Excel', (
   assert.match(msg, /📦 6 sản phẩm/)
   assert.match(msg, /💰 \*\*6\.000đ\*\*/)
 })
+
+// Go trả `null` (KHÔNG phải []) cho mọi slice chưa gán — đã kiểm bằng
+// json.Marshal trên OrderRow rỗng: `"skus":null`. Phần còn lại của file
+// này vẫn luôn viết `r.promoItems ?? []` / `r.priceMismatchDetails ?? []`
+// đúng vì lý do đó; nhánh đếm SKU mới bỏ mất lớp phòng vệ ấy.
+//
+// Ca dính đòn thật: một nhóm TMĐT mà MỌI dòng đều là #N/A → không mã nào
+// vào danh sách → backend gửi null → cả tin nhắn ném lỗi, nút Gửi Zalo
+// chết cứng đúng lúc dữ liệu đang có vấn đề cần báo nhất.
+test('thiếu danh sách mã (null từ Go) thì đếm 0, không được ném lỗi', () => {
+  const naked = { skus: undefined as unknown as string[] }
+  const tmdt = buildZaloMessageForTMDTShop(
+    [tmdtRow({ entryDate: '25/08/2026', totalOrders: 2, statusKind: 'warning', ...naked })],
+    '',
+  )
+  assert.match(tmdt, /Tổng số mã hàng: \*\*0 mã\*\*/)
+  assert.match(tmdt, /Tổng số đơn: \*\*2 đơn\*\*/)
+
+  const jit = buildZaloMessageForJITFile(
+    [row({ system: 'JIT-CHOICE', shipTo: 'WH6_HN', entryDate: '24/08/2026', donGia: '1000', ...naked })],
+    'Sáng',
+    '',
+  )
+  assert.match(jit, /Tổng số mã hàng: \*\*0 mã\*\*/)
+})
