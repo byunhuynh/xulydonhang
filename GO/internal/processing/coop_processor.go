@@ -10,7 +10,6 @@ import (
 	"strings"
 
 	"order-processor/internal/driveupload"
-	"order-processor/internal/pdfpage"
 	"order-processor/internal/processing/coop"
 	"order-processor/internal/processing/excelwriter"
 	"order-processor/internal/processing/pricing"
@@ -485,12 +484,16 @@ func (p *RealProcessor) processSegment(filePath string, realPageNum int, text, p
 		mismatchDetails[i].ExcelRow += startRow
 	}
 
+	// Tách riêng tài liệu của ĐÚNG đơn này để link Drive của nó chỉ mở ra
+	// chính nó: cắt trang với PDF, ghi khối văn bản của đơn với báo cáo
+	// .txt. Thất bại thì lùi về upload nguyên file — thà link rộng hơn cần
+	// còn hơn không có link nào.
 	uploadPath := filePath
-	if extractedPath, cleanup, extractErr := pdfpage.ExtractPage(filePath, realPageNum); extractErr == nil {
+	if extractedPath, cleanup, extractErr := extractOrderDocument(filePath, realPageNum, text); extractErr == nil {
 		uploadPath = extractedPath
 		defer cleanup()
 	} else if p.LogFunc != nil {
-		p.LogFunc(fmt.Sprintf("⚠️ Không cắt được trang PDF để upload Drive (dùng nguyên file thay thế): %v", extractErr))
+		p.LogFunc(fmt.Sprintf("⚠️ Không tách được tài liệu của đơn để upload Drive (dùng nguyên file thay thế): %v", extractErr))
 	}
 
 	driveURL, uploadErr := driveupload.Upload(p.DriveClient, uploadPath, driveupload.Metadata{
