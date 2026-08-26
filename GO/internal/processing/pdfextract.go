@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/ledongthuc/pdf"
 
@@ -169,7 +170,20 @@ func extractPageTextRaw(page pdf.Page) (string, error) {
 	// code width — correct per the PDF spec, since simple (non-Type0)
 	// fonts always use 1-byte codes regardless of what a malformed CMap
 	// claims.
-	if isGarbledText(text) {
+	//
+	// A SECOND, narrower trigger covers a failure the U+FFFD-ratio gate
+	// cannot see. Real archived Maxidi delivery notes (Crystal Reports)
+	// declare a codespace range that excludes codes their own CMap goes
+	// on to map — see cmapCodespaceExcludesOwnCodes — which destroys
+	// every digit on the page while leaving its Vietnamese prose intact.
+	// Only ~40% of such a page's runes are U+FFFD, under isGarbledText's
+	// >50% threshold, yet the PO number, both dates, the barcode and all
+	// quantities are gone. The extra condition that the page already
+	// contains at least one U+FFFD keeps this from ever re-extracting a
+	// page that decodes cleanly today, so no already-working vendor's
+	// output can move: a self-contradictory CMap alone is not enough,
+	// something must actually have failed to decode as well.
+	if isGarbledText(text) || (strings.ContainsRune(text, utf8.RuneError) && pageHasSelfContradictoryCmap(page)) {
 		if corrected, ok := extractPageTextViaCorrectedCmap(page); ok {
 			return corrected, nil
 		}

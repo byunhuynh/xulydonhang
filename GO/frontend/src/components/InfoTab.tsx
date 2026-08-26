@@ -13,13 +13,13 @@ import {
 import AnimatedBlueLogo from './AnimatedBlueLogo'
 import { SectionHeader } from './SectionHeader'
 
-const SUPPORTED_SYSTEMS = ['Co.op Mart', 'BigC / GO!', 'Lotte Mart', 'Satra', 'Emart', 'Kingfood Mart', 'WinMart', 'FujiMart', 'JMart']
+const SUPPORTED_SYSTEMS = ['Co.op Mart', 'BigC / GO!', 'Lotte Mart', 'Satra', 'Emart', 'Kingfood Mart', 'WinMart', 'FujiMart', 'JMart', 'Maxidi']
 
 const CORE_FEATURES: { icon: React.ReactNode; title: string; desc: string }[] = [
   {
     icon: <FaFilePdf />,
     title: 'Đọc đơn hàng tự động',
-    desc: 'Phân tích file PO gốc (PDF/XLSX/TXT) từ 9 hệ thống MT, tách đúng mã hàng, số lượng, giá theo từng nhà bán lẻ.',
+    desc: 'Phân tích file PO gốc (PDF/XLSX/TXT) từ 10 hệ thống MT, tách đúng mã hàng, số lượng, giá theo từng nhà bán lẻ.',
   },
   {
     icon: <FaScaleBalanced />,

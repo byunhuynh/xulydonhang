@@ -258,6 +258,37 @@ func (s *Store) GetCustomerCodeBySuffix(system, storeCode string) string {
 	return ""
 }
 
+// GetCustomerCodeForSystem returns the customer code (column C) of the
+// FIRST row belonging to the named system (column A, compared
+// case-insensitively), for a retailer that has exactly one customer code
+// rather than one per store.
+//
+// Has no Python counterpart: every vendor in the old app either resolved
+// a per-store code (Coop's get_makhachhang, Lotte's
+// get_makhachhang_lotte) or hardcoded a single one at the call site
+// (Kingfood, JMart). Maxidi has exactly one code but reads it from the
+// sheet, so it can be corrected without rebuilding the app.
+//
+// Returns ok=false when no row matches or the matched row's code cell is
+// blank, rather than a bare "" the caller could mistake for a real
+// value: this code is written straight into the order workbook's
+// customer column, where a blank means an order billed to nobody.
+func (s *Store) GetCustomerCodeForSystem(system string) (string, bool) {
+	system = strings.ToUpper(strings.TrimSpace(system))
+	if system == "" {
+		return "", false
+	}
+	for _, row := range s.customerRows {
+		if strings.ToUpper(strings.TrimSpace(row[0])) != system {
+			continue
+		}
+		if code := strings.TrimSpace(row[2]); code != "" {
+			return code, true
+		}
+	}
+	return "", false
+}
+
 // GetSystemForCustomer mirrors layhethong_COOP: column C -> column A.
 func (s *Store) GetSystemForCustomer(customerCode string) string {
 	customerCode = strings.TrimSpace(customerCode)

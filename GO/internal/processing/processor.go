@@ -27,7 +27,7 @@ type StreamingProcessor interface {
 
 var mockVendors = []string{
 	"Coop", "BigC", "Lotte", "Satra", "Emart", "Kingfood", "Winmart",
-	"Fujimart", "BHX", "Farmer", "CN-HCM", "MR.DIY", "JIT", "JV-Mart", "JMART", "BC MART",
+	"Fujimart", "BHX", "Farmer", "CN-HCM", "MR.DIY", "JIT", "JV-Mart", "JMART", "BC MART", "Maxidi",
 }
 
 // mockOutcome ghép một chuỗi Status hiển thị (giữ emoji cho người dùng)

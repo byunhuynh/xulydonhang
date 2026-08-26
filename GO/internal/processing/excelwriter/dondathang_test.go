@@ -372,3 +372,73 @@ func TestSetPrice_OverwritesValueWithNoCommentCheck(t *testing.T) {
 		t.Fatalf("Y9 = %q, want %q", val, "30000")
 	}
 }
+
+func TestWriteOrderRows_WritesCustomerBillingDetailsToColumnsHIJ(t *testing.T) {
+	// H/I/J ("Tên khách hàng", "Địa chỉ", "Mã số thuế") are columns the
+	// MISA template has always carried but nothing ever wrote. Maxidi
+	// needs them because its two branches share one customer code while
+	// invoicing under different names, addresses and tax codes, so the
+	// customer code alone cannot tell the two apart in the accounting
+	// system.
+	path := copyTestWorkbook(t)
+
+	rows := []Row{
+		{
+			EntryDate: "26/08/2026", OrderNumber: "ĐĐHMAXIDI-HO-PO00085936",
+			Status: "Chưa thực hiện", IsNoteRow: true, ProductName: "MAXIDI HO-PO00085936",
+			CustomerCode: "LA_GC_00002",
+			CustomerName: "CHI NHÁNH BÌNH DƯƠNG - CÔNG TY TNHH MAXIDI VIỆT NAM",
+			InvoiceAddress: "Khu A, Kho Liên Anh, số 189/8 Lê Hồng Phong, KP Tân Phước, " +
+				"P.Tân Đông Hiệp, Hồ Chí Minh, Bình Dương",
+			TaxCode: "0317899481-002",
+		},
+	}
+	if _, err := WriteOrderRows(path, rows, "MAXIDI HO-PO00085936"); err != nil {
+		t.Fatalf("WriteOrderRows returned error: %v", err)
+	}
+
+	f, err := excelize.OpenFile(path)
+	if err != nil {
+		t.Fatalf("failed reopening workbook: %v", err)
+	}
+	defer f.Close()
+
+	for _, c := range []struct{ cell, want string }{
+		{"H9", "CHI NHÁNH BÌNH DƯƠNG - CÔNG TY TNHH MAXIDI VIỆT NAM"},
+		{"I9", "Khu A, Kho Liên Anh, số 189/8 Lê Hồng Phong, KP Tân Phước, P.Tân Đông Hiệp, Hồ Chí Minh, Bình Dương"},
+		{"J9", "0317899481-002"},
+	} {
+		got, _ := f.GetCellValue("Don dat hang", c.cell)
+		if got != c.want {
+			t.Errorf("%s = %q, want %q", c.cell, got, c.want)
+		}
+	}
+}
+
+func TestWriteOrderRows_LeavesColumnsHIJBlankWhenUnset(t *testing.T) {
+	// Every vendor other than Maxidi leaves these three fields at their
+	// zero value, and must keep writing blank cells there — MISA fills
+	// the customer's own name/address/tax code from the customer code
+	// when the columns are empty, so writing anything at all (even an
+	// empty string is fine, but a placeholder would not be) must not
+	// start happening by accident.
+	path := copyTestWorkbook(t)
+
+	rows := []Row{{SKU: "3564270-4", Qty: 24, UnitPrice: 33726, ProductName: "Chai tay toilet", UseZFormula: true}}
+	if _, err := WriteOrderRows(path, rows, ""); err != nil {
+		t.Fatalf("WriteOrderRows returned error: %v", err)
+	}
+
+	f, err := excelize.OpenFile(path)
+	if err != nil {
+		t.Fatalf("failed reopening workbook: %v", err)
+	}
+	defer f.Close()
+
+	for _, cell := range []string{"H9", "I9", "J9"} {
+		got, _ := f.GetCellValue("Don dat hang", cell)
+		if got != "" {
+			t.Errorf("%s = %q, want an empty cell for a vendor that sets no billing details", cell, got)
+		}
+	}
+}

@@ -113,6 +113,52 @@ var hexTokenPattern = regexp.MustCompile(`<([0-9a-fA-F]+)>`)
 var bfRangeBlockPattern = regexp.MustCompile(`(?s)beginbfrange(.*?)endbfrange`)
 var bfCharBlockPattern = regexp.MustCompile(`(?s)beginbfchar(.*?)endbfchar`)
 
+// simpleFontCmapText returns the raw text of a simple (non-Type0)
+// font's embedded /ToUnicode CMap stream, or ok=false for any font whose
+// shape this package's narrow CMap reasoning was not verified against.
+// Shared by decodeSimpleFontCmap (which builds a corrected byte->rune
+// table from it) and cmapCodespaceExcludesOwnCodes (which only inspects
+// it for self-contradiction) so both agree exactly on which fonts they
+// will speak about at all.
+func simpleFontCmapText(font pdf.Font) (string, bool) {
+	if font.V.Key("Subtype").Name() == "Type0" {
+		return "", false
+	}
+	switch font.V.Key("Encoding").Kind() {
+	case pdf.Null:
+		// No /Encoding at all — the original FujiMart shape, and also
+		// Maxidi's.
+	case pdf.Dict:
+		// An /Encoding DICTIONARY (/Differences, optionally over a
+		// /BaseEncoding). The vendored library takes this branch in
+		// preference to /ToUnicode and decodes through glyph NAMES,
+		// which for a subset font are frequently names its table does
+		// not know — see isControlRune for the confirmed Coop case. The
+		// PDF spec makes /ToUnicode the authoritative mapping for text
+		// EXTRACTION regardless of how the glyphs are selected for
+		// rendering (§9.10.2), so preferring it here is not a guess.
+	default:
+		// A named base encoding (WinAnsiEncoding, MacRomanEncoding,
+		// Identity-H) decodes through a table this parser has no reason
+		// to second-guess.
+		return "", false
+	}
+	toUnicode := font.V.Key("ToUnicode")
+	if toUnicode.Kind() != pdf.Stream {
+		return "", false
+	}
+	rdr := toUnicode.Reader()
+	if rdr == nil {
+		return "", false
+	}
+	defer rdr.Close()
+	data, err := io.ReadAll(rdr)
+	if err != nil {
+		return "", false
+	}
+	return string(data), true
+}
+
 // decodeSimpleFontCmap builds a byte->rune lookup table directly from a
 // simple (non-Type0) TrueType/Type1 font's embedded ToUnicode CMap
 // stream, deliberately IGNORING that stream's own begincodespacerange
@@ -141,41 +187,10 @@ var bfCharBlockPattern = regexp.MustCompile(`(?s)beginbfchar(.*?)endbfchar`)
 // avoid building a WRONG table for a font shape this narrow parser
 // wasn't verified against, not to identify FujiMart specifically.
 func decodeSimpleFontCmap(font pdf.Font) (map[byte]rune, bool) {
-	if font.V.Key("Subtype").Name() == "Type0" {
+	text, ok := simpleFontCmapText(font)
+	if !ok {
 		return nil, false
 	}
-	switch font.V.Key("Encoding").Kind() {
-	case pdf.Null:
-		// No /Encoding at all — the original FujiMart shape.
-	case pdf.Dict:
-		// An /Encoding DICTIONARY (/Differences, optionally over a
-		// /BaseEncoding). The vendored library takes this branch in
-		// preference to /ToUnicode and decodes through glyph NAMES,
-		// which for a subset font are frequently names its table does
-		// not know — see isControlRune for the confirmed Coop case. The
-		// PDF spec makes /ToUnicode the authoritative mapping for text
-		// EXTRACTION regardless of how the glyphs are selected for
-		// rendering (§9.10.2), so preferring it here is not a guess.
-	default:
-		// A named base encoding (WinAnsiEncoding, MacRomanEncoding,
-		// Identity-H) decodes through a table this parser has no reason
-		// to second-guess.
-		return nil, false
-	}
-	toUnicode := font.V.Key("ToUnicode")
-	if toUnicode.Kind() != pdf.Stream {
-		return nil, false
-	}
-	rdr := toUnicode.Reader()
-	if rdr == nil {
-		return nil, false
-	}
-	defer rdr.Close()
-	data, err := io.ReadAll(rdr)
-	if err != nil {
-		return nil, false
-	}
-	text := string(data)
 
 	table := make(map[byte]rune)
 	// sawEntry tracks whether at least one bfrange OR bfchar entry was
@@ -424,4 +439,127 @@ func extractPageTextViaCorrectedCmap(page pdf.Page) (result string, ok bool) {
 		return "", false
 	}
 	return text, true
+}
+
+// codespaceBlockPattern captures the body of a begincodespacerange/
+// endcodespacerange block — the declaration of how many bytes a
+// character code occupies, and which byte values are legal codes at all.
+var codespaceBlockPattern = regexp.MustCompile(`(?s)begincodespacerange(.*?)endcodespacerange`)
+
+// cmapCodespaceExcludesOwnCodes reports whether a ToUnicode CMap
+// contradicts itself: it declares a 1-byte codespace range that does NOT
+// contain every source code its own bfrange/bfchar entries go on to map.
+//
+// This is not a stylistic quibble — the vendored library honours the
+// declaration and emits U+FFFD for every code outside it, silently
+// throwing away mappings the same CMap explicitly provides two lines
+// further down. Confirmed on every real archived Maxidi delivery note:
+// its Arial subset declares "<52> <f9>" while mapping <20>, <2c>, <2f>,
+// all ten digits <30>..<39> and most uppercase letters — so the prose
+// survives, but the PO number, both dates, the barcode and every
+// quantity decode to U+FFFD.
+//
+// Deliberately narrow — returns false (i.e. "nothing provably wrong
+// here") rather than guessing whenever the CMap is not the plain
+// 1-byte-code shape this reasoning holds for: a multi-byte codespace
+// declaration is the FujiMart shape, already handled by the
+// isGarbledText gate, and a CMap with no codespace declaration at all
+// makes no claim that could be contradicted. False is also the answer
+// for a well-formed CMap, which is the overwhelmingly common case.
+func cmapCodespaceExcludesOwnCodes(text string) bool {
+	type codespace struct{ lo, hi uint64 }
+	var declared []codespace
+	for _, block := range codespaceBlockPattern.FindAllStringSubmatch(text, -1) {
+		tokens := hexTokenPattern.FindAllStringSubmatch(block[1], -1)
+		for i := 0; i+2 <= len(tokens); i += 2 {
+			loHex, hiHex := tokens[i][1], tokens[i+1][1]
+			if len(loHex) != 2 || len(hiHex) != 2 {
+				// Not a 1-byte codespace declaration — out of scope, see
+				// this function's own doc comment.
+				return false
+			}
+			lo, errLo := strconv.ParseUint(loHex, 16, 8)
+			hi, errHi := strconv.ParseUint(hiHex, 16, 8)
+			if errLo != nil || errHi != nil || hi < lo {
+				return false
+			}
+			declared = append(declared, codespace{lo, hi})
+		}
+	}
+	if len(declared) == 0 {
+		return false
+	}
+
+	covered := func(code uint64) bool {
+		for _, r := range declared {
+			if code >= r.lo && code <= r.hi {
+				return true
+			}
+		}
+		return false
+	}
+
+	for _, block := range bfRangeBlockPattern.FindAllStringSubmatch(text, -1) {
+		tokens := hexTokenPattern.FindAllStringSubmatch(block[1], -1)
+		for i := 0; i+3 <= len(tokens); i += 3 {
+			loHex, hiHex := tokens[i][1], tokens[i+1][1]
+			if len(loHex) != 2 || len(hiHex) != 2 {
+				return false
+			}
+			lo, errLo := strconv.ParseUint(loHex, 16, 8)
+			hi, errHi := strconv.ParseUint(hiHex, 16, 8)
+			if errLo != nil || errHi != nil || hi < lo {
+				return false
+			}
+			if !covered(lo) || !covered(hi) {
+				return true
+			}
+		}
+	}
+	for _, block := range bfCharBlockPattern.FindAllStringSubmatch(text, -1) {
+		tokens := hexTokenPattern.FindAllStringSubmatch(block[1], -1)
+		for i := 0; i+2 <= len(tokens); i += 2 {
+			srcHex := tokens[i][1]
+			if len(srcHex) != 2 {
+				return false
+			}
+			src, err := strconv.ParseUint(srcHex, 16, 8)
+			if err != nil {
+				return false
+			}
+			if !covered(src) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// pageHasSelfContradictoryCmap reports whether ANY simple font used on
+// this page carries a ToUnicode CMap that excludes its own mapped codes
+// (see cmapCodespaceExcludesOwnCodes). One such font is enough: the
+// page's numbers are typically all set in a single font, so a page can
+// look mostly fine while everything that matters for order processing is
+// destroyed.
+//
+// Wrapped in a panic boundary for the same reason
+// extractPageTextViaCorrectedCmap is: the vendored library panics rather
+// than returning an error when a font resource or stream filter is
+// malformed, and a single bad PDF must never take down the process.
+func pageHasSelfContradictoryCmap(page pdf.Page) (contradictory bool) {
+	defer func() {
+		if recover() != nil {
+			contradictory = false
+		}
+	}()
+	for _, name := range page.Fonts() {
+		text, ok := simpleFontCmapText(page.Font(name))
+		if !ok {
+			continue
+		}
+		if cmapCodespaceExcludesOwnCodes(text) {
+			return true
+		}
+	}
+	return false
 }

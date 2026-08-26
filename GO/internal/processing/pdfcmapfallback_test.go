@@ -352,3 +352,34 @@ func TestExtractPageTexts_DecodesDifferencesEncodedSubsetFontViaToUnicode(t *tes
 		t.Fatalf("vendor.Identify = %q, want %q\nextracted text:\n%q", got, "Coop", pages[0])
 	}
 }
+
+func TestExtractPageTexts_DecodesCodesBelowADeclaredCodespaceRange(t *testing.T) {
+	// Real archived Maxidi delivery note. Its Arial subset font's
+	// ToUnicode CMap is self-contradictory: it declares
+	// "1 begincodespacerange <52> <f9> endcodespacerange" while its own
+	// 75 bfrange entries map codes far BELOW 0x52 — every digit
+	// (<30>..<39>), the space (<20>), the comma, the slash and most
+	// uppercase letters. The vendored library honours the declared range
+	// and emits U+FFFD for each of those codes, so the page decodes with
+	// its prose intact but every NUMBER destroyed: PO number, both
+	// dates, barcode, PLU and all quantities. isGarbledText alone cannot
+	// catch this — only ~40% of the page's runes are affected, under its
+	// >50% threshold — which is why a contradictory codespacerange is
+	// its own, separate trigger for the corrected-CMap walk.
+	path := filepath.Join("maxidi", "testdata", "realpdfs", "00000000054823.pdf")
+	if _, statErr := os.Stat(path); statErr != nil {
+		t.Skipf("real sample PDF not found at %s: %v", path, statErr)
+	}
+	pages, _, err := extractPageTexts(path)
+	if err != nil {
+		t.Fatalf("extractPageTexts: %v", err)
+	}
+	if len(pages) == 0 {
+		t.Fatal("no pages extracted")
+	}
+	for _, want := range []string{"HO-PO00085936", "26/08/2026", "24/09/2026", "8935355302344", "10,800.00"} {
+		if !strings.Contains(pages[0], want) {
+			t.Errorf("extracted page 1 does not contain %q\nextracted text:\n%s", want, pages[0])
+		}
+	}
+}

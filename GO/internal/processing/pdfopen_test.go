@@ -217,3 +217,42 @@ func TestPdfOpen_RecoversTextFromPlaceholderStreamLengths(t *testing.T) {
 		t.Fatalf("vendor.Identify = %q, want %q (extracted %d chars)", got, "Coop", len(pages[0]))
 	}
 }
+
+func TestPdfOpen_NormalizesHeaderWithTrailingSpace(t *testing.T) {
+	// Real, confirmed shape: every archived Maxidi delivery note
+	// (Crystal Reports generator) starts with "%PDF-1.2 \n" — a space
+	// where the vendored library demands a CR or LF at byte offset 8
+	// (read.go:136 checks buf[8] explicitly), so it rejects the whole
+	// file with "not a PDF file: invalid header" before parsing a single
+	// object. PyMuPDF, which the original Python app used, accepts these
+	// files without complaint. Same fixture as
+	// TestPdfOpen_TrimsGarbageAfterEOF, differing ONLY in that one byte.
+	minimalPDF := "%PDF-1.4 \n" +
+		"1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n" +
+		"2 0 obj\n<< /Type /Pages /Kids [3 0 R] /Count 1 >>\nendobj\n" +
+		"3 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 200 200] >>\nendobj\n" +
+		"xref\n0 4\n" +
+		"0000000000 65535 f \n" +
+		"0000000010 00000 n \n" +
+		"0000000059 00000 n \n" +
+		"0000000116 00000 n \n" +
+		"trailer\n<< /Size 4 /Root 1 0 R >>\n" +
+		"startxref\n187\n%%EOF\n"
+
+	path := filepath.Join(t.TempDir(), "space_in_header.pdf")
+	if err := os.WriteFile(path, []byte(minimalPDF), 0o644); err != nil {
+		t.Fatalf("failed writing synthetic PDF: %v", err)
+	}
+
+	f, r, err := pdfOpen(path)
+	if err != nil {
+		t.Fatalf("pdfOpen returned error for a PDF whose header ends in a space: %v", err)
+	}
+	defer f.Close()
+	if r == nil {
+		t.Fatal("pdfOpen returned a nil reader with no error")
+	}
+	if r.NumPage() != 1 {
+		t.Errorf("NumPage() = %d, want 1", r.NumPage())
+	}
+}

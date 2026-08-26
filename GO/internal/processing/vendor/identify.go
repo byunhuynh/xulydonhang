@@ -59,6 +59,18 @@ var (
 	// JMart after Tiktok/KOC (both unported) and after FujiMart — see
 	// Identify's own doc comment for the full chain.
 	jmartPattern = regexp.MustCompile(`Đơn vị : HỆ THỐNG SIÊU THỊ JMART`)
+	// Maxidi has NO counterpart in xulydonhang.py at all — it is the
+	// first vendor in this project implemented directly in Go with no
+	// Python original to mirror, so there is no "real Python order" to
+	// preserve for it and appending last is simply correct. The marker is
+	// the supplier's own company name, which appears in the letterhead of
+	// BOTH branches that issue these delivery notes (Bình Dương, tax code
+	// 0317899481-002, and Đồng Nai, -001) — deliberately NOT the tax code
+	// itself, since that differs per branch and would need two
+	// alternatives to cover the same one vendor. Matched against the
+	// whitespace-normalized text (see Identify), so it still fires when
+	// text extraction happens to break the name across lines.
+	maxidiPattern = regexp.MustCompile(`CÔNG TY TNHH MAXIDI VIỆT NAM`)
 )
 
 // Identify tries to recognize which retail vendor produced this
@@ -98,6 +110,9 @@ func Identify(text string) string {
 	}
 	if jmartPattern.MatchString(cleaned) {
 		return "JMart"
+	}
+	if maxidiPattern.MatchString(cleaned) {
+		return "Maxidi"
 	}
 	return ""
 }

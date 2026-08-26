@@ -64,6 +64,29 @@ type Row struct {
 	// its zero value (""), which writes an empty AN cell — same as
 	// Python's Coop/Lotte/Satra/Winmart rows never assigning to AN.
 	SiteCode string
+	// CustomerName/InvoiceAddress/TaxCode write to columns H, I and J
+	// ("Tên khách hàng", "Địa chỉ", "Mã số thuế") — columns the MISA
+	// import template has always had and nothing ever populated, because
+	// every vendor before Maxidi bills under exactly one legal entity per
+	// customer code, which MISA resolves from column G on its own.
+	//
+	// Maxidi breaks that assumption: its Bình Dương and Đồng Nai branches
+	// share one customer code but are separate legal entities with their
+	// own names, tax codes and invoicing addresses, so column G alone
+	// cannot say which of the two an order belongs to. These three fields
+	// carry that distinction through to the accounting system.
+	//
+	// Left at their zero value by every other vendor, which writes blank
+	// cells and keeps MISA's own customer-code lookup in charge — see
+	// TestWriteOrderRows_LeavesColumnsHIJBlankWhenUnset.
+	//
+	// InvoiceAddress is the address the branch INVOICES from, which is
+	// not necessarily where the goods go: column E (ShipTo) carries the
+	// delivery address, read off the order itself, and for Maxidi's Đồng
+	// Nai branch the two genuinely differ.
+	CustomerName   string
+	InvoiceAddress string
+	TaxCode        string
 }
 
 // WriteOrderRows appends rows to the "Don dat hang" sheet, mirroring
@@ -365,6 +388,9 @@ func writeRow(f *excelize.File, rowNum int, row Row, redFillStyle int) error {
 		{"D", row.CancelDate},
 		{"E", row.ShipTo},
 		{"G", row.CustomerCode},
+		{"H", row.CustomerName},
+		{"I", row.InvoiceAddress},
+		{"J", row.TaxCode},
 		{"K", row.StoreName},
 		{"L", row.Description},
 		{"Q", row.SKU},

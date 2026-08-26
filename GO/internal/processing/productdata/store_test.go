@@ -227,3 +227,46 @@ func TestGetSiteValue(t *testing.T) {
 		t.Fatalf("GetSiteValue(no match) = %q, want UnknownStoreName", got)
 	}
 }
+
+func TestGetCustomerCodeForSystem_ReadsTheSystemsOwnRow(t *testing.T) {
+	store := newStore([][]string{
+		{"HỆ THÔNG", "Mã ST", "Mã KH", "Địa chỉ"},
+		{"LOTTE", "LT1001", "MN_MT_LOT1001", ""},
+		{"Maxidi", "LA_GC_00002", "LA_GC_00002", ""},
+	}, nil)
+
+	got, ok := store.GetCustomerCodeForSystem("Maxidi")
+	if !ok || got != "LA_GC_00002" {
+		t.Fatalf("GetCustomerCodeForSystem(Maxidi) = (%q, %v), want (LA_GC_00002, true)", got, ok)
+	}
+}
+
+func TestGetCustomerCodeForSystem_IsCaseInsensitiveOnTheSystemName(t *testing.T) {
+	store := newStore([][]string{
+		{"HỆ THÔNG", "Mã ST", "Mã KH", "Địa chỉ"},
+		{"Maxidi", "LA_GC_00002", "LA_GC_00002", ""},
+	}, nil)
+
+	got, ok := store.GetCustomerCodeForSystem("MAXIDI")
+	if !ok || got != "LA_GC_00002" {
+		t.Fatalf("GetCustomerCodeForSystem(MAXIDI) = (%q, %v), want (LA_GC_00002, true)", got, ok)
+	}
+}
+
+func TestGetCustomerCodeForSystem_ReportsAMissingSystemRatherThanReturningBlank(t *testing.T) {
+	// The caller writes this value into the order workbook's customer
+	// column, so "no row in the sheet" must be distinguishable from a
+	// real code — a blank there is an order billed to nobody.
+	store := newStore([][]string{
+		{"HỆ THÔNG", "Mã ST", "Mã KH", "Địa chỉ"},
+		{"LOTTE", "LT1001", "MN_MT_LOT1001", ""},
+		{"Maxidi", "LA_GC_00002", "", ""},
+	}, nil)
+
+	if got, ok := store.GetCustomerCodeForSystem("Kingfood"); ok {
+		t.Errorf("GetCustomerCodeForSystem(Kingfood) = (%q, true), want ok=false (no such row)", got)
+	}
+	if got, ok := store.GetCustomerCodeForSystem("Maxidi"); ok {
+		t.Errorf("GetCustomerCodeForSystem(Maxidi) = (%q, true), want ok=false (the row's code cell is blank)", got)
+	}
+}

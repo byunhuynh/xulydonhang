@@ -293,3 +293,25 @@ func TestIdentify_JMartCheckedAfterFujiMart(t *testing.T) {
 		t.Fatalf("Identify with JMart marker = %q, want %q", got, "JMart")
 	}
 }
+
+func TestIdentify_RecognizesMaxidiByCompanyName(t *testing.T) {
+	cases := []struct {
+		name string
+		text string
+		want string
+	}{
+		{"Bình Dương branch letterhead", "UoM\nCHI NHÁNH BÌNH DƯƠNG - CÔNG TY TNHH MAXIDI VIỆT NAM\nTax Code: 0317899481-002", "Maxidi"},
+		{"Đồng Nai branch letterhead", "UoM\nCHI NHÁNH ĐỒNG NAI-CÔNG TY TNHH MAXIDI VIỆT NAM\nTax Code: 0317899481-001", "Maxidi"},
+		{"name split across extraction lines", "CHI NHÁNH BÌNH DƯƠNG - CÔNG TY TNHH\nMAXIDI VIỆT NAM", "Maxidi"},
+		{"a different company", "CÔNG TY TNHH MỘT THÀNH VIÊN NÀO ĐÓ", ""},
+		{"no marker at all", "nothing relevant here", ""},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			got := Identify(c.text)
+			if got != c.want {
+				t.Fatalf("Identify(%q) = %q, want %q", c.text, got, c.want)
+			}
+		})
+	}
+}

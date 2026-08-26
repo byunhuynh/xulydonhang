@@ -68,6 +68,7 @@ func pdfOpen(path string) (f *os.File, r *pdf.Reader, err error) {
 		return nil, nil, readErr
 	}
 	raw = stripInlineImageData(raw)
+	normalizePDFHeader(raw)
 
 	r, err = tryNewReader(raw)
 	if err == nil {
@@ -136,6 +137,46 @@ func pdfOpen(path string) (f *os.File, r *pdf.Reader, err error) {
 
 	f.Close()
 	return nil, nil, err
+}
+
+// normalizePDFHeader repairs, IN PLACE, a "%PDF-1.x" header whose
+// version number is followed by a space instead of the CR or LF the
+// vendored library demands. That library's NewReaderEncrypted checks
+// byte 8 explicitly (read.go:136 requires it to be '\r' or '\n')
+// and rejects anything else outright with "not a PDF file: invalid
+// header" — before parsing a single object, so no later fallback in
+// pdfOpen ever gets a chance to run.
+//
+// Confirmed on every real archived Maxidi delivery note (all four
+// samples available when this was written): they begin with the ten
+// bytes "%PDF-1.2 \n" — a Crystal Reports quirk. PyMuPDF, which the
+// original Python app used, opens them without complaint; only this
+// library's stricter byte-8 check rejects them, and it rejects 100% of
+// this vendor's files.
+//
+// Writes a newline over the offending space rather than deleting it:
+// every xref entry in a PDF is an absolute byte offset into the file,
+// so removing even one byte would invalidate the whole table. A
+// same-length substitution keeps every offset exactly where it was.
+//
+// Deliberately narrow — only a literal space is replaced, and only when
+// the first eight bytes already spell a valid "%PDF-1.x" version. A
+// header that is malformed in any OTHER way still reaches the library
+// and is still rejected there, rather than being silently "repaired"
+// into something that merely looks valid.
+func normalizePDFHeader(data []byte) {
+	if len(data) < 9 {
+		return
+	}
+	if !bytes.HasPrefix(data, []byte("%PDF-1.")) {
+		return
+	}
+	if data[7] < '0' || data[7] > '7' {
+		return
+	}
+	if data[8] == ' ' {
+		data[8] = '\n'
+	}
 }
 
 // readerHasPages reports whether r can actually resolve its page tree,
