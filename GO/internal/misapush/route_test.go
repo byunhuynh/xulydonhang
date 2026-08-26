@@ -53,13 +53,13 @@ func TestRouteKey_HệThốngKhácGiữNguyên(t *testing.T) {
 
 func TestLabel_DễĐọcChoTừngDạngKhoá(t *testing.T) {
 	cases := map[string]string{
-		"BigC/GC":            "BigC · gia công",
-		"BigC/MT":            "BigC · modern trade",
-		"BigC":               "BigC",
-		"JIT-CHOICE/WH6_HN":  "JIT · kho WH6_HN",
-		"JIT-CHOICE":         "JIT",
-		"TMĐT-*":             "TMĐT (mọi sàn)",
-		"Lotte":              "Lotte",
+		"BigC/GC":           "BigC · gia công",
+		"BigC/MT":           "BigC · modern trade",
+		"BigC":              "BigC",
+		"JIT-CHOICE/WH6_HN": "JIT · kho WH6_HN",
+		"JIT-CHOICE":        "JIT",
+		"TMĐT-*":            "TMĐT (mọi sàn)",
+		"Lotte":             "Lotte",
 	}
 	for key, want := range cases {
 		if got := Label(key); got != want {
@@ -158,5 +158,21 @@ func TestApplySeed_KhôngĐổiGìThìBáoFalse(t *testing.T) {
 	routing := SeedRouting()
 	if ApplySeed(routing) {
 		t.Error("ApplySeed = true trên map đã đủ khoá, want false")
+	}
+}
+
+func TestLookup_TMDTKhongDoRaSanVanRaHTLA(t *testing.T) {
+	// channelFromOrderNumber tra ve chuoi rong khi so don khong tach duoc
+	// (vd du lieu la), nen he thong thanh "TMĐT-" tron. Van phai khop khoa
+	// tien to, neu khong don do bi khoa nut day ma nguoi dung khong hieu
+	// vi sao mot dong TMĐT lai khac cac dong TMĐT con lai.
+	seed := SeedRouting()
+	if got := Lookup(seed, RouteKey("TMĐT-", "MN_TMDT_00015", "")); got != BranchHTLA {
+		t.Errorf("Lookup(TMĐT- tron) = %q, want %q", got, BranchHTLA)
+	}
+	for _, san := range []string{"TMĐT-Shopee", "TMĐT-TikTok Shop", "TMĐT-Lazada"} {
+		if got := Lookup(seed, RouteKey(san, "MN_TMDT_00015", "")); got != BranchHTLA {
+			t.Errorf("Lookup(%q) = %q, want %q", san, got, BranchHTLA)
+		}
 	}
 }
