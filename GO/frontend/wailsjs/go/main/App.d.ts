@@ -11,13 +11,11 @@ export function ConfirmPrice(arg1:number,arg2:number):Promise<void>;
 
 export function GetAppSettings():Promise<appsettings.Settings>;
 
-export function GetSTT():Promise<number>;
-
 export function InitializeApp():Promise<void>;
 
 export function InspectTMDTFiles(arg1:Array<string>):Promise<Array<string>>;
 
-export function ProcessFiles(arg1:Array<string>,arg2:number,arg3:Record<string, main.TMDTDateRange>):Promise<void>;
+export function ProcessFiles(arg1:Array<string>,arg2:Record<string, main.TMDTDateRange>):Promise<void>;
 
 export function RefreshZaloQR():Promise<void>;
 
@@ -30,7 +28,5 @@ export function ScanOrderFolder():Promise<Array<string>>;
 export function SelectFiles():Promise<Array<string>>;
 
 export function SendZaloMessages(arg1:Array<main.ZaloJob>):Promise<void>;
-
-export function SetSTT(arg1:number):Promise<void>;
 
 export function UpdateJITPeriod(arg1:Array<number>,arg2:string,arg3:string,arg4:string):Promise<void>;

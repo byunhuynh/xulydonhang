@@ -17,7 +17,6 @@ export type LockStatus = 'checking' | 'unlocked' | 'locked'
 
 interface AppState {
   files: string[]
-  stt: number
   isProcessing: boolean
   batchProgress: BatchProgress
   logLines: LogEntry[]
@@ -42,7 +41,6 @@ interface AppState {
   setFiles: (files: string[]) => void
   addFiles: (files: string[]) => void
   removeFiles: (files: string[]) => void
-  setStt: (stt: number) => void
   setProcessing: (processing: boolean) => void
   setBatchProgress: (progress: BatchProgress) => void
   appendLog: (line: string) => void
@@ -58,7 +56,6 @@ interface AppState {
 
 export const useAppStore = create<AppState>((set, get) => ({
   files: [],
-  stt: 1,
   isProcessing: false,
   batchProgress: createBatchProgress(),
   logLines: [],
@@ -98,7 +95,6 @@ export const useAppStore = create<AppState>((set, get) => ({
     set((state) => ({
       files: state.files.filter((f) => !toRemove.includes(f)),
     })),
-  setStt: (stt) => set({ stt }),
   setProcessing: (isProcessing) => set({ isProcessing }),
   setBatchProgress: (batchProgress) => set({ batchProgress }),
   appendLog: (line) =>

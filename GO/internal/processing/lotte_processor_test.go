@@ -26,7 +26,7 @@ func TestRealProcessor_ProcessesRealSampleLotteFile(t *testing.T) {
 	pricingSource := &fixturePricingSource{index: pricing.ParseIndex(nil)}
 
 	rp := &RealProcessor{Store: store, Pricing: pricingSource, ExcelPath: excelPath}
-	rows, err := rp.Process(context.Background(), "testdata/sample_lotte_order.pdf", 1)
+	rows, err := rp.Process(context.Background(), "testdata/sample_lotte_order.pdf")
 	if err != nil {
 		t.Fatalf("Process returned error: %v", err)
 	}
@@ -87,7 +87,7 @@ func TestRealProcessor_LotteNoBraceBonusRowUsesGiaoRoiNote(t *testing.T) {
 	pricingSource := &fixturePricingSource{index: pricing.ParseIndex(priceCsv)}
 
 	rp := &RealProcessor{Store: store, Pricing: pricingSource, ExcelPath: excelPath}
-	if _, err := rp.Process(context.Background(), "testdata/sample_lotte_order.pdf", 1); err != nil {
+	if _, err := rp.Process(context.Background(), "testdata/sample_lotte_order.pdf"); err != nil {
 		t.Fatalf("Process returned error: %v", err)
 	}
 
@@ -185,7 +185,7 @@ func TestRealProcessor_LotteInvoiceBonusRowFromFrozenPricing(t *testing.T) {
 	pricingSource := &fixturePricingSource{index: pricing.ParseIndex(priceCsv)}
 
 	rp := &RealProcessor{Store: store, Pricing: pricingSource, ExcelPath: excelPath}
-	rows, err := rp.Process(context.Background(), "testdata/sample_lotte_order.pdf", 1)
+	rows, err := rp.Process(context.Background(), "testdata/sample_lotte_order.pdf")
 	if err != nil {
 		t.Fatalf("Process returned error: %v", err)
 	}

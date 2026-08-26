@@ -82,7 +82,7 @@ func TestRealProcessor_MatchesGoldenFixtures_Lotte(t *testing.T) {
 		copyFile(t, "excelwriter/testdata/dondathang.xlsx", excelPath)
 
 		rp := &RealProcessor{Store: store, Pricing: pricingSource, ExcelPath: excelPath}
-		rows, err := rp.Process(context.Background(), pdfPath, 1)
+		rows, err := rp.Process(context.Background(), pdfPath)
 		if err != nil {
 			mismatches = append(mismatches, fixture.SourcePDF+": Process returned error: "+err.Error())
 			continue

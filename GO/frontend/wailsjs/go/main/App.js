@@ -18,10 +18,6 @@ export function GetAppSettings() {
   return window['go']['main']['App']['GetAppSettings']();
 }
 
-export function GetSTT() {
-  return window['go']['main']['App']['GetSTT']();
-}
-
 export function InitializeApp() {
   return window['go']['main']['App']['InitializeApp']();
 }
@@ -30,8 +26,8 @@ export function InspectTMDTFiles(arg1) {
   return window['go']['main']['App']['InspectTMDTFiles'](arg1);
 }
 
-export function ProcessFiles(arg1, arg2, arg3) {
-  return window['go']['main']['App']['ProcessFiles'](arg1, arg2, arg3);
+export function ProcessFiles(arg1, arg2) {
+  return window['go']['main']['App']['ProcessFiles'](arg1, arg2);
 }
 
 export function RefreshZaloQR() {
@@ -56,10 +52,6 @@ export function SelectFiles() {
 
 export function SendZaloMessages(arg1) {
   return window['go']['main']['App']['SendZaloMessages'](arg1);
-}
-
-export function SetSTT(arg1) {
-  return window['go']['main']['App']['SetSTT'](arg1);
 }
 
 export function UpdateJITPeriod(arg1, arg2, arg3, arg4) {

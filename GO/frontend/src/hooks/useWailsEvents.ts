@@ -10,7 +10,6 @@ export function useWailsEvents() {
   const upsertRow = useAppStore((s) => s.upsertRow)
   const setProcessing = useAppStore((s) => s.setProcessing)
   const setBatchProgress = useAppStore((s) => s.setBatchProgress)
-  const setStt = useAppStore((s) => s.setStt)
   const addFiles = useAppStore((s) => s.addFiles)
   const setLockStatus = useAppStore((s) => s.setLockStatus)
   const deselectPO = useAppStore((s) => s.deselectPO)
@@ -21,10 +20,8 @@ export function useWailsEvents() {
     const offLog = EventsOn('process:log', (line: string) => appendLog(line))
     const offRow = EventsOn('process:row', (row: OrderRow) => upsertRow(row))
     const offProgress = EventsOn('process:progress', (progress: BatchProgress) => setBatchProgress(progress))
-    const offDone = EventsOn('process:done', (finalStt: number) => {
-      setProcessing(false)
-      setStt(finalStt)
-    })
+    // process:done không mang dữ liệu: bộ đếm STT (config.txt) đã bị bỏ.
+    const offDone = EventsOn('process:done', () => setProcessing(false))
     const offDrop = EventsOn('files:dropped', (paths: string[]) => addFiles(paths))
     const offLock = EventsOn('applock:status', (status: LockStatus) => setLockStatus(status))
     const offZaloLog = EventsOn('zalo:log', (line: string) => appendLog(line))
@@ -72,5 +69,5 @@ export function useWailsEvents() {
       offTMDTMissing()
       OnFileDropOff()
     }
-  }, [appendLog, upsertRow, setBatchProgress, setProcessing, setStt, addFiles, setLockStatus, deselectPO, setZaloQR, setTMDTMissing])
+  }, [appendLog, upsertRow, setBatchProgress, setProcessing, addFiles, setLockStatus, deselectPO, setZaloQR, setTMDTMissing])
 }

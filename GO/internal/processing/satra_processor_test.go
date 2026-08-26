@@ -152,7 +152,7 @@ func TestRealProcessor_ProcessesRealSampleSatraFile(t *testing.T) {
 	pricingSource := &fixturePricingSource{index: pricing.ParseIndex(nil)}
 
 	rp := &RealProcessor{Store: store, Pricing: pricingSource, ExcelPath: excelPath}
-	rows, err := rp.Process(context.Background(), "testdata/sample_satra_order.pdf", 1)
+	rows, err := rp.Process(context.Background(), "testdata/sample_satra_order.pdf")
 	if err != nil {
 		t.Fatalf("Process returned error: %v", err)
 	}

@@ -21,7 +21,7 @@ func TestRealProcessor_ProcessesRealSampleEmartFile(t *testing.T) {
 	})}
 
 	rp := &RealProcessor{Store: store, Pricing: pricingSource, ExcelPath: excelPath}
-	rows, err := rp.Process(context.Background(), "testdata/sample_emart_order.pdf", 1)
+	rows, err := rp.Process(context.Background(), "testdata/sample_emart_order.pdf")
 	if err != nil {
 		t.Fatalf("Process returned error: %v", err)
 	}
@@ -136,7 +136,7 @@ func TestRealProcessor_EmartNoBraceBonusRowUsesKMRoiNote(t *testing.T) {
 	pricingSource := &fixturePricingSource{index: pricing.ParseIndex(priceCsv)}
 
 	rp := &RealProcessor{Store: store, Pricing: pricingSource, ExcelPath: excelPath}
-	if _, err := rp.Process(context.Background(), "testdata/sample_emart_order.pdf", 1); err != nil {
+	if _, err := rp.Process(context.Background(), "testdata/sample_emart_order.pdf"); err != nil {
 		t.Fatalf("Process returned error: %v", err)
 	}
 
@@ -219,7 +219,7 @@ func TestRealProcessor_EmartInvoiceLevelPromoBonusRow(t *testing.T) {
 	pricingSource := &fixturePricingSource{index: pricing.ParseIndex(priceCsv)}
 
 	rp := &RealProcessor{Store: store, Pricing: pricingSource, ExcelPath: excelPath}
-	if _, err := rp.Process(context.Background(), "testdata/sample_emart_order.pdf", 1); err != nil {
+	if _, err := rp.Process(context.Background(), "testdata/sample_emart_order.pdf"); err != nil {
 		t.Fatalf("Process returned error: %v", err)
 	}
 
@@ -291,7 +291,7 @@ func TestRealProcessor_EmartInvoiceBonusRowSkipsCleanlyWhenNoSkuMentioned(t *tes
 	pricingSource := &fixturePricingSource{index: pricing.ParseIndex(priceCsv)}
 
 	rp := &RealProcessor{Store: store, Pricing: pricingSource, ExcelPath: excelPath}
-	rows, err := rp.Process(context.Background(), "testdata/sample_emart_order.pdf", 1)
+	rows, err := rp.Process(context.Background(), "testdata/sample_emart_order.pdf")
 	if err != nil {
 		t.Fatalf("Process returned error: %v (should skip the invoice bonus row cleanly, not fail the whole order)", err)
 	}
@@ -348,7 +348,7 @@ func TestRealProcessor_EmartMultiCTKMSecondPartGetsKMRoiNote(t *testing.T) {
 	pricingSource := &fixturePricingSource{index: pricing.ParseIndex(priceCsv)}
 
 	rp := &RealProcessor{Store: store, Pricing: pricingSource, ExcelPath: excelPath}
-	if _, err := rp.Process(context.Background(), "testdata/sample_emart_order.pdf", 1); err != nil {
+	if _, err := rp.Process(context.Background(), "testdata/sample_emart_order.pdf"); err != nil {
 		t.Fatalf("Process returned error: %v", err)
 	}
 

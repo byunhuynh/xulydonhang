@@ -22,7 +22,8 @@ lần sau không hỏi lại.
 
 ### App chính (`GO/`, module `order-processor`)
 
-- `App.ProcessFiles(files, stt)` (`GO/app.go:436`) đặt chỗ batch rồi
+- `App.ProcessFiles(files, stt)` (`GO/app.go:436`) đặt chỗ batch rồi (tham
+  số `stt` đã bị bỏ ngày 26/08/2026 — xem ghi chú cuối mục "Bảng kết quả")
   chạy `go a.runReservedBatch(...)`. Batch giữ `a.excelMu`, gọi
   `excelwriter.ClearOrderRows(a.excelPath)` **một lần** ở đầu để
   `dondathang.xlsx` chỉ chứa kết quả của lần chạy mới nhất, rồi lặp
@@ -455,8 +456,11 @@ type ComboEntry struct {
 }
 ```
 
-Dòng tóm tắt TMĐT tiêu thụ số thứ tự (`stt`) như mọi `process:row` khác,
-nên `config.txt` sau batch vẫn tăng đúng bằng tổng số dòng đã phát.
+> **Đổi 26/08/2026:** bộ đếm số thứ tự (`config.txt`) đã bị bỏ hoàn toàn
+> theo yêu cầu người dùng — nó được đọc, cộng dồn rồi ghi lại mà không
+> nhánh xử lý nào đọc tới. `ProcessFiles` nay nhận `(files, ranges)`,
+> `Processor.Process` nhận `(ctx, filePath)`, và `process:done` không còn
+> mang dữ liệu. Mọi câu nhắc `stt` ở trên là mô tả bản trước thay đổi này.
 
 ## Kiểm thử
 

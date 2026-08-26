@@ -47,7 +47,7 @@ func TestRealProcessorStreamsEachCompletedSegment(t *testing.T) {
 	baseline := &RealProcessor{
 		Store: store, Pricing: &fixturePricingSource{index: priceIndex}, ExcelPath: copyTestWorkbookForProcessor(t),
 	}
-	baselineRows, err := baseline.Process(context.Background(), fixturePath, 1)
+	baselineRows, err := baseline.Process(context.Background(), fixturePath)
 	if err != nil {
 		t.Fatalf("baseline Process returned error: %v", err)
 	}
@@ -66,7 +66,7 @@ func TestRealProcessorStreamsEachCompletedSegment(t *testing.T) {
 	}
 	var emitted []OrderRow
 	var callbackLengths []int
-	rows, err := rp.ProcessStreaming(context.Background(), fixturePath, 1, func(row OrderRow) {
+	rows, err := rp.ProcessStreaming(context.Background(), fixturePath, func(row OrderRow) {
 		emitted = append(emitted, row)
 		callbackLengths = append(callbackLengths, len(emitted))
 		if len(emitted) == 1 {
@@ -123,7 +123,7 @@ func TestRealProcessor_ResultIdentityDistinguishesDuplicateFailedSegments(t *tes
 		},
 		ExcelPath: copyTestWorkbookForProcessor(t),
 	}
-	rows, err := rp.Process(context.Background(), fixturePath, 1)
+	rows, err := rp.Process(context.Background(), fixturePath)
 	if err != nil {
 		t.Fatalf("Process returned error: %v", err)
 	}
@@ -149,11 +149,11 @@ func TestRealProcessor_SourceIdentityDistinguishesSameBasenamePaths(t *testing.T
 	right := filepath.Join(t.TempDir(), "same.pdf")
 	rp := &RealProcessor{}
 
-	leftRows, err := rp.Process(context.Background(), left, 1)
+	leftRows, err := rp.Process(context.Background(), left)
 	if err != nil {
 		t.Fatalf("left Process returned error: %v", err)
 	}
-	rightRows, err := rp.Process(context.Background(), right, 1)
+	rightRows, err := rp.Process(context.Background(), right)
 	if err != nil {
 		t.Fatalf("right Process returned error: %v", err)
 	}
@@ -186,7 +186,7 @@ func TestRealProcessor_ProcessesRealSampleCoopFile(t *testing.T) {
 	pricingSource := &fixturePricingSource{index: pricing.ParseIndex(priceCsv)}
 
 	rp := &RealProcessor{Store: store, Pricing: pricingSource, ExcelPath: excelPath}
-	rows, err := rp.Process(context.Background(), "testdata/sample_coop_order.pdf", 1)
+	rows, err := rp.Process(context.Background(), "testdata/sample_coop_order.pdf")
 	if err != nil {
 		t.Fatalf("Process returned error: %v", err)
 	}
@@ -213,7 +213,7 @@ func TestRealProcessor_NonCoopFileProducesFailedRow(t *testing.T) {
 	// too, since a text-substitution fixture is simpler to construct
 	// than a whole different-vendor PDF; the point under test is the
 	// "vendor not recognized" branch of Process, not real BigC parsing.
-	rows, err := rp.Process(context.Background(), "testdata/not_a_coop_file.pdf", 1)
+	rows, err := rp.Process(context.Background(), "testdata/not_a_coop_file.pdf")
 	if err != nil {
 		t.Fatalf("Process returned error (should return a Failed row, not an error): %v", err)
 	}
@@ -256,7 +256,7 @@ func TestRealProcessor_PromoBonusRowFieldsMatchPythonRowTarget(t *testing.T) {
 	pricingSource := &fixturePricingSource{index: pricing.ParseIndex(priceCsv)}
 
 	rp := &RealProcessor{Store: store, Pricing: pricingSource, ExcelPath: excelPath}
-	if _, err := rp.Process(context.Background(), "testdata/sample_coop_order.pdf", 1); err != nil {
+	if _, err := rp.Process(context.Background(), "testdata/sample_coop_order.pdf"); err != nil {
 		t.Fatalf("Process returned error: %v", err)
 	}
 
@@ -354,7 +354,7 @@ func TestRealProcessor_PromoContentSetButNoBonusRowOnMismatch(t *testing.T) {
 	pricingSource := &fixturePricingSource{index: pricing.ParseIndex(priceCsv)}
 
 	rp := &RealProcessor{Store: store, Pricing: pricingSource, ExcelPath: excelPath}
-	if _, err := rp.Process(context.Background(), "testdata/sample_coop_order.pdf", 1); err != nil {
+	if _, err := rp.Process(context.Background(), "testdata/sample_coop_order.pdf"); err != nil {
 		t.Fatalf("Process returned error: %v", err)
 	}
 

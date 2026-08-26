@@ -40,14 +40,14 @@ type RealProcessor struct {
 	LogFunc     func(string) // optional (nil-safe) - routes background upload results to "process:log"
 }
 
-func (p *RealProcessor) Process(ctx context.Context, filePath string, stt int) ([]OrderRow, error) {
-	return p.process(ctx, filePath, stt, nil)
+func (p *RealProcessor) Process(ctx context.Context, filePath string) ([]OrderRow, error) {
+	return p.process(ctx, filePath, nil)
 }
 
 // ProcessStreaming keeps Process's result while reporting each row at the
 // same return boundary. Vendor-loop timing is introduced separately.
-func (p *RealProcessor) ProcessStreaming(ctx context.Context, filePath string, stt int, emit func(OrderRow)) ([]OrderRow, error) {
-	return p.process(ctx, filePath, stt, emit)
+func (p *RealProcessor) ProcessStreaming(ctx context.Context, filePath string, emit func(OrderRow)) ([]OrderRow, error) {
+	return p.process(ctx, filePath, emit)
 }
 
 func emitOrderRow(emit func(OrderRow), row OrderRow) OrderRow {
@@ -60,7 +60,7 @@ func emitOrderRow(emit func(OrderRow), row OrderRow) OrderRow {
 	return row
 }
 
-func (p *RealProcessor) process(ctx context.Context, filePath string, stt int, emit func(OrderRow)) ([]OrderRow, error) {
+func (p *RealProcessor) process(ctx context.Context, filePath string, emit func(OrderRow)) ([]OrderRow, error) {
 	pageTexts, pageNumbers, err := extractPageTexts(filePath)
 	if err != nil {
 		row := emitIdentifiedOrderRow(emit, filePath, "file", OrderRow{

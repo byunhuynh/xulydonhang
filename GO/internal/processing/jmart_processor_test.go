@@ -23,7 +23,7 @@ func TestRealProcessor_ProcessesRealSampleJMartFile(t *testing.T) {
 	})}
 
 	rp := &RealProcessor{Store: store, Pricing: pricingSource, ExcelPath: excelPath}
-	rows, err := rp.Process(context.Background(), "testdata/sample_jmart_order.pdf", 1)
+	rows, err := rp.Process(context.Background(), "testdata/sample_jmart_order.pdf")
 	if err != nil {
 		t.Fatalf("Process returned error: %v", err)
 	}
@@ -174,7 +174,7 @@ func TestRealProcessor_JMartNoBraceBonusRowDoesNotWriteAP(t *testing.T) {
 	pricingSource := &fixturePricingSource{index: pricing.ParseIndex(priceCsv)}
 
 	rp := &RealProcessor{Store: store, Pricing: pricingSource, ExcelPath: excelPath}
-	if _, err := rp.Process(context.Background(), "testdata/sample_jmart_order.pdf", 1); err != nil {
+	if _, err := rp.Process(context.Background(), "testdata/sample_jmart_order.pdf"); err != nil {
 		t.Fatalf("Process returned error: %v", err)
 	}
 

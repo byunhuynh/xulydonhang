@@ -13,7 +13,6 @@ import (
 	"github.com/xuri/excelize/v2"
 
 	"order-processor/internal/appsettings"
-	"order-processor/internal/config"
 	"order-processor/internal/processing"
 	"order-processor/internal/processing/excelwriter"
 	"order-processor/internal/zalosend"
@@ -36,7 +35,7 @@ type stubProcessor struct {
 	failOn string
 }
 
-func (s *stubProcessor) Process(ctx context.Context, filePath string, stt int) ([]processing.OrderRow, error) {
+func (s *stubProcessor) Process(ctx context.Context, filePath string) ([]processing.OrderRow, error) {
 	if filePath == s.failOn {
 		return nil, errors.New("stub failure")
 	}
@@ -55,7 +54,7 @@ type channelProcessor struct {
 	release chan struct{}
 }
 
-func (p *channelProcessor) Process(context.Context, string, int) ([]processing.OrderRow, error) {
+func (p *channelProcessor) Process(context.Context, string) ([]processing.OrderRow, error) {
 	close(p.entered)
 	<-p.release
 	return nil, nil
@@ -63,12 +62,12 @@ func (p *channelProcessor) Process(context.Context, string, int) ([]processing.O
 
 var _ processing.StreamingProcessor = (*streamingStubProcessor)(nil)
 
-func (s *streamingStubProcessor) Process(ctx context.Context, filePath string, stt int) ([]processing.OrderRow, error) {
+func (s *streamingStubProcessor) Process(ctx context.Context, filePath string) ([]processing.OrderRow, error) {
 	s.processCalls++
 	return s.returned, nil
 }
 
-func (s *streamingStubProcessor) ProcessStreaming(ctx context.Context, filePath string, stt int, emit func(processing.OrderRow)) ([]processing.OrderRow, error) {
+func (s *streamingStubProcessor) ProcessStreaming(ctx context.Context, filePath string, emit func(processing.OrderRow)) ([]processing.OrderRow, error) {
 	s.streamCalls++
 	for _, row := range s.emitted {
 		emit(row)
@@ -128,11 +127,10 @@ func freshOrderWorkbook(t *testing.T) string {
 }
 
 func TestRunBatch_EmitsLogRowPerFileThenDone(t *testing.T) {
-	cfg := config.NewStore(filepath.Join(t.TempDir(), "config.txt"))
-	a := &App{cfg: cfg, processor: &stubProcessor{}, excelPath: freshOrderWorkbook(t)}
+	a := &App{processor: &stubProcessor{}, excelPath: freshOrderWorkbook(t)}
 	emitter := &fakeEmitter{}
 
-	a.runBatch(emitter, []string{"a.pdf", "b.pdf"}, 10, nil)
+	a.runBatch(emitter, []string{"a.pdf", "b.pdf"}, nil)
 
 	wantNames := []string{
 		"process:progress",
@@ -149,26 +147,20 @@ func TestRunBatch_EmitsLogRowPerFileThenDone(t *testing.T) {
 		}
 	}
 
-	wantDoneData := []interface{}{12}
+	// process:done KHÔNG còn mang dữ liệu: bộ đếm STT (config.txt) đã bị bỏ
+	// vì không nhánh xử lý nào đọc tới nó. Kiểm rỗng chứ không bỏ hẳn phép
+	// kiểm — nếu ai đó gắn lại một payload thì frontend phải biết.
 	lastEvent := emitter.events[len(emitter.events)-1]
 	if lastEvent.name != "process:done" {
 		t.Fatalf("last event = %q, want %q", lastEvent.name, "process:done")
 	}
-	if !reflect.DeepEqual(lastEvent.data, wantDoneData) {
-		t.Fatalf("process:done data = %#v, want %#v", lastEvent.data, wantDoneData)
-	}
-
-	gotSTT, err := cfg.GetSTT()
-	if err != nil {
-		t.Fatalf("GetSTT returned error: %v", err)
-	}
-	if gotSTT != 12 {
-		t.Fatalf("STT after batch = %d, want 12", gotSTT)
+	if len(lastEvent.data) != 0 {
+		t.Fatalf("process:done data = %#v, muốn rỗng", lastEvent.data)
 	}
 }
 
 func TestApp_RunBatchStreamsRowsWithoutDuplicates(t *testing.T) {
-	t.Run("updates to a streamed key do not increment STT", func(t *testing.T) {
+	t.Run("dòng cập nhật lại của một khoá đã phát không sinh thêm dòng mới", func(t *testing.T) {
 		processor := &streamingStubProcessor{
 			emitted: []processing.OrderRow{
 				{ResultKey: "jit|1/1|PO1", StatusKind: processing.StatusKindProcessing},
@@ -176,11 +168,10 @@ func TestApp_RunBatchStreamsRowsWithoutDuplicates(t *testing.T) {
 			},
 			returned: []processing.OrderRow{{ResultKey: "jit|1/1|PO1", StatusKind: processing.StatusKindDone}},
 		}
-		cfg := config.NewStore(filepath.Join(t.TempDir(), "config.txt"))
-		a := &App{cfg: cfg, processor: processor, excelPath: freshOrderWorkbook(t)}
+		a := &App{processor: processor, excelPath: freshOrderWorkbook(t)}
 		emitter := &fakeEmitter{}
 
-		a.runBatch(emitter, []string{"jit.pdf"}, 7, nil)
+		a.runBatch(emitter, []string{"jit.pdf"}, nil)
 
 		var rows []processing.OrderRow
 		for _, event := range emitter.events {
@@ -192,15 +183,8 @@ func TestApp_RunBatchStreamsRowsWithoutDuplicates(t *testing.T) {
 			t.Fatalf("streamed rows = %+v, want processing then final update", rows)
 		}
 		lastEvent := emitter.events[len(emitter.events)-1]
-		if !reflect.DeepEqual(lastEvent.data, []interface{}{8}) {
-			t.Fatalf("process:done data = %#v, want one new key to advance STT from 7 to 8", lastEvent.data)
-		}
-		gotSTT, err := cfg.GetSTT()
-		if err != nil {
-			t.Fatal(err)
-		}
-		if gotSTT != 8 {
-			t.Fatalf("saved STT = %d, want 8 after one stable key", gotSTT)
+		if lastEvent.name != "process:done" || len(lastEvent.data) != 0 {
+			t.Fatalf("sự kiện cuối = %q data %#v, muốn process:done không mang dữ liệu", lastEvent.name, lastEvent.data)
 		}
 	})
 
@@ -216,13 +200,12 @@ func TestApp_RunBatchStreamsRowsWithoutDuplicates(t *testing.T) {
 			},
 		}
 		a := &App{
-			cfg:       config.NewStore(filepath.Join(t.TempDir(), "config.txt")),
 			processor: processor,
 			excelPath: freshOrderWorkbook(t),
 		}
 		emitter := &fakeEmitter{}
 
-		a.runBatch(emitter, []string{"a.pdf"}, 1, nil)
+		a.runBatch(emitter, []string{"a.pdf"}, nil)
 
 		if processor.streamCalls != 1 || processor.processCalls != 0 {
 			t.Fatalf("calls = streaming %d, regular %d; want streaming 1, regular 0", processor.streamCalls, processor.processCalls)
@@ -264,13 +247,12 @@ func TestApp_RunBatchStreamsRowsWithoutDuplicates(t *testing.T) {
 
 	t.Run("non-streaming processor still emits returned rows", func(t *testing.T) {
 		a := &App{
-			cfg:       config.NewStore(filepath.Join(t.TempDir(), "config.txt")),
 			processor: &stubProcessor{},
 			excelPath: freshOrderWorkbook(t),
 		}
 		emitter := &fakeEmitter{}
 
-		a.runBatch(emitter, []string{"legacy.pdf"}, 1, nil)
+		a.runBatch(emitter, []string{"legacy.pdf"}, nil)
 
 		var rows []processing.OrderRow
 		for _, event := range emitter.events {
@@ -291,11 +273,10 @@ func TestApp_RunBatchStreamsRowsWithoutDuplicates(t *testing.T) {
 }
 
 func TestRunBatch_FileErrorEmitsLogAndContinues(t *testing.T) {
-	cfg := config.NewStore(filepath.Join(t.TempDir(), "config.txt"))
-	a := &App{cfg: cfg, processor: &stubProcessor{failOn: "bad.pdf"}, excelPath: freshOrderWorkbook(t)}
+	a := &App{processor: &stubProcessor{failOn: "bad.pdf"}, excelPath: freshOrderWorkbook(t)}
 	emitter := &fakeEmitter{}
 
-	a.runBatch(emitter, []string{"bad.pdf", "good.pdf"}, 1, nil)
+	a.runBatch(emitter, []string{"bad.pdf", "good.pdf"}, nil)
 
 	wantNames := []string{
 		"process:progress",
@@ -342,21 +323,12 @@ func TestRunBatch_FileErrorEmitsLogAndContinues(t *testing.T) {
 		t.Fatalf("failure row StatusKind = %q, want %q", failureRow.StatusKind, processing.StatusKindFailed)
 	}
 
-	wantDoneData := []interface{}{3}
 	lastEvent := emitter.events[len(emitter.events)-1]
 	if lastEvent.name != "process:done" {
 		t.Fatalf("last event = %q, want %q", lastEvent.name, "process:done")
 	}
-	if !reflect.DeepEqual(lastEvent.data, wantDoneData) {
-		t.Fatalf("process:done data = %#v, want %#v", lastEvent.data, wantDoneData)
-	}
-
-	gotSTT, err := cfg.GetSTT()
-	if err != nil {
-		t.Fatalf("GetSTT returned error: %v", err)
-	}
-	if gotSTT != 3 {
-		t.Fatalf("STT after batch = %d, want 3", gotSTT)
+	if len(lastEvent.data) != 0 {
+		t.Fatalf("process:done data = %#v, muốn rỗng", lastEvent.data)
 	}
 }
 
@@ -500,7 +472,6 @@ func TestApp_WorkbookMutationCannotOverlapNewBatch(t *testing.T) {
 	batchDone := make(chan struct{})
 
 	a := &App{
-		cfg:       config.NewStore(filepath.Join(t.TempDir(), "config.txt")),
 		excelPath: freshOrderWorkbook(t),
 		processor: &channelProcessor{entered: batchEntered, release: releaseBatch},
 		updateJITPeriodFn: func(string, []int, string, string, string) error {
@@ -516,7 +487,7 @@ func TestApp_WorkbookMutationCannotOverlapNewBatch(t *testing.T) {
 	<-mutationEntered
 
 	go func() {
-		a.runBatch(&fakeEmitter{}, []string{"batch.pdf"}, 1, nil)
+		a.runBatch(&fakeEmitter{}, []string{"batch.pdf"}, nil)
 		close(batchDone)
 	}()
 
@@ -974,11 +945,10 @@ func TestApp_RunBatchReportsProgressPerFile(t *testing.T) {
 	// có thể phát ra dòng tạm rồi mới xong (BigC, JIT), nên đếm theo dòng
 	// sẽ báo xong sớm. Backend đang lặp qua danh sách file nên chỉ nó biết
 	// con số thật - đây là chỗ nói ra.
-	cfg := config.NewStore(filepath.Join(t.TempDir(), "config.txt"))
-	a := &App{cfg: cfg, processor: &stubProcessor{}, excelPath: freshOrderWorkbook(t)}
+	a := &App{processor: &stubProcessor{}, excelPath: freshOrderWorkbook(t)}
 	emitter := &fakeEmitter{}
 
-	a.runBatch(emitter, []string{"a.pdf", "b.pdf", "c.pdf"}, 1, nil)
+	a.runBatch(emitter, []string{"a.pdf", "b.pdf", "c.pdf"}, nil)
 
 	var got []BatchProgress
 	for _, event := range emitter.events {
@@ -1003,11 +973,10 @@ func TestApp_RunBatchReportsProgressPerFile(t *testing.T) {
 }
 
 func TestApp_RunBatchReportsProgressEvenWhenAFileFails(t *testing.T) {
-	cfg := config.NewStore(filepath.Join(t.TempDir(), "config.txt"))
-	a := &App{cfg: cfg, processor: &stubProcessor{failOn: "b.pdf"}, excelPath: freshOrderWorkbook(t)}
+	a := &App{processor: &stubProcessor{failOn: "b.pdf"}, excelPath: freshOrderWorkbook(t)}
 	emitter := &fakeEmitter{}
 
-	a.runBatch(emitter, []string{"a.pdf", "b.pdf"}, 1, nil)
+	a.runBatch(emitter, []string{"a.pdf", "b.pdf"}, nil)
 
 	last := BatchProgress{}
 	for _, event := range emitter.events {

@@ -16,7 +16,6 @@ import (
 
 	"order-processor/internal/applock"
 	"order-processor/internal/appsettings"
-	"order-processor/internal/config"
 	"order-processor/internal/driveupload"
 	"order-processor/internal/fileset"
 	"order-processor/internal/processing"
@@ -42,7 +41,6 @@ func (e *wailsEmitter) Emit(eventName string, data ...interface{}) {
 }
 
 const orderFolderName = "đơn hàng"
-const configFileName = "config.txt"
 
 // zaloJobTimeout là hạn giờ cho MỘT job gửi Zalo (tìm hội thoại + dán +
 // chờ Zalo xác nhận đã gửi). Không có nó, 1 lời gọi chromedp treo vì DOM
@@ -54,7 +52,6 @@ const zaloJobTimeout = 90 * time.Second
 // App struct
 type App struct {
 	ctx                 context.Context
-	cfg                 *config.Store
 	appSettingsStore    *appsettings.Store
 	processor           processing.Processor
 	emitter             Emitter
@@ -157,7 +154,6 @@ func NewApp() (*App, error) {
 	orderDir := filepath.Join(resolveRepoDir("settings.ini"), orderFolderName)
 
 	app := &App{
-		cfg:              config.NewStore(configFileName),
 		appSettingsStore: appSettingsStore,
 		orderDir:         orderDir,
 		excelPath:        excelPath,
@@ -258,16 +254,6 @@ func (a *App) runLockChecker(ctx context.Context) {
 			wait = lockCheckInterval
 		}
 	}
-}
-
-// GetSTT trả về số thứ tự đơn hàng bắt đầu hiện tại.
-func (a *App) GetSTT() (int, error) {
-	return a.cfg.GetSTT()
-}
-
-// SetSTT ghi lại số thứ tự đơn hàng bắt đầu.
-func (a *App) SetSTT(v int) error {
-	return a.cfg.SetSTT(v)
 }
 
 // GetAppSettings trả về toàn bộ cấu hình hiện tại (gid/zalo/reminder)
@@ -444,24 +430,23 @@ func (a *App) SelectFiles() ([]string, error) {
 // process:log / process:row / process:done về frontend. ranges gắn khoảng
 // ngày cho từng file TMĐT (khoá là đúng đường dẫn file); batch không có
 // file TMĐT thì truyền map rỗng hoặc nil.
-func (a *App) ProcessFiles(files []string, stt int, ranges map[string]TMDTDateRange) {
+func (a *App) ProcessFiles(files []string, ranges map[string]TMDTDateRange) {
 	if !a.reserveBatch() {
 		a.emitter.Emit("process:log", "⚠️ Đã có một batch đang xử lý, vui lòng đợi hoàn tất.")
 		return
 	}
-	go a.runReservedBatch(a.emitter, files, stt, ranges)
+	go a.runReservedBatch(a.emitter, files, ranges)
 }
 
-func (a *App) runBatch(emitter Emitter, files []string, stt int, ranges map[string]TMDTDateRange) {
+func (a *App) runBatch(emitter Emitter, files []string, ranges map[string]TMDTDateRange) {
 	if !a.reserveBatch() {
 		emitter.Emit("process:log", "⚠️ Đã có một batch đang xử lý, vui lòng đợi hoàn tất.")
 		return
 	}
-	a.runReservedBatch(emitter, files, stt, ranges)
+	a.runReservedBatch(emitter, files, ranges)
 }
 
-func (a *App) runReservedBatch(emitter Emitter, files []string, stt int, ranges map[string]TMDTDateRange) {
-	current := stt
+func (a *App) runReservedBatch(emitter Emitter, files []string, ranges map[string]TMDTDateRange) {
 	a.excelMu.Lock()
 	defer func() {
 		if r := recover(); r != nil {
@@ -469,7 +454,7 @@ func (a *App) runReservedBatch(emitter Emitter, files []string, stt int, ranges 
 		}
 		a.excelMu.Unlock()
 		a.releaseBatchReservation()
-		emitter.Emit("process:done", current)
+		emitter.Emit("process:done")
 	}()
 
 	// Mirrors xulydonhang.py's xu_ly_don_hang: clear every existing data
@@ -496,12 +481,8 @@ func (a *App) runReservedBatch(emitter Emitter, files []string, stt int, ranges 
 		emitRow := func(row processing.OrderRow) {
 			row = ensureResultIdentity(row, f)
 			row = emitProcessRowOncePerSkuKey(emitter, row, loggedSkuKeys)
-			isFirstAppearance := !streamed[row.ResultKey]
 			if row.ResultKey != "" {
 				streamed[row.ResultKey] = true
-			}
-			if isFirstAppearance {
-				current++
 			}
 		}
 		// Nhánh rẽ TMĐT: cùng một lô có thể trộn file PDF vendor với
@@ -513,7 +494,7 @@ func (a *App) runReservedBatch(emitter Emitter, files []string, stt int, ranges 
 		if tmdt.IsWorkbook(f) {
 			rows, err = a.processTMDTFile(emitter, f, ranges[f], emitRow)
 		} else {
-			rows, err = a.processOne(f, current, emitRow)
+			rows, err = a.processOne(f, emitRow)
 		}
 		if err != nil {
 			emitter.Emit("process:log", fmt.Sprintf("❌ Lỗi xử lý %s: %v", filepath.Base(f), err))
@@ -522,7 +503,6 @@ func (a *App) runReservedBatch(emitter Emitter, files []string, stt int, ranges 
 				Status:     processing.StatusFailed,
 				StatusKind: processing.StatusKindFailed,
 			}, f))
-			current++
 			emitter.Emit("process:progress", BatchProgress{Done: i + 1, Total: len(files)})
 			continue
 		}
@@ -532,14 +512,12 @@ func (a *App) runReservedBatch(emitter Emitter, files []string, stt int, ranges 
 				continue
 			}
 			emitProcessRowOncePerSkuKey(emitter, row, loggedSkuKeys)
-			current++
 		}
 		// Một file lỗi vẫn là một file đã xong phần việc của nó: nếu bỏ
 		// qua ở nhánh trên thì thanh tiến trình sẽ đứng im ở con số cũ
 		// cho tới hết lô và người dùng tưởng app treo.
 		emitter.Emit("process:progress", BatchProgress{Done: i + 1, Total: len(files)})
 	}
-	_ = a.cfg.SetSTT(current)
 }
 
 // BatchProgress là tiến trình của một lô, phát qua "process:progress" khi
@@ -552,16 +530,16 @@ type BatchProgress struct {
 	Total int `json:"total"`
 }
 
-func (a *App) processOne(f string, stt int, emit func(processing.OrderRow)) (rows []processing.OrderRow, err error) {
+func (a *App) processOne(f string, emit func(processing.OrderRow)) (rows []processing.OrderRow, err error) {
 	defer func() {
 		if r := recover(); r != nil {
 			err = fmt.Errorf("panic: %v", r)
 		}
 	}()
 	if processor, ok := a.processor.(processing.StreamingProcessor); ok {
-		return processor.ProcessStreaming(context.Background(), f, stt, emit)
+		return processor.ProcessStreaming(context.Background(), f, emit)
 	}
-	return a.processor.Process(context.Background(), f, stt)
+	return a.processor.Process(context.Background(), f)
 }
 
 func emitProcessRow(emitter Emitter, row processing.OrderRow) processing.OrderRow {

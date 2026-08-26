@@ -21,7 +21,7 @@ func TestRealProcessor_ProcessesRealSampleWinmartFile(t *testing.T) {
 	pricingSource := &fixturePricingSource{index: pricing.ParseIndex(nil)}
 
 	rp := &RealProcessor{Store: store, Pricing: pricingSource, ExcelPath: excelPath}
-	rows, err := rp.Process(context.Background(), "testdata/sample_winmart_order.pdf", 1)
+	rows, err := rp.Process(context.Background(), "testdata/sample_winmart_order.pdf")
 	if err != nil {
 		t.Fatalf("Process returned error: %v", err)
 	}

@@ -76,7 +76,7 @@ func TestBigCStreamingEmitsProvisionalStoresBeforeCombinedWriteAndFinalizesSameK
 	filePath := bigcStreamingFixture(t)
 
 	var events []OrderRow
-	rows, err := rp.ProcessStreaming(context.Background(), filePath, 1, func(row OrderRow) {
+	rows, err := rp.ProcessStreaming(context.Background(), filePath, func(row OrderRow) {
 		if row.StatusKind == StatusKindProcessing {
 			if got := bigcTestWorkbookRowCount(t, excelPath); got != initialRows {
 				t.Errorf("workbook already has %d rows during provisional callback, want unchanged %d before combined write", got, initialRows)
@@ -137,7 +137,7 @@ func TestBigCStreamingCombinedWriteFailureFinalizesEveryProvisionalKey(t *testin
 	filePath := "testdata/sample_bigc_order.pdf"
 
 	var events []OrderRow
-	rows, err := rp.ProcessStreaming(context.Background(), filePath, 1, func(row OrderRow) {
+	rows, err := rp.ProcessStreaming(context.Background(), filePath, func(row OrderRow) {
 		events = append(events, row)
 	})
 	if err != nil {
@@ -169,7 +169,7 @@ func TestBigCStreamingMalformedPagePlusCombinedWriteFailureHasOneTerminalParseFa
 	filePath := bigcStreamingFixture(t)
 
 	var events []OrderRow
-	rows, err := rp.ProcessStreaming(context.Background(), filePath, 1, func(row OrderRow) {
+	rows, err := rp.ProcessStreaming(context.Background(), filePath, func(row OrderRow) {
 		events = append(events, row)
 	})
 	if err != nil {
@@ -215,7 +215,7 @@ func TestBigCLatestPDFSmoke(t *testing.T) {
 	rp := &RealProcessor{Store: store, Pricing: loadFrozenBigcPricingSource(t), ExcelPath: excelPath}
 
 	var events []OrderRow
-	rows, err := rp.ProcessStreaming(context.Background(), filePath, 1, func(row OrderRow) {
+	rows, err := rp.ProcessStreaming(context.Background(), filePath, func(row OrderRow) {
 		events = append(events, row)
 	})
 	if err != nil {
@@ -271,7 +271,7 @@ func TestRealProcessor_ProcessesRealSampleBigcFile(t *testing.T) {
 	pricingSource := &fixturePricingSource{index: pricing.ParseIndex(nil)}
 
 	rp := &RealProcessor{Store: store, Pricing: pricingSource, ExcelPath: excelPath}
-	rows, err := rp.Process(context.Background(), "testdata/sample_bigc_order.pdf", 1)
+	rows, err := rp.Process(context.Background(), "testdata/sample_bigc_order.pdf")
 	if err != nil {
 		t.Fatalf("Process returned error: %v", err)
 	}

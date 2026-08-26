@@ -1,7 +1,7 @@
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { FaPaperPlane, FaCloudArrowUp, FaRocket, FaSpinner } from 'react-icons/fa6'
 import { useAppStore } from '../store/appStore'
-import { GetSTT, InspectTMDTFiles, ProcessFiles, SendZaloMessages } from '../../wailsjs/go/main/App'
+import { InspectTMDTFiles, ProcessFiles, SendZaloMessages } from '../../wailsjs/go/main/App'
 import { TMDTDateRangeModal } from './TMDTDateRangeModal'
 import type { TMDTDateRange } from '../lib/tmdtDateRange'
 import {
@@ -14,8 +14,6 @@ import {
 import { groupKeyFor } from '../lib/zaloGrouping'
 
 export function ControlPanel() {
-  const stt = useAppStore((s) => s.stt)
-  const setStt = useAppStore((s) => s.setStt)
   const files = useAppStore((s) => s.files)
   const isProcessing = useAppStore((s) => s.isProcessing)
   const setProcessing = useAppStore((s) => s.setProcessing)
@@ -30,13 +28,6 @@ export function ControlPanel() {
   // Danh sách file TMĐT đang chờ người dùng chọn khoảng ngày. Modal chỉ
   // bật khi người dùng bấm "Xử lý" — thả file vào không hỏi gì.
   const [pendingTMDT, setPendingTMDT] = useState<string[] | null>(null)
-
-  useEffect(() => {
-    GetSTT()
-      .then(setStt)
-      .catch((err) => appendLog(`❌ Lỗi đọc STT: ${String(err)}`))
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
 
   async function handleProcess() {
     if (files.length === 0) {
@@ -65,7 +56,7 @@ export function ControlPanel() {
     setProcessing(true)
     appendLog('🚀 Bắt đầu xử lý...')
     try {
-      await ProcessFiles(files, stt, ranges)
+      await ProcessFiles(files, ranges)
     } catch (err) {
       appendLog(`❌ Lỗi xử lý: ${String(err)}`)
       setProcessing(false)

@@ -49,7 +49,7 @@ func TestJITStreamingBatchesWorkbookRowsAndFinalizesAbsoluteRows(t *testing.T) {
 	t.Cleanup(func() { writeJITOrderRows = originalWrite })
 
 	var events []OrderRow
-	rows, err := rp.ProcessStreaming(context.Background(), filePath, 1, func(row OrderRow) {
+	rows, err := rp.ProcessStreaming(context.Background(), filePath, func(row OrderRow) {
 		events = append(events, row)
 	})
 	if err != nil {
@@ -123,7 +123,7 @@ func TestJITCombinedWriteFailureFinalizesEveryProvisionalKey(t *testing.T) {
 	t.Cleanup(func() { writeJITOrderRows = originalWrite })
 
 	var events []OrderRow
-	rows, err := rp.ProcessStreaming(context.Background(), filePath, 1, func(row OrderRow) {
+	rows, err := rp.ProcessStreaming(context.Background(), filePath, func(row OrderRow) {
 		events = append(events, row)
 	})
 	if err != nil {
@@ -290,7 +290,7 @@ func TestRealProcessorProcessesJITAirWaybillByFilename(t *testing.T) {
 		LogFunc:   func(line string) { logs = append(logs, line) },
 	}
 	path := filepath.Join("..", "..", "..", "đơn hàng", "air_waybill_WH6_HTLA_24082026.pdf")
-	rows, err := rp.Process(context.Background(), path, 1)
+	rows, err := rp.Process(context.Background(), path)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -359,7 +359,7 @@ func TestRealProcessorDoesNotWriteJITOrderWhenPriceIsMissing(t *testing.T) {
 		ExcelPath: excelPath,
 	}
 	path := filepath.Join("..", "..", "..", "đơn hàng", "air_waybill_WH6_HTLA_24082026.pdf")
-	rows, err := rp.Process(context.Background(), path, 1)
+	rows, err := rp.Process(context.Background(), path)
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -15,14 +15,14 @@ import (
 // thật theo từng vendor — App.ProcessFiles và frontend không cần đổi khi
 // đó xảy ra.
 type Processor interface {
-	Process(ctx context.Context, filePath string, stt int) ([]OrderRow, error)
+	Process(ctx context.Context, filePath string) ([]OrderRow, error)
 }
 
 // StreamingProcessor optionally reports completed rows while processing is
 // still in progress. Processor remains the required contract so existing
 // processors continue to work unchanged.
 type StreamingProcessor interface {
-	ProcessStreaming(ctx context.Context, filePath string, stt int, emit func(OrderRow)) ([]OrderRow, error)
+	ProcessStreaming(ctx context.Context, filePath string, emit func(OrderRow)) ([]OrderRow, error)
 }
 
 var mockVendors = []string{
@@ -52,6 +52,11 @@ type MockProcessor struct {
 	Rand  *rand.Rand
 	Delay time.Duration
 	mu    sync.Mutex
+	// seq đánh số PO giả cho mỗi lần gọi. Trước đây MockProcessor mượn
+	// tham số stt của Processor để làm việc này; stt đã bị bỏ (không
+	// nhánh xử lý thật nào đọc tới nó) nên bộ đếm chuyển vào đây, giữ
+	// nguyên tính chất mỗi dòng giả một PO khác nhau.
+	seq int
 }
 
 func NewMockProcessor() *MockProcessor {
@@ -61,7 +66,7 @@ func NewMockProcessor() *MockProcessor {
 	}
 }
 
-func (m *MockProcessor) Process(ctx context.Context, filePath string, stt int) ([]OrderRow, error) {
+func (m *MockProcessor) Process(ctx context.Context, filePath string) ([]OrderRow, error) {
 	select {
 	case <-time.After(m.Delay):
 	case <-ctx.Done():
@@ -71,6 +76,7 @@ func (m *MockProcessor) Process(ctx context.Context, filePath string, stt int) (
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
+	m.seq++
 	system := mockVendors[m.Rand.Intn(len(mockVendors))]
 	outcome := mockOutcomes[m.Rand.Intn(len(mockOutcomes))]
 
@@ -79,7 +85,7 @@ func (m *MockProcessor) Process(ctx context.Context, filePath string, stt int) (
 		Page:        "1",
 		System:      system,
 		MaKhachHang: fmt.Sprintf("MN_KH%04d", m.Rand.Intn(9999)),
-		PO:          fmt.Sprintf("PO%06d", stt),
+		PO:          fmt.Sprintf("PO%06d", m.seq),
 		DonGia:      fmt.Sprintf("%d", 10000+m.Rand.Intn(90000)),
 		Status:      outcome.status,
 		StatusKind:  outcome.kind,
