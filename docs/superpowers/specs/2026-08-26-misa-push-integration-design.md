@@ -51,7 +51,7 @@ Ba dữ kiện quyết định hình dạng thiết kế, đều đã kiểm ch�
 | Ghi sổ | **Một bước**: kiểm tra xong, không dòng nào lỗi thì ghi luôn |
 | Số lần đẩy | **Một nhánh = một file = một lần đẩy.** Tối đa 2 lần cho cả lô |
 | Kiểu điều khiển chọn nhánh | **Segmented control** giống bộ chọn buổi của JIT, không dùng dropdown |
-| Định tuyến mặc định | HTLA: TMĐT, COOP, DIY, LOTTE, SATRA, **BigC gia công**. Hà Thành: BIGC (modern trade), EMART, WINMART, KINGFOOD. **JIT tách theo kho**: `WH6_HN` → Hà Thành, `WH6_HTLA` → HTLA |
+| Định tuyến mặc định | HTLA: TMĐT, COOP, DIY, LOTTE, SATRA, FUJIMART, **BigC gia công**. Hà Thành: BIGC (modern trade), EMART, WINMART, KINGFOOD, JMART. **JIT tách theo kho**: `WH6_HN` → Hà Thành, `WH6_HTLA` → HTLA |
 
 ## Kiến trúc
 
@@ -188,13 +188,15 @@ không được panic).
 | `COOPMART`, `COOPFOOD`, `Coop` | `Emart` |
 | `Lotte` | `Winmart` |
 | `Satra` | `Kingfood` |
-| `MR.DIY` | `JIT-CHOICE/WH6_HN` |
+| `MR.DIY` | `JMart` |
+| `FujiMart` | `JIT-CHOICE/WH6_HN` |
 | `BigC/GC` | |
 | `JIT-CHOICE/WH6_HTLA` | |
 
-`FujiMart`, `JMart` và mọi hệ thống chưa nêu **cố tình để trống** — người dùng
-mới liệt kê tới đó, đoán thay là đoán vào sổ kế toán. Chúng hiện trong Cài đặt để
-chọn, và modal push chặn đẩy nếu gặp một khoá chưa map.
+Bảng này phủ hết mọi hệ thống mà các processor hiện có sinh ra. Hệ thống **chưa
+từng thấy** (sàn TMĐT mới ngoài tiền tố `TMĐT-`, phân khúc Coop mới do sheet MAKH
+sinh ra) vẫn để trống — đoán thay là đoán vào sổ kế toán. Chúng hiện trong Cài đặt
+để chọn, và modal push chặn đẩy nếu gặp một khoá chưa map.
 
 `TMĐT-*` là **trường hợp tiền tố duy nhất**: tên sàn do `haravan.DetectChannel`
 dò ra nên không liệt kê hết được (`TMĐT-Shopee`, `TMĐT-TikTok Shop`, sàn mới mai
@@ -233,10 +235,10 @@ BigC · modern trade      │*Hà Thành*│ HTLA │
 COOPFOOD                 │ Hà Thành │*HTLA*│
 COOPMART                 │ Hà Thành │*HTLA*│
 Emart                    │*Hà Thành*│ HTLA │
-FujiMart                 │ Hà Thành │ HTLA │   ← chưa đặt
+FujiMart                 │ Hà Thành │*HTLA*│
 JIT · kho WH6_HN         │*Hà Thành*│ HTLA │
 JIT · kho WH6_HTLA       │ Hà Thành │*HTLA*│
-JMart                    │ Hà Thành │ HTLA │   ← chưa đặt
+JMart                    │*Hà Thành*│ HTLA │
 Kingfood                 │*Hà Thành*│ HTLA │
 Lotte                    │ Hà Thành │*HTLA*│
 MR.DIY                   │ Hà Thành │*HTLA*│
@@ -269,7 +271,7 @@ Push MISA — 12 đơn
  ☑  SO-99120     Lotte                  6 dòng │ Hà Thành │*HTLA*│
  ☑  air_waybill  JIT · kho WH6_HN      31 dòng │*Hà Thành*│ HTLA │
  ☐  2608258E3T   TMĐT-Shopee            3 dòng │ Hà Thành │*HTLA*│
- ☑  DH-7781      FujiMart               4 dòng │ Hà Thành │ HTLA │ ← chưa map
+ ☑  DH-7781      Coop Bình Tân          4 dòng │ Hà Thành │ HTLA │ ← chưa map
 ──────────────────────────────────────────────────────────────
  ☑ Ghi nhớ nhánh đã chọn
 Hà Thành: 8 đơn / 96 dòng · HTLA: 3 đơn / 21 dòng
@@ -410,7 +412,11 @@ nhánh đã vào sổ. Ô tick chọn nhóm Zalo trên bảng kết quả **khô
    - `Lookup` khớp không phân biệt hoa thường; `TMĐT-Shopee` và một sàn chưa
      từng thấy đều khớp nhánh tiền tố `TMĐT-`; `TMĐT-Shopee` đã lưu riêng trong
      `misa_routing` thì **khớp đúng thắng tiền tố**;
-   - `SeedRouting` phủ đúng bảng ở mục 4 và **không** chứa `FujiMart`/`JMart`.
+   - `SeedRouting` phủ đúng bảng ở mục 4, và phủ **mọi** giá trị `System` mà các
+     processor hiện có sinh ra (`BigC`, `Coop`, `COOPMART`, `COOPFOOD`, `Emart`,
+     `FujiMart`, `JIT-CHOICE`, `JMart`, `Kingfood`, `Lotte`, `Satra`, `Winmart`,
+     `TMĐT-*`) — test liệt kê tường minh, để thêm processor mới mà quên gieo
+     nhánh thì test đỏ ngay.
 4. `internal/misapush/push_test.go` — `HTTPPusher` trỏ vào `httptest.Server` trả
    đúng phản hồi đã bắt được: khẳng định thứ tự gọi (login → database-context →
    upload → sheetname → step2 → step3 → step4) và `Force=false` chặn ghi khi có
