@@ -44,13 +44,14 @@ Ba dữ kiện quyết định hình dạng thiết kế, đều đã kiểm ch�
 
 | Câu hỏi | Quyết định |
 |---|---|
-| Chọn nhánh lúc nào | Map sẵn theo hệ thống trong Cài đặt; lúc push vẫn chỉnh tay được **từng đơn** |
+| Chọn nhánh lúc nào | Map sẵn theo khoá định tuyến trong Cài đặt; lúc push vẫn chỉnh tay được **từng đơn** |
 | Phạm vi push | **Toàn bộ bảng kết quả** vừa xử lý — mọi đơn đều vào modal, bỏ bớt bằng ô tick **của riêng modal**; không liên quan tới ô tick chọn nhóm Zalo trên bảng |
 | Bảng trống | Nút Push **vô hiệu hoá** |
 | Phiên đăng nhập | File `misa-session.json` + `sid_url` (Apps Script) khai trong Cài đặt |
 | Ghi sổ | **Một bước**: kiểm tra xong, không dòng nào lỗi thì ghi luôn |
 | Số lần đẩy | **Một nhánh = một file = một lần đẩy.** Tối đa 2 lần cho cả lô |
 | Kiểu điều khiển chọn nhánh | **Segmented control** giống bộ chọn buổi của JIT, không dùng dropdown |
+| Định tuyến mặc định | HTLA: TMĐT, COOP, DIY, LOTTE, SATRA, **BigC gia công**. Hà Thành: BIGC (modern trade), EMART, WINMART, KINGFOOD. **JIT tách theo kho**: `WH6_HN` → Hà Thành, `WH6_HTLA` → HTLA |
 
 ## Kiến trúc
 
@@ -59,14 +60,14 @@ Ba dữ kiện quyết định hình dạng thiết kế, đều đã kiểm ch�
 │ ControlPanel  ── nút "Push MISA" (bật khi rows.length > 0)        │
 │      │                                                            │
 │      v                                                            │
-│ MisaPushModal ── 1 dòng / 1 đơn: ☑ | Số ĐH | Hệ thống | dòng |    │
+│ MisaPushModal ── 1 dòng / 1 đơn: ☑ | Số ĐH | nhãn khoá | dòng |   │
 │                  SegmentedControl[ Hà Thành │ HTLA ]              │
 │      │ PushMisa(jobs)                                             │
 └──────┼────────────────────────────────────────────────────────────┘
        v
 ┌─ app.go ──────────────────────────────────────────────────────────┐
 │ (a *App) PushMisa(jobs []MisaPushJob)   ← chạy nền, phát sự kiện  │
-│      │ gom excelRows theo branch                                  │
+│      │ gom excelRows theo branch (RouteKey → nhánh)               │
 │      v                                                            │
 │ internal/misapush ── SplitWorkbook(src, dst, keep []int)          │
 │                   └─ Pusher.Push(ctx, Request) → *misa.ImportResult│
@@ -152,11 +153,59 @@ thì `ImportExcel` dừng lại và trả lỗi **kèm `*ImportResult`** — nê
 được đủ `res.RowErrors`, không chỉ dòng đầu như thông điệp lỗi. Cả nhánh không
 ghi gì, không có chuyện vào sổ nửa lô rồi phải dò xem đơn nào đã lọt.
 
-### 4. Cấu hình — `appsettings.Settings` thêm 2 map
+### 4. Khoá định tuyến — `misapush.RouteKey`
+
+Hệ thống một mình **không đủ** để định tuyến. Hai chỗ phải tách nhỏ hơn, cả hai
+đều là yêu cầu thật của người dùng và đều đọc được từ dữ liệu đã có trên
+`OrderRow`:
+
+| Hệ thống | Khoá định tuyến | Nguồn phân biệt |
+|---|---|---|
+| `JIT-CHOICE` | `JIT-CHOICE/WH6_HN`, `JIT-CHOICE/WH6_HTLA` | `OrderRow.ShipTo` — `jit_airway_processor.go` gán thẳng mã kho bóc từ tên file (`air_waybill_WH6_HTLA_24082026.pdf`) |
+| `BigC` | `BigC/GC`, `BigC/MT` | phân khúc mã KH — `bigc.ResolveCustomerCode` chỉ sinh ra đúng 4 mã: `MB_GC_BIGC`, `MB_MT_BIGC`, `MN_GC_BIGCAC`, `MN_MT_BIGCAC` |
+| còn lại | chính `OrderRow.System` | — |
+
+```go
+// RouteKey trả về khoá tra bảng định tuyến cho một dòng kết quả.
+func RouteKey(system, customerCode, shipTo string) string
+```
+
+Đặt trong `internal/misapush` chứ không phải `internal/processing`: đây là quy
+tắc **kế toán** (đơn này vào sổ của pháp nhân nào), không phải quy tắc xử lý đơn.
+`processing` không được biết gì về nhánh MISA.
+
+Phân khúc mã KH lấy phần giữa của `<miền>_<phân khúc>_<mã NCC>`, viết hoa — đúng
+phép tách mà `zalosend.splitCustomerCode` đã dùng. Mã không đủ 3 phần thì phân
+khúc rỗng và khoá rơi về `BigC` trần (không bao giờ xảy ra với BigC thật, nhưng
+không được panic).
+
+**Giá trị mặc định gieo sẵn** (`misapush.SeedRouting`) — dùng khi
+`misa_routing` chưa có khoá đó, ghi vào Cài đặt ngay lần chạy đầu:
+
+| → HTLA | → Hà Thành |
+|---|---|
+| `TMĐT-*` (mọi sàn, khớp tiền tố) | `BigC/MT` |
+| `COOPMART`, `COOPFOOD`, `Coop` | `Emart` |
+| `Lotte` | `Winmart` |
+| `Satra` | `Kingfood` |
+| `MR.DIY` | `JIT-CHOICE/WH6_HN` |
+| `BigC/GC` | |
+| `JIT-CHOICE/WH6_HTLA` | |
+
+`FujiMart`, `JMart` và mọi hệ thống chưa nêu **cố tình để trống** — người dùng
+mới liệt kê tới đó, đoán thay là đoán vào sổ kế toán. Chúng hiện trong Cài đặt để
+chọn, và modal push chặn đẩy nếu gặp một khoá chưa map.
+
+`TMĐT-*` là **trường hợp tiền tố duy nhất**: tên sàn do `haravan.DetectChannel`
+dò ra nên không liệt kê hết được (`TMĐT-Shopee`, `TMĐT-TikTok Shop`, sàn mới mai
+sau). Tra theo thứ tự: khớp đúng khoá trước, không có thì thử tiền tố `TMĐT-`.
+Mọi hệ thống khác chỉ khớp đúng.
+
+### 5. Cấu hình — `appsettings.Settings` thêm 2 map
 
 ```go
 Misa        map[string]string `json:"misa"`         // sid_url, db_ha_thanh, db_htla
-MisaRouting map[string]string `json:"misa_routing"` // "BigC" -> "ha_thanh" | "htla"
+MisaRouting map[string]string `json:"misa_routing"` // RouteKey -> "ha_thanh" | "htla"
 ```
 
 `ensureMaps` khởi tạo cả hai thành map rỗng khi nil (JSON marshal của map nil ra
@@ -169,56 +218,85 @@ migration.
 Đổi tên bộ dữ liệu bên MISA chỉ phải sửa một chỗ, không phải sửa lại toàn bộ bảng
 định tuyến.
 
-### 5. Giao diện Cài đặt — 2 tab mới
+### 6. Giao diện Cài đặt — 2 tab mới
 
 | Tab | Component | Nội dung |
 |---|---|---|
 | **MISA** | `KeyValueEditor` sẵn có, `secretKeys={['sid_url']}` | 3 khoá: `sid_url`, `db_ha_thanh`, `db_htla`. Giá trị `db_*` khớp một phần tên (không phân biệt hoa thường) hoặc `database_id` đầy đủ — đúng cách `-company` của misapush tra, xem `misa.FindDatabase` |
-| **MISA – Nhánh** | `MisaRoutingEditor` (mới) | Mỗi hệ thống một dòng + `SegmentedControl[Hà Thành │ HTLA]`. Không gõ tay khoá |
+| **MISA – Nhánh** | `MisaRoutingEditor` (mới) | Mỗi khoá định tuyến một dòng + `SegmentedControl[Hà Thành │ HTLA]`. Không gõ tay khoá |
 
-**Danh sách hệ thống lấy từ đâu.** Không hardcode được: `OrderRow.System` của
-Coop lấy từ cột A sheet MAKH (`GetSystemForCustomer` → `COOPMART`/`COOPFOOD`), của
-TMĐT là `"TMĐT-" + tên sàn` do `haravan.DetectChannel` dò ra. Danh sách cứng sẽ
-thiếu ngay khi thêm một phân khúc Coop hoặc một sàn mới.
+```
+Cài đặt > MISA – Nhánh
+──────────────────────────────────────────────────
+BigC · gia công          │ Hà Thành │*HTLA*│
+BigC · modern trade      │*Hà Thành*│ HTLA │
+COOPFOOD                 │ Hà Thành │*HTLA*│
+COOPMART                 │ Hà Thành │*HTLA*│
+Emart                    │*Hà Thành*│ HTLA │
+FujiMart                 │ Hà Thành │ HTLA │   ← chưa đặt
+JIT · kho WH6_HN         │*Hà Thành*│ HTLA │
+JIT · kho WH6_HTLA       │ Hà Thành │*HTLA*│
+JMart                    │ Hà Thành │ HTLA │   ← chưa đặt
+Kingfood                 │*Hà Thành*│ HTLA │
+Lotte                    │ Hà Thành │*HTLA*│
+MR.DIY                   │ Hà Thành │*HTLA*│
+Satra                    │ Hà Thành │*HTLA*│
+TMĐT-* (mọi sàn)         │ Hà Thành │*HTLA*│
+Winmart                  │*Hà Thành*│ HTLA │
+──────────────────────────────────────────────────
+```
 
-Giải pháp: `MisaRoutingEditor` hiển thị **hợp của** một danh sách gợi ý trong code
-(`misapush.SeedSystems` — các literal đang có: `BigC, COOPMART, COOPFOOD, Emart,
-FujiMart, JIT-CHOICE, JMart, Kingfood, Lotte, Satra, Winmart, TMĐT-Shopee,
-TMĐT-TikTok Shop`) **và** mọi khoá đã lưu trong `misa_routing`. Danh sách tự đầy
-lên nhờ cơ chế ở mục 6 — `SeedSystems` chỉ là điểm khởi đầu cho lần cài đầu tiên,
-không phải nguồn chân lý.
+Nhãn hiển thị do frontend dựng từ khoá (`BigC/GC` → "BigC · gia công",
+`JIT-CHOICE/WH6_HN` → "JIT · kho WH6_HN"), khoá lưu xuống file vẫn là chuỗi máy
+đọc. Sắp xếp theo nhãn để danh sách không nhảy chỗ khi có khoá mới.
 
-### 6. Modal push
+**Danh sách khoá lấy từ đâu.** Không hardcode hết được: `OrderRow.System` của Coop
+lấy từ cột A sheet MAKH (`GetSystemForCustomer` → `COOPMART`/`COOPFOOD`), của TMĐT
+là `"TMĐT-" + tên sàn` do `haravan.DetectChannel` dò ra. `MisaRoutingEditor` hiển
+thị **hợp của** `misapush.SeedRouting` (bảng ở mục 4) **và** mọi khoá đã lưu trong
+`misa_routing`; danh sách tự đầy lên nhờ cơ chế ghi nhớ ở mục 7.
+
+### 7. Modal push
 
 Nút "Push MISA" ở `ControlPanel` thay chỗ nhãn `SẮP RA MẮT` hiện có. Bật khi
 `rows.length > 0 && !isProcessing && !isPushing`.
 
 ```
 Push MISA — 12 đơn
-──────────────────────────────────────────────────────────
- ☑  3105551282   BigC          14 dòng   │ Hà Thành │ HTLA │
- ☑  SO-99120     Lotte          6 dòng   │ Hà Thành │ HTLA │
- ☐  2608258E3T   TMĐT-Shopee    3 dòng   │ Hà Thành │ HTLA │
- ☑  …
-──────────────────────────────────────────────────────────
- ☑ Ghi nhớ nhánh đã chọn cho các hệ thống này
+──────────────────────────────────────────────────────────────
+ ☑  3105551282   BigC · gia công       14 dòng │ Hà Thành │*HTLA*│
+ ☑  4102277318   BigC · modern trade    9 dòng │*Hà Thành*│ HTLA │
+ ☑  SO-99120     Lotte                  6 dòng │ Hà Thành │*HTLA*│
+ ☑  air_waybill  JIT · kho WH6_HN      31 dòng │*Hà Thành*│ HTLA │
+ ☐  2608258E3T   TMĐT-Shopee            3 dòng │ Hà Thành │*HTLA*│
+ ☑  DH-7781      FujiMart               4 dòng │ Hà Thành │ HTLA │ ← chưa map
+──────────────────────────────────────────────────────────────
+ ☑ Ghi nhớ nhánh đã chọn
 Hà Thành: 8 đơn / 96 dòng · HTLA: 3 đơn / 21 dòng
                                     [Huỷ]  [ĐẨY LÊN MISA]
 ```
 
 - Gom nhóm bằng đúng `groupKeyFor` (`lib/zaloGrouping.ts`) mà bảng kết quả và nút
   Zalo đang dùng — một đơn trên modal là đúng một đơn người dùng thấy trên bảng.
-- Nhánh mặc định: tra `misa_routing` theo `OrderRow.System`, so khớp **không phân
-  biệt hoa thường, khớp đúng chuỗi** (không đoán theo tiền tố — modal ghi lại đúng
-  chuỗi nó nhìn thấy, nên khớp đúng là đủ và không bao giờ gán nhầm).
-- Hệ thống chưa map → **không nút nào sáng**. Nút "ĐẨY LÊN MISA" khoá cho tới khi
-  mọi đơn đang tick đều có nhánh. Không đoán bừa vào Hà Thành.
-- **"Ghi nhớ nhánh đã chọn"** (mặc định bật) ghi ngược `system → branch` vào
+- Cột thứ ba hiện **nhãn của khoá định tuyến**, không phải tên hệ thống trần —
+  nhìn là biết vì sao hai đơn BigC lại rơi vào hai nhánh khác nhau.
+- Nhánh mặc định: `RouteKey(row)` → tra `misa_routing` (khớp đúng, không phân biệt
+  hoa thường; riêng `TMĐT-*` có nhánh khớp tiền tố) → không có thì tra
+  `SeedRouting` → vẫn không có thì để trống.
+- Khoá chưa map → **không nút nào sáng**. Nút "ĐẨY LÊN MISA" khoá cho tới khi mọi
+  đơn đang tick đều có nhánh. Không đoán bừa vào Hà Thành.
+- **"Ghi nhớ nhánh đã chọn"** (mặc định bật) ghi ngược `RouteKey → branch` vào
   `misa_routing` qua `SaveAppSettings`. Đây là cơ chế giữ cho bảng định tuyến đầy
-  đủ mà không cần danh sách hệ thống cứng: hệ thống mới xuất hiện lần đầu thì chọn
-  tay một lần, từ lần sau tự có sẵn và hiện luôn trong tab Cài đặt.
+  đủ mà không cần danh sách khoá cứng: sàn TMĐT mới hoặc phân khúc Coop mới xuất
+  hiện lần đầu thì chọn tay một lần, từ lần sau tự có sẵn và hiện luôn trong Cài
+  đặt.
+- Hai đơn cùng một khoá định tuyến mà người dùng đổi nhánh của một đơn → **chỉ đơn
+  đó đổi**, khoá không đổi theo. "Ghi nhớ" khi đó ghi nhánh của đơn cuối cùng
+  người dùng chạm vào cho khoá ấy; nếu một khoá bị đặt hai nhánh khác nhau trong
+  cùng một lượt thì **không ghi nhớ khoá đó** và log một dòng cảnh báo — thà để
+  lần sau hỏi lại còn hơn ghi sai vào Cài đặt.
 
-### 7. `SegmentedControl` dùng chung
+### 8. `SegmentedControl` dùng chung
 
 Tách phần thân `JITPeriodMenu` thành `frontend/src/components/SegmentedControl.tsx`:
 
@@ -240,7 +318,7 @@ nhưng `role="group"` + `aria-pressed` vẫn đúng cho cả hai). Buổi JIT kh
 pixel, và nhánh MISA giống nó vì **dùng chung đúng một component**, không phải
 chép lại style.
 
-### 8. `App.PushMisa` — điều phối
+### 9. `App.PushMisa` — điều phối
 
 ```go
 type MisaPushJob struct {
@@ -321,11 +399,23 @@ nhánh đã vào sổ. Ô tick chọn nhóm Zalo trên bảng kết quả **khô
    - khẳng định công thức `Z` hạ đúng chỉ số (`Y9*X9`, `Y10*X10`, `Y11*X11`);
    - `keep` rỗng → lỗi; chỉ số ngoài phạm vi → lỗi;
    - file nguồn **không bị sửa**.
-3. `internal/misapush/push_test.go` — `HTTPPusher` trỏ vào `httptest.Server` trả
+3. `internal/misapush/route_test.go`
+   - `RouteKey("JIT-CHOICE", "MN_JIT_01512", "WH6_HN")` → `JIT-CHOICE/WH6_HN`;
+     `…"WH6_HTLA"` → `JIT-CHOICE/WH6_HTLA`;
+   - `RouteKey("BigC", "MB_GC_BIGC", "")` → `BigC/GC`; cả 4 mã BigC thật
+     (`MB_GC_BIGC`, `MB_MT_BIGC`, `MN_GC_BIGCAC`, `MN_MT_BIGCAC`) ra đúng 2 khoá;
+   - `RouteKey("Lotte", "MN_MT_LOT1001", "")` → `Lotte` (hệ thống trần);
+   - mã KH không đủ 3 phần với BigC → `BigC` trần, không panic;
+   - JIT với `ShipTo` rỗng → `JIT-CHOICE` trần, không panic;
+   - `Lookup` khớp không phân biệt hoa thường; `TMĐT-Shopee` và một sàn chưa
+     từng thấy đều khớp nhánh tiền tố `TMĐT-`; `TMĐT-Shopee` đã lưu riêng trong
+     `misa_routing` thì **khớp đúng thắng tiền tố**;
+   - `SeedRouting` phủ đúng bảng ở mục 4 và **không** chứa `FujiMart`/`JMart`.
+4. `internal/misapush/push_test.go` — `HTTPPusher` trỏ vào `httptest.Server` trả
    đúng phản hồi đã bắt được: khẳng định thứ tự gọi (login → database-context →
    upload → sheetname → step2 → step3 → step4) và `Force=false` chặn ghi khi có
    dòng lỗi.
-4. `app_misa_test.go`
+5. `app_misa_test.go`
    - `PushMisa` gom đúng `ExcelRows` theo nhánh, loại trùng, sắp tăng dần;
    - đúng **một** lời gọi `Push` cho mỗi nhánh có đơn; **không** gọi cho nhánh rỗng;
    - từ chối khi `a.processing` đang bật;
@@ -334,19 +424,23 @@ nhánh đã vào sổ. Ô tick chọn nhóm Zalo trên bảng kết quả **khô
    - nhánh 1 lỗi vẫn chạy nhánh 2;
    - phát `misa:pushed` đúng nhánh, đúng cờ `ok`;
    - file tạm bị xoá kể cả khi `Push` trả lỗi.
-5. `internal/appsettings/store_test.go` — thêm ca: `.bhconfig` cũ **không có**
+6. `internal/appsettings/store_test.go` — thêm ca: `.bhconfig` cũ **không có**
    `misa`/`misa_routing` đọc lên ra map rỗng (không nil), ghi lại có đủ 6 khoá.
 
 ### Frontend (vitest)
 
-6. `lib/misaBranch.test.ts`
+7. `lib/misaBranch.test.ts`
    - gom nhóm đơn từ `rows` khớp đúng `groupKeyFor`;
-   - tra nhánh mặc định không phân biệt hoa thường;
-   - hệ thống chưa map → nhánh rỗng;
+   - nhãn hiển thị dựng đúng từ khoá (`BigC/GC` → "BigC · gia công",
+     `JIT-CHOICE/WH6_HN` → "JIT · kho WH6_HN", `Lotte` → "Lotte");
+   - tra nhánh mặc định: `misa_routing` thắng `SeedRouting`; khớp không phân biệt
+     hoa thường;
+   - khoá chưa map → nhánh rỗng;
    - tổng "x đơn / y dòng" mỗi nhánh tính đúng, chỉ đếm đơn đang tick;
    - `canPush` = false khi còn đơn đã tick mà chưa có nhánh, hoặc khi không tick
      đơn nào;
-   - `rememberRouting` dựng đúng map `system → branch` từ lựa chọn hiện tại;
+   - `rememberRouting` dựng đúng map `RouteKey → branch` từ lựa chọn hiện tại, và
+     **bỏ qua** khoá bị đặt hai nhánh khác nhau trong cùng một lượt;
    - sau khi nhận `misa:pushed{branch, ok: true}`, nhánh đó bị loại khỏi lượt đẩy
      tiếp theo còn nhánh lỗi thì không.
 
