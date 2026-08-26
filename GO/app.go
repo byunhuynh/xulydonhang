@@ -90,6 +90,29 @@ type App struct {
 	misaSessionPath string
 }
 
+// exeDir trả về thư mục chứa chính file .exe đang chạy.
+//
+// Đây là mọi neo cuối cùng khi không dò ra settings.ini ở đâu cả — tức
+// trường hợp bản triển khai thật, nơi exe nằm cạnh settings.bhconfig,
+// misa-session.json, dondathang.xlsx và thư mục "đơn hàng" chứ không có
+// settings.ini đời cũ.
+//
+// Trước đây neo này là "." (thư mục làm việc hiện hành). Bấm đúp vào exe
+// thì CWD trùng thư mục chứa exe nên chạy đúng, nhưng chạy qua shortcut có
+// "Start in" khác, từ cửa sổ lệnh ở thư mục khác, hay từ một trình khởi
+// chạy đặt CWD về System32 thì app đọc cấu hình RỖNG mà không báo gì —
+// triệu chứng là "Không tải được dữ liệu" hoặc Cài đặt trắng trơn. Neo
+// theo exe làm cả thư mục chép đi đâu cũng chạy, khởi động kiểu gì cũng đúng.
+//
+// Lấy không được thì lùi về "." như cũ, vì còn hơn là không có gì.
+func exeDir() string {
+	exe, err := os.Executable()
+	if err != nil {
+		return "."
+	}
+	return filepath.Dir(exe)
+}
+
 // resolveRepoFile looks for filename starting in the current working
 // directory and then each parent directory up to 5 levels, returning
 // the first path where the file actually exists. This is needed
@@ -116,7 +139,9 @@ func resolveRepoFile(filename string) string {
 		}
 		dir = parent
 	}
-	return filename
+	// Không thấy ở đâu: trả đường dẫn cạnh exe thay vì tên trần. Tên
+	// trần là đường dẫn tương đối, nên mọi thứ đi theo CWD — xem exeDir.
+	return filepath.Join(exeDir(), filename)
 }
 
 // resolveRepoDir returns the directory resolveRepoFile would resolve

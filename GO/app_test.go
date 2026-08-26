@@ -383,17 +383,20 @@ func TestResolveRepoFile_FindsFileInAncestorDirectory(t *testing.T) {
 	}
 }
 
-func TestResolveRepoFile_FallsBackToBareNameBeyondSearchDepth(t *testing.T) {
+func TestResolveRepoFile_BeyondSearchDepthNeoTheoExe(t *testing.T) {
 	base := t.TempDir()
 	const markerName = "marker.txt"
 	if err := os.WriteFile(filepath.Join(base, markerName), []byte("x"), 0o644); err != nil {
 		t.Fatalf("WriteFile: %v", err)
 	}
 
-	// One directory deeper than the "found" test above puts base just
-	// outside resolveRepoFile's cwd+4-parents search window, so the
-	// file — despite existing — must not be found, and the bare
-	// filename must be returned instead.
+	// Sau vung tim kiem cwd+4-cha, nen file DU TON TAI van khong duoc tim
+	// thay. Truoc day ham tra ve TEN TRAN - mot duong dan tuong doi, keo
+	// theo moi thu bam vao thu muc lam viec hien hanh. Ban trien khai that
+	// (New folder tren Desktop) khong co settings.ini nen luon roi vao
+	// nhanh nay: bam dup vao exe thi dung, chay qua shortcut co "Start in"
+	// khac thi app doc cau hinh RONG ma khong bao gi. Nay neo theo thu muc
+	// chua exe de thu muc chep di dau, khoi dong kieu gi cung chay.
 	nested := filepath.Join(base, "a", "b", "c", "d", "e")
 	if err := os.MkdirAll(nested, 0o755); err != nil {
 		t.Fatalf("MkdirAll: %v", err)
@@ -401,8 +404,15 @@ func TestResolveRepoFile_FallsBackToBareNameBeyondSearchDepth(t *testing.T) {
 	chdirForTest(t, nested)
 
 	got := resolveRepoFile(markerName)
-	if got != markerName {
-		t.Fatalf("resolveRepoFile(%q) = %q, want bare filename %q (not found within search depth)", markerName, got, markerName)
+	if !filepath.IsAbs(got) {
+		t.Fatalf("resolveRepoFile(%q) = %q, want duong dan tuyet doi canh exe", markerName, got)
+	}
+	exe, err := os.Executable()
+	if err != nil {
+		t.Skipf("khong lay duoc duong dan exe: %v", err)
+	}
+	if want := filepath.Join(filepath.Dir(exe), markerName); got != want {
+		t.Fatalf("resolveRepoFile(%q) = %q, want %q", markerName, got, want)
 	}
 }
 
