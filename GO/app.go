@@ -18,6 +18,7 @@ import (
 	"order-processor/internal/appsettings"
 	"order-processor/internal/driveupload"
 	"order-processor/internal/fileset"
+	"order-processor/internal/misapush"
 	"order-processor/internal/processing"
 	"order-processor/internal/processing/excelwriter"
 	"order-processor/internal/processing/pricing"
@@ -138,6 +139,16 @@ func NewApp() (*App, error) {
 	settings, err := appSettingsStore.Load(resolveRepoFile("settings.ini"))
 	if err != nil {
 		return nil, fmt.Errorf("app: load app settings: %w", err)
+	}
+
+	// Vật chất hoá bảng định tuyến mặc định xuống settings.bhconfig ngay
+	// lần chạy đầu, chỉ điền khoá còn thiếu. Xem misapush.ApplySeed cho
+	// lý do đầy đủ: nếu bảng gieo chỉ sống trong code như giá trị dự
+	// phòng, một lần sửa hằng số ở bản sau sẽ lặng lẽ đổi nhánh của mọi
+	// mục người dùng chưa từng chạm vào. Lỗi ghi đĩa KHÔNG chặn khởi
+	// động — app vẫn chạy được đầy đủ, chỉ là lần sau gieo lại.
+	if misapush.ApplySeed(settings.MisaRouting) {
+		_ = appSettingsStore.Save(settings)
 	}
 
 	excelPath := resolveRepoFile("dondathang.xlsx")
