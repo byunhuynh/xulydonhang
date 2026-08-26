@@ -26,8 +26,20 @@ export function InspectTMDTFiles(arg1) {
   return window['go']['main']['App']['InspectTMDTFiles'](arg1);
 }
 
+export function MisaResolveRoutes(arg1) {
+  return window['go']['main']['App']['MisaResolveRoutes'](arg1);
+}
+
+export function MisaRouteOptions() {
+  return window['go']['main']['App']['MisaRouteOptions']();
+}
+
 export function ProcessFiles(arg1, arg2) {
   return window['go']['main']['App']['ProcessFiles'](arg1, arg2);
+}
+
+export function PushMisa(arg1) {
+  return window['go']['main']['App']['PushMisa'](arg1);
 }
 
 export function RefreshZaloQR() {

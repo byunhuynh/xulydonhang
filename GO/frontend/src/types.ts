@@ -66,4 +66,6 @@ export interface AppSettings {
   zalo: Record<string, string>
   reminder: Record<string, string>
   haravan: Record<string, string>
+  misa: Record<string, string>
+  misa_routing: Record<string, string>
 }
