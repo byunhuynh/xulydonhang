@@ -155,8 +155,11 @@ export function FileListPanel({
     // trực tiếp thuộc tính flex trong 1 flex-col dùng chung với LogPanel
     // từng gây đè/chồng hình giữa 2 panel lúc đổi kích thước (WebView2).
     <section
+      // Thu gọn = CHIỀU CAO CỐ ĐỊNH (đủ tiêu đề + vài dòng + nút chọn
+      // file), không phải chiều cao theo nội dung — xem ghi chú cùng lý do
+      // trong LogPanel.tsx.
       className={`flex min-h-0 flex-col rounded-xl border border-border bg-panel p-3.5 ${
-        size === 'compact' ? 'flex-none' : size === 'expanded' ? 'flex-1' : 'flex-[2]'
+        size === 'compact' ? 'h-[220px] flex-none' : size === 'expanded' ? 'flex-1' : 'flex-[2]'
       }`}
     >
       <SectionHeader
@@ -206,9 +209,7 @@ export function FileListPanel({
       <ul
         tabIndex={0}
         onKeyDown={handleKeyDown}
-        className={`selectable flex-1 overflow-auto rounded-lg border border-border bg-bg p-2 ${
-          size === 'compact' ? 'max-h-[210px]' : ''
-        }`}
+        className="selectable min-h-0 flex-1 overflow-auto rounded-lg border border-border bg-bg p-2"
       >
         {files.length === 0 && (
           <li className="flex h-full items-center justify-center rounded-lg border border-dashed border-border p-6 text-center font-mono text-xs text-muted">

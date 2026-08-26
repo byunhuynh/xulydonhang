@@ -181,8 +181,13 @@ export function LogPanel({
 
   return (
     <section
+      // Thu gọn = CHIỀU CAO CỐ ĐỊNH, không phải chiều cao theo nội dung.
+      // Bản cũ dùng flex-none + max-h ở danh sách bên trong: ở cửa sổ thấp
+      // (1366×768) mức chặn đó còn LỚN HƠN phần panel vốn được chia khi cân
+      // bằng, nên bấm "Mở rộng" panel kia gần như không nhả ra chỗ nào —
+      // đo được đúng +17px, và panel này còn tự nhỏ đi 23px khi tự bung.
       className={`flex min-h-0 flex-col rounded-xl border border-border bg-panel p-3.5 ${
-        size === 'compact' ? 'flex-none' : 'flex-1'
+        size === 'compact' ? 'h-[130px] flex-none' : 'flex-1'
       }`}
     >
       <SectionHeader
@@ -213,9 +218,10 @@ export function LogPanel({
       />
       <div
         ref={listRef}
-        className={`selectable flex-1 overflow-auto rounded-lg border border-border bg-bg p-2.5 font-mono text-xs ${
-          size === 'compact' ? 'max-h-[150px]' : ''
-        }`}
+        // Không còn max-h riêng cho compact: chiều cao section đã cố định
+        // nên danh sách chỉ việc lấp phần còn lại (min-h-0 để co được và
+        // cuộn thay vì đẩy phồng section).
+        className="selectable min-h-0 flex-1 overflow-auto rounded-lg border border-border bg-bg p-2.5 font-mono text-xs"
       >
         {logLines.length === 0 && (
           <div className="flex h-full items-center justify-center text-muted">Chưa có hoạt động nào.</div>
