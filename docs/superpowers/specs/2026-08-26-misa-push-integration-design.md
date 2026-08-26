@@ -423,7 +423,7 @@ nhánh đã vào sổ. Ô tick chọn nhóm Zalo trên bảng kết quả **khô
    - khẳng định công thức `Z` hạ đúng chỉ số (`Y9*X9`, `Y10*X10`, `Y11*X11`);
    - `keep` rỗng → lỗi; chỉ số ngoài phạm vi → lỗi;
    - file nguồn **không bị sửa**.
-3. `internal/misapush/route_test.go`
+3. `internal/misapush/route_test.go` (và `app_misa_route_test.go` cho hai binding)
    - `RouteKey("JIT-CHOICE", "MN_JIT_01512", "WH6_HN")` → `JIT-CHOICE/WH6_HN`;
      `…"WH6_HTLA"` → `JIT-CHOICE/WH6_HTLA`;
    - `RouteKey("BigC", "MB_GC_BIGC", "")` → `BigC/GC`; cả 4 mã BigC thật
@@ -434,6 +434,11 @@ nhánh đã vào sổ. Ô tick chọn nhóm Zalo trên bảng kết quả **khô
    - `Lookup` khớp không phân biệt hoa thường; `TMĐT-Shopee` và một sàn chưa
      từng thấy đều khớp nhánh tiền tố `TMĐT-`; `TMĐT-Shopee` đã lưu riêng trong
      `misa_routing` thì **khớp đúng thắng tiền tố**;
+   - `Label` dựng đúng: `BigC/GC` → "BigC · gia công", `BigC/MT` → "BigC · modern
+     trade", `JIT-CHOICE/WH6_HN` → "JIT · kho WH6_HN", `TMĐT-*` → "TMĐT (mọi
+     sàn)", `Lotte` → "Lotte";
+   - `ApplySeed` chỉ thêm khoá còn thiếu, **không** ghi đè khoá đã có, và báo
+     đúng cờ "có thay đổi hay không" để bên gọi biết có cần lưu xuống đĩa;
    - `SeedRouting` phủ đúng bảng ở mục 4, và phủ **mọi** giá trị `System` mà các
      processor hiện có sinh ra (`BigC`, `Coop`, `COOPMART`, `COOPFOOD`, `Emart`,
      `FujiMart`, `JIT-CHOICE`, `JMart`, `Kingfood`, `Lotte`, `Satra`, `Winmart`,
@@ -455,15 +460,15 @@ nhánh đã vào sổ. Ô tick chọn nhóm Zalo trên bảng kết quả **khô
 6. `internal/appsettings/store_test.go` — thêm ca: `.bhconfig` cũ **không có**
    `misa`/`misa_routing` đọc lên ra map rỗng (không nil), ghi lại có đủ 6 khoá.
 
-### Frontend (vitest)
+### Frontend (`node --experimental-strip-types --test`)
 
-7. `lib/misaBranch.test.ts`
-   - gom nhóm đơn từ `rows` khớp đúng `groupKeyFor`;
-   - nhãn hiển thị dựng đúng từ khoá (`BigC/GC` → "BigC · gia công",
-     `JIT-CHOICE/WH6_HN` → "JIT · kho WH6_HN", `Lotte` → "Lotte");
-   - tra nhánh mặc định: `misa_routing` thắng `SeedRouting`; khớp không phân biệt
-     hoa thường;
-   - khoá chưa map → nhánh rỗng;
+Repo **không dùng vitest**. Bộ test frontend chạy bằng test runner có sẵn của
+Node, và `package.json` liệt kê tường minh từng file — file test mới phải được
+thêm vào script `test`, nếu không nó không bao giờ chạy.
+
+7. `lib/misaBranch.test.ts` — chỉ logic thuần của giao diện, **không** lặp lại
+   quy tắc định tuyến (quy tắc đó nằm ở Go, xem mục "Ranh giới Go ↔ frontend"):
+   - gom nhóm đơn từ `rows` khớp đúng `groupKeyFor`, giữ nguyên thứ tự xuất hiện;
    - tổng "x đơn / y dòng" mỗi nhánh tính đúng, chỉ đếm đơn đang tick;
    - `canPush` = false khi còn đơn đã tick mà chưa có nhánh, hoặc khi không tick
      đơn nào;
@@ -471,6 +476,41 @@ nhánh đã vào sổ. Ô tick chọn nhóm Zalo trên bảng kết quả **khô
      **bỏ qua** khoá bị đặt hai nhánh khác nhau trong cùng một lượt;
    - sau khi nhận `misa:pushed{branch, ok: true}`, nhánh đó bị loại khỏi lượt đẩy
      tiếp theo còn nhánh lỗi thì không.
+
+## Ranh giới Go ↔ frontend
+
+Quy tắc định tuyến (`RouteKey`, `SeedRouting`, nhãn hiển thị, phép tra khớp
+tiền tố `TMĐT-*`) **chỉ tồn tại ở Go**. Viết lại chúng bằng TypeScript sẽ tạo ra
+hai bản sao của một quy tắc kế toán, và bản nào lệch thì đơn vào nhầm sổ mà test
+của bên kia vẫn xanh.
+
+Frontend lấy qua đúng hai binding, mỗi cái gọi một lần:
+
+```go
+// MisaRouteInput là dòng ĐẦU của một nhóm đơn trên bảng kết quả.
+type MisaRouteInput struct {
+    System       string `json:"system"`
+    CustomerCode string `json:"customerCode"`
+    ShipTo       string `json:"shipTo"`
+}
+
+// MisaRouteInfo là khoá định tuyến đã phân giải của một nhóm đơn.
+type MisaRouteInfo struct {
+    Key    string `json:"key"`    // vd "BigC/GC"
+    Label  string `json:"label"`  // vd "BigC · gia công"
+    Branch string `json:"branch"` // "ha_thanh" | "htla" | "" nếu chưa map
+}
+
+// MisaResolveRoutes: modal push gọi khi mở, một lời gọi cho cả lô.
+func (a *App) MisaResolveRoutes(rows []MisaRouteInput) ([]MisaRouteInfo, error)
+
+// MisaRouteOptions: tab Cài đặt gọi khi mở — mọi khoá đã biết (seed ∪ đã lưu),
+// sắp theo nhãn.
+func (a *App) MisaRouteOptions() ([]MisaRouteInfo, error)
+```
+
+Frontend chỉ còn việc gom nhóm, đếm, khoá/mở nút, và dựng map ghi nhớ — đó đúng
+là phần `lib/misaBranch.test.ts` kiểm.
 
 ## Cố ý không làm
 
