@@ -34,26 +34,36 @@ type PageCounts struct {
 	SubTotal int
 }
 
+// pomNormalizer chuan hoa van ban truoc khi DEM va truoc khi TACH.
+// CountPOsOnPage va SplitMultiPO phai nhin thay CUNG mot van ban: truoc
+// day mot ben dem tren ban da chuan hoa con ben kia tach tren ban goc,
+// nen so dem va so doan tach duoc lech nhau ma khong co gi bao.
+var pomNormalizer = strings.NewReplacer(" ", " ", "pom343", "POM343", "pom346", "POM346")
+
 // CountPOsOnPage mirrors demsodonhang1trang_coop.
 func CountPOsOnPage(text string) PageCounts {
-	text = strings.NewReplacer(" ", " ", "pom343", "POM343", "pom346", "POM346").Replace(text)
+	text = pomNormalizer.Replace(text)
 	return PageCounts{
 		POM343:   len(pom34Pattern.FindAllString(text, -1)),
 		SubTotal: len(subTotalCountPattern.FindAllString(text, -1)),
 	}
 }
 
-// SplitMultiPO mirrors catdonra_nhieutrang exactly, including its
-// latent case-sensitivity bug (see this plan's Global Constraints): the
-// membership check (`keyword in text.lower()`) is case-insensitive, but
-// the actual split (`text.split(keyword, 1)`) is case-sensitive against
-// the lowercase literal keyword. That preserved bug is only about the
-// POM keyword; the "Sub Total" boundary below uses subTotalCountPattern
-// (the same whitespace-tolerant matcher CountPOsOnPage uses) instead of
-// a literal split, so a page whose extraction shreds "Sub Total" into
-// "S u b   T o t a l" — which CountPOsOnPage already tolerates — doesn't
-// silently produce zero segments here despite the counts matching.
+// SplitMultiPO cat mot trang nhieu PO thanh tung doan, moi doan mot PO.
+//
+// Ranh gioi mo dau la POM343/POM346, ranh gioi ket thuc la "Sub Total".
+// Ca hai deu dung DUNG regex ma CountPOsOnPage dung de dem, tren van ban
+// da qua pomNormalizer - nen so doan tra ve luon khop so dem.
+//
+// Ban dau ham nay port nguyen si mot bug cua ban Python: kiem tra ton tai
+// thi khong phan biet hoa thuong, nhung lenh tach lai dung strings.SplitN
+// voi chuoi CHU THUONG "pom343" trong khi du lieu Coop that viet HOA. Hau
+// qua: moi trang PDF co nhieu hon mot PO chi ra dung don dau tien, cac don
+// sau bien mat KHONG BAO GI. Nguoi dung quyet sua ngay 2026-08-26 vi day
+// la mat don im lang vao so dat hang.
 func SplitMultiPO(text string) []string {
+	text = pomNormalizer.Replace(text)
+
 	var segments []string
 
 	before, after, ok := splitOnSubTotal(text)
@@ -63,35 +73,23 @@ func SplitMultiPO(text string) []string {
 	segments = append(segments, before)
 	text = after
 
-	for containsAny(strings.ToLower(text), "pom343", "pom346") && subTotalCountPattern.MatchString(text) {
-		found := false
-		for _, keyword := range []string{"pom343", "pom346"} {
-			if !strings.Contains(strings.ToLower(text), keyword) {
-				continue
-			}
-			// Case-sensitive on purpose — see the doc comment above.
-			splitParts := strings.SplitN(text, keyword, 2)
-			if len(splitParts) < 2 {
-				// Case-sensitive split failed (bug preserved)
-				continue
-			}
-			found = true
-			text = splitParts[1]
+	for subTotalCountPattern.MatchString(text) {
+		loc := pom34Pattern.FindStringIndex(text)
+		if loc == nil {
+			break
+		}
+		// Giu dung chuoi tu khoa da khop (POM343 hay POM346) thay vi gan
+		// cung mot chuoi: moi doan phai noi dung loai chung tu cua chinh no.
+		keyword := text[loc[0]:loc[1]]
+		text = text[loc[1]:]
 
-			subBefore, subAfter, subOK := splitOnSubTotal(text)
-			if subOK {
-				segments = append(segments, strings.ToUpper(keyword)+strings.TrimRight(subBefore, "\n"))
-				text = subAfter
-			} else {
-				segments = append(segments, strings.ToUpper(keyword)+text)
-				return segments
-			}
-			break
+		subBefore, subAfter, subOK := splitOnSubTotal(text)
+		if !subOK {
+			segments = append(segments, keyword+text)
+			return segments
 		}
-		if !found {
-			// No keyword matched case-sensitively, bug prevents further processing
-			break
-		}
+		segments = append(segments, keyword+strings.TrimRight(subBefore, "\n"))
+		text = subAfter
 	}
 
 	return segments
@@ -107,13 +105,4 @@ func splitOnSubTotal(text string) (before, after string, ok bool) {
 		return "", "", false
 	}
 	return text[:loc[0]], text[loc[1]:], true
-}
-
-func containsAny(s string, subs ...string) bool {
-	for _, sub := range subs {
-		if strings.Contains(s, sub) {
-			return true
-		}
-	}
-	return false
 }
