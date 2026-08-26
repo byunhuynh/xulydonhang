@@ -138,13 +138,14 @@ func (p *RealProcessor) processJMartSegment(filePath string, realPageNum int, te
 		if len(promos) == 0 && closeEnough(invoicePrice, realPrice) {
 			matched = true
 		}
+		unitPrice := appliedUnitPrice(matched, invoicePrice, finalPrice)
 		skuLog = append(skuLog, formatSkuLogLine(barcode, productInfo.Name, matched, invoicePrice, finalPrice, khuyenmai, khuyenmaiColumn))
 
 		productRow := excelwriter.Row{
 			EntryDate: entryDate, DebtDays: coopDebtDays, OrderNumber: orderNum,
 			Status: "Chưa thực hiện", CancelDate: cancelDate, ShipTo: deliveryAddress, CustomerCode: jmartCustomerCode,
 			Description: description, SKU: barcode, Warehouse: warehouse, VATPercent: 8,
-			RegionCode: region, StatCode: statCode, Qty: ouQty, UnitPrice: finalPrice,
+			RegionCode: region, StatCode: statCode, Qty: ouQty, UnitPrice: unitPrice,
 			ProductName: productInfo.Name, CaseCount: caseCount, LineWeightKg: lineWeight, UseZFormula: true,
 			PromoContent: khuyenmai,
 		}
@@ -161,7 +162,7 @@ func (p *RealProcessor) processJMartSegment(filePath string, realPageNum int, te
 			})
 		}
 		rows = append(rows, productRow)
-		totalValue += finalPrice * ouQty
+		totalValue += unitPrice * ouQty
 
 		// Per-item promo bonus row — single attempt, buildPromoBonusRow
 		// always called with index=0, matching Kingfood's exact shape

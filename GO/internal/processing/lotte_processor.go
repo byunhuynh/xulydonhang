@@ -150,13 +150,14 @@ func (p *RealProcessor) processLotteSegment(filePath string, realPageNum int, te
 		if len(promos) == 0 && closeEnough(invoicePrice, realPrice) {
 			matched = true
 		}
+		unitPrice := appliedUnitPrice(matched, invoicePrice, finalPrice)
 		skuLog = append(skuLog, formatSkuLogLine(barcode, productInfo.Name, matched, invoicePrice, finalPrice, lastExaminedPromo, lastExaminedPromoColumn))
 
 		productRow := excelwriter.Row{
 			EntryDate: info.EntryDate, DebtDays: coopDebtDays, OrderNumber: lotteOrderNumber(info.PONumber),
 			Status: "Chưa thực hiện", CancelDate: cancelDate, ShipTo: shipTo, CustomerCode: customerCode,
 			Description: description, SKU: barcode, Warehouse: warehouse, VATPercent: 8,
-			RegionCode: region, StatCode: statCode, Qty: qty, UnitPrice: finalPrice,
+			RegionCode: region, StatCode: statCode, Qty: qty, UnitPrice: unitPrice,
 			ProductName: productInfo.Name, CaseCount: caseCount, LineWeightKg: lineWeight, UseZFormula: true,
 			PromoContent: lastExaminedPromo,
 		}
@@ -173,7 +174,7 @@ func (p *RealProcessor) processLotteSegment(filePath string, realPageNum int, te
 			})
 		}
 		rows = append(rows, productRow)
-		totalValue += finalPrice * qty
+		totalValue += unitPrice * qty
 
 		// Unlike Coop's write_to_dondathang (xulydonhang.py:1174,
 		// "nhieuCtkm = khuyenmai.split('|')" followed by an

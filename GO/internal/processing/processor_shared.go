@@ -70,9 +70,51 @@ func regionInfo(customerCode string) (region, statCode, warehouse string) {
 	return "MT_MN", "LA", "LA_TP"
 }
 
+// closeEnough quyết định một dòng sản phẩm có "đúng giá" hay không:
+// giá hóa đơn và giá hệ thống — CẢ HAI đều là ĐƠN GIÁ của 1 sản phẩm,
+// không phải thành tiền — chỉ được lệch tối đa 1 ĐỒNG.
+//
+// Trước đây hàm này port nguyên math.isclose(rel_tol=1e-4) của bản
+// Python (xulydonhang.py:1122), tức khoảng dung sai nở theo giá: giá
+// 5.000đ chỉ được lệch 0,5đ nhưng giá 133.806đ lại được lệch tới 13đ.
+// Nguồn sai lệch thật duy nhất là phần lẻ đồng sinh ra khi áp % giảm
+// lên một mức giá chẵn (giá gốc - giá gốc*%/100) — phần lẻ này luôn
+// nhỏ hơn 1đ bất kể giá lớn hay nhỏ, nên ngưỡng tuyệt đối 1đ vừa chặt
+// hơn ở giá cao vừa rộng hơn ở giá thấp, đúng với ý nghĩa nghiệp vụ
+// (quyết định của người dùng, 2026-08-26).
 func closeEnough(a, b float64) bool {
-	const relTol = 1e-4
-	return math.Abs(a-b) <= relTol*math.Max(math.Abs(a), math.Abs(b))
+	const maxDiffDong = 1.0
+	// Khe hở float64 cực nhỏ: đơn giá sau khi chia % giảm là số thực,
+	// nên hai giá "lệch đúng 1đ" trên giấy có thể cho hiệu
+	// 1.0000000000145 và bị báo sai giá oan nếu so <= 1.0 trần trụi.
+	const floatSlack = 1e-6
+	return math.Abs(a-b) <= maxDiffDong+floatSlack
+}
+
+// appliedUnitPrice chọn đơn giá THỰC SỰ ghi xuống cột Y của
+// "Don dat hang" cho một dòng sản phẩm.
+//
+// Khi giá khớp (chênh lệch trong khoảng closeEnough cho phép — xem hàm
+// đó) thì ghi ĐƠN GIÁ CỦA PO, không ghi giá hệ thống. Lý do nghiệp vụ:
+// PO của siêu thị luôn là số đồng chẵn, còn giá hệ thống sau khi áp %
+// giảm hay sinh phần lẻ dưới 1đ (ví dụ 75136*0.6 = 45081.6 trong khi PO
+// ghi 45082). Hai giá này coi như bằng nhau về mặt đối chiếu, nhưng nếu
+// ghi con số lẻ xuống Excel thì hoá đơn xuất ra sẽ lệch vài đồng so với
+// PO — nên lấy luôn số của PO (quyết định của người dùng, 2026-08-26).
+//
+// Khi giá KHÔNG khớp thì vẫn ghi giá hệ thống, y như trước: dòng đó
+// được tô đỏ kèm comment để người dùng tự quyết (xem excelwriter's
+// PriceMismatch và ConfirmPrice) — không được âm thầm lấy giá PO cho
+// một chênh lệch chưa được xác nhận.
+//
+// Quy tắc này vốn đã là hành vi của RIÊNG Satra ngay từ bản Python
+// (xulydonhang.py:2495/:2521, đối chiếu được với fixture thật của
+// P-000022974.pdf), nay áp dụng cho mọi nhà cung cấp.
+func appliedUnitPrice(matched bool, invoicePrice, systemPrice float64) float64 {
+	if matched {
+		return invoicePrice
+	}
+	return systemPrice
 }
 
 // skuLogPromoMaxLen caps how much of a promo's raw text (which can be a

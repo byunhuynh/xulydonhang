@@ -197,24 +197,16 @@ func (p *RealProcessor) processSatraSegment(filePath string, realPageNum int, te
 			matched = true
 		}
 
-		// unitPrice mirrors write_to_dondathang_satra's Y-cell write,
-		// which is NOT symmetric with Coop's equivalent write despite
-		// the rest of this loop's structural identity (see this
-		// function's doc comment): on a MATCH, Satra writes giahoadon —
-		// the PDF's own invoice price (xulydonhang.py:2495, and again at
-		// :2521 in the len(promos)==0 branch) — not giathucte/finalPrice
-		// like Coop's write_to_dondathang does at :1116/:1139. Confirmed
-		// against a real fixture: P-000022974.pdf's TP32415_01 line has
-		// finalPrice(giathucte)=75136*0.6=45081.6 but its invoice price
-		// (PDF's own "Đơn giá" for that line) is 45082, and the frozen
-		// fixture's Y column is 45082 — the invoice price, not the
-		// computed one. On a mismatch, Y still uses finalPrice
-		// (giathucte), unchanged from Coop's shape and Go's prior
-		// behavior here.
-		unitPrice := finalPrice
-		if matched {
-			unitPrice = invoicePrice
-		}
+		// Satra là nơi quy tắc "khớp giá thì ghi giá PO" xuất hiện đầu
+		// tiên: bản Python viết giahoadon cho RIÊNG Satra
+		// (xulydonhang.py:2495 và :2521 ở nhánh len(promos)==0), khác
+		// hẳn Coop viết giathucte ở :1116/:1139. Bằng chứng từ fixture
+		// thật: dòng TP32415_01 của P-000022974.pdf có
+		// giathucte = 75136*0.6 = 45081.6 nhưng "Đơn giá" trên PDF là
+		// 45082, và cột Y của fixture đông lạnh đúng bằng 45082.
+		// Nay quy tắc đó là quy tắc chung của mọi nhà cung cấp — xem
+		// appliedUnitPrice để biết lý do nghiệp vụ đầy đủ.
+		unitPrice := appliedUnitPrice(matched, invoicePrice, finalPrice)
 		skuLog = append(skuLog, formatSkuLogLine(barcode, productInfo.Name, matched, invoicePrice, finalPrice, lastExaminedPromo, lastExaminedPromoColumn))
 
 		productRow := excelwriter.Row{
@@ -238,7 +230,7 @@ func (p *RealProcessor) processSatraSegment(filePath string, realPageNum int, te
 			})
 		}
 		rows = append(rows, productRow)
-		totalValue += finalPrice * qty
+		totalValue += unitPrice * qty
 
 		// Satra's promo/bonus-row loop DOES split on "|" and DOES use
 		// buildPromoBonusRow's own default — no override needed, unlike

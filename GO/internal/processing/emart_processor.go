@@ -195,13 +195,14 @@ func (p *RealProcessor) processEmartSegment(filePath string, realPageNum int, te
 		if len(promos) == 0 && closeEnough(invoicePrice, realPrice) {
 			matched = true
 		}
+		unitPrice := appliedUnitPrice(matched, invoicePrice, finalPrice)
 		skuLog = append(skuLog, formatSkuLogLine(barcode, productInfo.Name, matched, invoicePrice, finalPrice, lastExaminedPromo, lastExaminedPromoColumn))
 
 		productRow := excelwriter.Row{
 			EntryDate: entryDate, DebtDays: coopDebtDays, OrderNumber: orderNum,
 			Status: "Chưa thực hiện", CancelDate: cancelDate, ShipTo: storeName, CustomerCode: emartCustomerCode,
 			Description: description, SKU: barcode, Warehouse: warehouse, VATPercent: 8,
-			RegionCode: region, StatCode: statCode, Qty: qty, UnitPrice: finalPrice,
+			RegionCode: region, StatCode: statCode, Qty: qty, UnitPrice: unitPrice,
 			ProductName: productInfo.Name, CaseCount: caseCount, LineWeightKg: lineWeight, UseZFormula: true,
 			PromoContent: lastExaminedPromo, NoCaseCount: true, SiteCode: shortCode,
 		}
@@ -218,7 +219,7 @@ func (p *RealProcessor) processEmartSegment(filePath string, realPageNum int, te
 			})
 		}
 		rows = append(rows, productRow)
-		totalValue += finalPrice * qty
+		totalValue += unitPrice * qty
 
 		// Multi-CTKM split (xulydonhang.py:5203, "nhieuCtkm =
 		// khuyenmai.split('|')") — same shape as Coop's own multi-CTKM

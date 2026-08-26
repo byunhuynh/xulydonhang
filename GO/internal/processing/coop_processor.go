@@ -381,13 +381,14 @@ func (p *RealProcessor) processSegment(filePath string, realPageNum int, text, p
 		if len(promos) == 0 && closeEnough(invoicePrice, realPrice) {
 			matched = true
 		}
+		unitPrice := appliedUnitPrice(matched, invoicePrice, finalPrice)
 		skuLog = append(skuLog, formatSkuLogLine(product.Barcode, productInfo.Name, matched, invoicePrice, finalPrice, lastExaminedPromo, lastExaminedPromoColumn))
 
 		productRow := excelwriter.Row{
 			EntryDate: entryDate, DebtDays: coopDebtDays, OrderNumber: orderNumber(info.PONumber),
 			Status: "Chưa thực hiện", CancelDate: cancelDate, ShipTo: shipTo, CustomerCode: customerCode,
 			Description: description, SKU: product.Barcode, Warehouse: warehouse, VATPercent: 8,
-			RegionCode: region, StatCode: statCode, Qty: product.Qty, UnitPrice: finalPrice,
+			RegionCode: region, StatCode: statCode, Qty: product.Qty, UnitPrice: unitPrice,
 			ProductName: productInfo.Name, CaseCount: caseCount, LineWeightKg: lineWeight, UseZFormula: true,
 			// AQ (PromoContent/khuyenmai) is written unconditionally in
 			// Python (xulydonhang.py:1183, inside the `for i, hangkm in
@@ -414,7 +415,7 @@ func (p *RealProcessor) processSegment(filePath string, realPageNum int, text, p
 			})
 		}
 		rows = append(rows, productRow)
-		totalValue += finalPrice * product.Qty
+		totalValue += unitPrice * product.Qty
 
 		// currentRowIndex mirrors Python's current_row pointer through
 		// this loop (xulydonhang.py:1174-1250): "AQ{current_row} =

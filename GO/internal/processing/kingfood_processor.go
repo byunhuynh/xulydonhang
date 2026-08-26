@@ -171,13 +171,14 @@ func (p *RealProcessor) processKingfoodSegment(filePath string, realPageNum int,
 		if len(promos) == 0 && closeEnough(invoicePrice, realPrice) {
 			matched = true
 		}
+		unitPrice := appliedUnitPrice(matched, invoicePrice, finalPrice)
 		skuLog = append(skuLog, formatSkuLogLine(barcode, productInfo.Name, matched, invoicePrice, finalPrice, khuyenmai, khuyenmaiColumn))
 
 		productRow := excelwriter.Row{
 			EntryDate: entryDate, DebtDays: coopDebtDays, OrderNumber: orderNum,
 			Status: "Chưa thực hiện", CancelDate: cancelDate, ShipTo: kingfoodDeliveryAddress, CustomerCode: kingfoodCustomerCode,
 			Description: description, SKU: barcode, Warehouse: warehouse, VATPercent: 8,
-			RegionCode: region, StatCode: statCode, Qty: ouQty, UnitPrice: finalPrice,
+			RegionCode: region, StatCode: statCode, Qty: ouQty, UnitPrice: unitPrice,
 			ProductName: productInfo.Name, CaseCount: caseCount, LineWeightKg: lineWeight, UseZFormula: true,
 			PromoContent: khuyenmai,
 		}
@@ -194,7 +195,7 @@ func (p *RealProcessor) processKingfoodSegment(filePath string, realPageNum int,
 			})
 		}
 		rows = append(rows, productRow)
-		totalValue += finalPrice * ouQty
+		totalValue += unitPrice * ouQty
 
 		// Per-item promo bonus row (xulydonhang.py:4074-4128) — single
 		// attempt, buildPromoBonusRow always called with index=0 (no

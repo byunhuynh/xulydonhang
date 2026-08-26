@@ -133,8 +133,8 @@ func TestParseKingfoodPrice(t *testing.T) {
 // a literal "52195.073" would parse to 52195073, not 52195.073 — this
 // bonus row now only builds once matched is true (see the per-item promo
 // bonus row's own "Gated on matched" comment in kingfood_processor.go),
-// and closeEnough's tolerance (relTol 1e-4) comfortably covers the 0.073
-// gap between realPrice=52195 and the real invoicePrice=52195.073.
+// and closeEnough's tolerance (an absolute 1đ) comfortably covers the
+// 0.073 gap between realPrice=52195 and the real invoicePrice=52195.073.
 func TestRealProcessor_KingfoodNoBraceBonusRowDoesNotWriteAP(t *testing.T) {
 	store, err := productdata.Load("productdata/testdata/data.xlsx")
 	if err != nil {
@@ -269,5 +269,92 @@ func TestRealProcessor_KingfoodInvoiceLevelPromoBonusRow(t *testing.T) {
 		if cell(row, colSKU) == "SP0002" {
 			t.Errorf("found a row with SKU (Q) = %q, want none (only the first mentioned SKU, SP0001, should get an invoice bonus row)", "SP0002")
 		}
+	}
+}
+
+// TestRealProcessor_KingfoodWritesPOPriceWhenPricesMatch pins the
+// end-to-end wiring of appliedUnitPrice on a NON-Satra vendor: khi giá
+// khớp thì cột Y phải mang đơn giá của PO, không phải giá hệ thống.
+//
+// Dùng đúng sản phẩm thật của sample_kingfood_order.pdf (barcode
+// 8936156732620, đơn giá PO "52.195,073" -> 52195.073). Bảng giá khai
+// 52195 chẵn, lệch 0.073đ — nằm trong cửa sổ 1đ của closeEnough nên coi
+// là đúng giá, và Y phải là 52195.073 (số của PO), không phải 52195.
+//
+// Đây là chỗ duy nhất khẳng định trực tiếp hành vi mới trên một nhà
+// cung cấp không phải Satra: golden test chỉ CHẤP NHẬN chênh lệch này
+// (xem isPOPriceOnMatch) chứ không tự khẳng định chiều của nó.
+func TestRealProcessor_KingfoodWritesPOPriceWhenPricesMatch(t *testing.T) {
+	const poPrice = "52195.073"
+
+	cases := []struct {
+		name        string
+		sheetPrice  string
+		wantY       string
+		wantFlagged bool
+	}{
+		{
+			name:       "khớp giá -> ghi giá PO",
+			sheetPrice: "52195", // lệch 0.073đ so với PO
+			wantY:      poPrice,
+		},
+		{
+			name:        "lệch quá 1đ -> vẫn ghi giá hệ thống và tô đỏ",
+			sheetPrice:  "52190", // lệch 5.073đ so với PO
+			wantY:       "52190",
+			wantFlagged: true,
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			store, err := productdata.Load("productdata/testdata/data.xlsx")
+			if err != nil {
+				t.Fatalf("Load productdata failed: %v", err)
+			}
+			excelPath := copyTestWorkbookForProcessor(t)
+
+			priceCsv := [][]string{
+				{"STT", "Mã hàng", "Tên", "Giá", "1/1-31/12"},
+				{"1", "8936156732620", "Viên giặt xả", tc.sheetPrice, ""},
+			}
+			rp := &RealProcessor{
+				Store:     store,
+				Pricing:   &fixturePricingSource{index: pricing.ParseIndex(priceCsv)},
+				ExcelPath: excelPath,
+			}
+			row, err := rp.Process(context.Background(), "testdata/sample_kingfood_order.pdf")
+			if err != nil {
+				t.Fatalf("Process returned error: %v", err)
+			}
+			if got := row[0].PriceMismatchCount > 0; got != tc.wantFlagged {
+				t.Errorf("PriceMismatchCount > 0 = %v, want %v (log: %v)", got, tc.wantFlagged, row[0].SkuLog)
+			}
+
+			f, err := excelize.OpenFile(excelPath)
+			if err != nil {
+				t.Fatalf("failed reopening written workbook: %v", err)
+			}
+			defer f.Close()
+			sheetRows, err := f.GetRows("Don dat hang")
+			if err != nil {
+				t.Fatalf("failed reading Don dat hang rows: %v", err)
+			}
+
+			const colSKU, colUnitPrice = 16, 24
+			var productRow []string
+			for _, r := range sheetRows {
+				if colSKU < len(r) && r[colSKU] == "8936156732620" {
+					productRow = r
+					break
+				}
+			}
+			if productRow == nil {
+				t.Fatalf("không tìm thấy dòng sản phẩm trong sheet")
+			}
+			if got := productRow[colUnitPrice]; got != tc.wantY {
+				t.Errorf("cột Y (đơn giá) = %q, want %q", got, tc.wantY)
+			}
+		})
 	}
 }

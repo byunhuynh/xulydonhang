@@ -389,6 +389,7 @@ func (p *RealProcessor) processBigcStorePage(storePageText string, priceList []b
 		if len(promos) == 0 && closeEnough(invoicePrice, finalPrice) {
 			matched = true
 		}
+		unitPrice := appliedUnitPrice(matched, invoicePrice, finalPrice)
 		skuLog = append(skuLog, formatSkuLogLine(barcode, productInfo.Name, matched, invoicePrice, finalPrice, khuyenmai, khuyenmaiColumn))
 
 		// Promo bonus-row check (xulydonhang.py:4754-4808). BigC has NO
@@ -466,7 +467,7 @@ func (p *RealProcessor) processBigcStorePage(storePageText string, priceList []b
 			EntryDate: entryDate, DebtDays: coopDebtDays, OrderNumber: orderNum,
 			Status: "Chưa thực hiện", CancelDate: cancelDate, ShipTo: shipTo, CustomerCode: customerCode,
 			Description: description, SKU: barcode, Warehouse: warehouse, VATPercent: 8,
-			RegionCode: region, StatCode: statCode, Qty: qtyOrdPcs, UnitPrice: finalPrice,
+			RegionCode: region, StatCode: statCode, Qty: qtyOrdPcs, UnitPrice: unitPrice,
 			ProductName: productInfo.Name, LineWeightKg: lineWeight, UseZFormula: true, PromoContent: khuyenmai,
 			PromoNote: promoNote, PromoBundleSku: promoBundleSku, NoCaseCount: true, SiteCode: siteCode,
 		}
@@ -483,7 +484,7 @@ func (p *RealProcessor) processBigcStorePage(storePageText string, priceList []b
 			})
 		}
 		rows = append(rows, productRow)
-		tongtien += finalPrice * qtyOrdPcs // xulydonhang.py:4749 — uses qtyOrdPcs BEFORE any promo-bonus division below
+		tongtien += unitPrice * qtyOrdPcs // xulydonhang.py:4749 — uses qtyOrdPcs BEFORE any promo-bonus division below
 
 		if bonusBarcode != "" {
 			bonusInfo, _ := p.Store.GetProductInfo(bonusBarcode)

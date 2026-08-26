@@ -91,3 +91,38 @@ func isValidUTF8(s string) bool {
 	}
 	return true
 }
+
+// TestCloseEnough_AbsoluteOneDongTolerance pins the price-match rule to
+// an ABSOLUTE ±1đ window (user decision 2026-08-26), replacing the
+// original relative 1e-4 tolerance ported from Python's
+// math.isclose(rel_tol=1e-4). Rationale: the only real source of
+// mismatch noise is the fractional đồng left over when a % discount is
+// applied to a whole-đồng price (giá gốc - giá gốc*%/100), which is
+// always well under 1đ regardless of how large the price is — while the
+// relative rule scaled the window with the price and silently accepted
+// a 13đ gap on a 133.806đ item.
+func TestCloseEnough_AbsoluteOneDongTolerance(t *testing.T) {
+	cases := []struct {
+		name string
+		a, b float64
+		want bool
+	}{
+		{"bằng nhau tuyệt đối", 33000, 33000, true},
+		{"lẻ đồng do chia %: 52195.073 vs 52195", 52195.073, 52195, true},
+		{"lệch đúng 1đ vẫn coi là khớp", 33001, 33000, true},
+		{"lệch 1đ theo chiều ngược lại", 32999, 33000, true},
+		{"lệch 1.5đ là sai giá", 33001.5, 33000, false},
+		// Dưới quy tắc tương đối cũ (1e-4) khoảng này là 13.38đ nên cặp
+		// giá dưới đây từng được coi là khớp — nay phải báo sai giá.
+		{"lệch 5đ trên giá lớn là sai giá", 133811, 133806, false},
+		// Ngược lại, giá nhỏ trước đây chỉ được phép lệch 0.5đ.
+		{"lệch 0.8đ trên giá nhỏ vẫn khớp", 5000.8, 5000, true},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := closeEnough(tc.a, tc.b); got != tc.want {
+				t.Fatalf("closeEnough(%v, %v) = %v, want %v", tc.a, tc.b, got, tc.want)
+			}
+		})
+	}
+}

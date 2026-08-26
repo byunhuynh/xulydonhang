@@ -238,13 +238,14 @@ func (p *RealProcessor) processWinmartSegment(filePath string, realPageNum int, 
 		if len(promos) == 0 && closeEnough(invoicePrice, finalPrice) {
 			matched = true
 		}
+		unitPrice := appliedUnitPrice(matched, invoicePrice, finalPrice)
 		skuLog = append(skuLog, formatSkuLogLine(barcode, productInfo.Name, matched, invoicePrice, finalPrice, khuyenmai, khuyenmaiColumn))
 
 		productRow := excelwriter.Row{
 			EntryDate: entryDate, DebtDays: coopDebtDays, OrderNumber: orderNum,
 			Status: "Chưa thực hiện", CancelDate: cancelDate, ShipTo: deliveryAddress, CustomerCode: customerCode,
 			Description: description, SKU: barcode, Warehouse: warehouse, VATPercent: 8,
-			RegionCode: region, StatCode: statCode, Qty: ouQty, UnitPrice: finalPrice,
+			RegionCode: region, StatCode: statCode, Qty: ouQty, UnitPrice: unitPrice,
 			ProductName: productInfo.Name, CaseCount: caseCount, LineWeightKg: lineWeight, UseZFormula: true,
 			PromoContent: khuyenmai,
 		}
@@ -261,7 +262,7 @@ func (p *RealProcessor) processWinmartSegment(filePath string, realPageNum int, 
 			})
 		}
 		rows = append(rows, productRow)
-		totalValue += finalPrice * ouQty
+		totalValue += unitPrice * ouQty
 
 		// Per-item promo bonus row via the shared buildPromoBonusRow
 		// helper (see processWinmartSegment's doc comment for the general
