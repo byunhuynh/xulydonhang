@@ -10,6 +10,8 @@ import (
 	"strings"
 	"sync"
 	"testing"
+
+	"order-processor/internal/misa"
 )
 
 // fakeMISA dựng lại đúng chuỗi phản hồi mà AMIS Kế toán trả về, ghi lại
@@ -213,5 +215,57 @@ func TestHTTPPusher_GhiNhậtKýQuaRequestLog(t *testing.T) {
 	}
 	if len(lines) == 0 {
 		t.Error("Request.Log không nhận được dòng nào — người dùng sẽ không thấy tiến độ")
+	}
+}
+
+// TestHTTPPusher_KhôngCóFilePhiênThìXinTừSidURL khoá lại ĐƯỜNG CHÍNH của người
+// dùng khi đã khai sid_url: máy chưa từng có misa-session.json vẫn đẩy được, vì
+// client tự xin phiên ở endpoint cấp phiên (Google Apps Script) rồi GHI LẠI ra
+// file cho những lần sau.
+//
+// Ba test phiên khác đều bắt đầu bằng một file phiên có sẵn, nên không cái nào
+// đi qua nhánh này — mà đây lại đúng là nhánh chạy trên máy mới cài.
+func TestHTTPPusher_KhôngCóFilePhiênThìXinTừSidURL(t *testing.T) {
+	fake := &fakeMISA{}
+	misaSrv := httptest.NewServer(fake.handler())
+	defer misaSrv.Close()
+
+	var sidCalls int
+	sidSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		sidCalls++
+		w.Header().Set("Content-Type", "application/json")
+		w.Write([]byte(`{"sid":"s-1","tid":"t-1","mid":"u-1","dbid":"db-cu","x_device":"dev-1"}`))
+	}))
+	defer sidSrv.Close()
+
+	dir := t.TempDir()
+	sessionPath := filepath.Join(dir, "misa-session.json")
+
+	res, err := (&HTTPPusher{}).Push(context.Background(), Request{
+		BaseURL:     misaSrv.URL,
+		SessionPath: sessionPath, // CỐ Ý chưa tồn tại
+		SidURL:      sidSrv.URL,
+		Database:    "Long An",
+		FilePath:    writeXLSX(t, dir),
+	})
+	if err != nil {
+		t.Fatalf("Push: %v", err)
+	}
+	if !res.Committed {
+		t.Errorf("res.Committed = false, want true")
+	}
+	if sidCalls != 1 {
+		t.Errorf("gọi endpoint cấp phiên %d lần, want đúng 1", sidCalls)
+	}
+
+	// Phiên vừa xin phải được ghi lại, nếu không thì mỗi lần đẩy lại tốn một
+	// lượt gọi Apps Script (và có thể một mã OTP).
+	if _, err := os.Stat(sessionPath); err != nil {
+		t.Fatalf("không ghi lại phiên vừa xin ra %s: %v", sessionPath, err)
+	}
+	if s, err := misa.LoadSession(sessionPath); err != nil {
+		t.Errorf("file phiên vừa ghi không đọc lại được: %v", err)
+	} else if s.SID != "s-1" || s.XDevice != "dev-1" {
+		t.Errorf("phiên đã ghi = %+v, want sid=s-1 x_device=dev-1", s)
 	}
 }
