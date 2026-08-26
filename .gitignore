@@ -61,6 +61,10 @@ log.log
 # ghi nhớ dự án "Zalo session leak incident") =====
 zalo_profile/
 
+# ===== Phiên đăng nhập MISA (không chứa mật khẩu nhưng THAY ĐƯỢC mật khẩu
+# trong 24h — không commit, không gửi qua chat) =====
+misa-session.json
+
 # ===== Superpowers scratch (per-plan SDD ledgers/workspaces) =====
 .superpowers/
 

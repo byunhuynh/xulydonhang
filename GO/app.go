@@ -77,6 +77,17 @@ type App struct {
 	// tmdtWaiting cho biết đang có nhánh TMĐT chờ phản hồi — dùng để từ
 	// chối lời gọi Resolve/Cancel lạc (người dùng bấm khi không có modal).
 	tmdtWaiting atomic.Bool
+	// misaPusher thực hiện một lần đẩy cho một nhánh. Thay được trong
+	// test để không phải chạm mạng — cùng khuôn với zaloSender.
+	misaPusher misapush.Pusher
+	// pushing khoá lượt đẩy MISA, đúng vai trò a.sending làm cho Zalo:
+	// hai lượt đẩy chồng nhau sẽ đọc cùng một workbook trong lúc file
+	// tạm của nhau đang được cắt.
+	pushing atomic.Bool
+	// misaSessionPath là file phiên đăng nhập MISA, nằm cạnh
+	// settings.bhconfig. Nó thay được mật khẩu trong 24h nên đã được
+	// .gitignore loại ra.
+	misaSessionPath string
 }
 
 // resolveRepoFile looks for filename starting in the current working
@@ -171,7 +182,9 @@ func NewApp() (*App, error) {
 		zaloSender: &zalosend.ChromedpSender{
 			ProfileDir: filepath.Join(resolveRepoDir("settings.ini"), "zalo_profile"),
 		},
-		tmdtResolve: make(chan tmdtResolution, 1),
+		tmdtResolve:     make(chan tmdtResolution, 1),
+		misaPusher:      &misapush.HTTPPusher{},
+		misaSessionPath: filepath.Join(resolveRepoDir("settings.ini"), "misa-session.json"),
 	}
 
 	app.dataLoader = func() (processing.Processor, error) {
