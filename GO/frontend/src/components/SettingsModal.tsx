@@ -124,6 +124,9 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
               keyLabel="Khoá"
               valueLabel="Giá trị"
               valueType="text"
+              // Chỉ access_token là bí mật; exclude_shops vẫn hiện bình
+              // thường để người dùng đọc lại danh sách shop đang bỏ qua.
+              secretKeys={['access_token']}
             />
           )}
         </div>

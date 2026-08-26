@@ -9,6 +9,10 @@ interface KeyValueEditorProps {
   valueLabel: string
   valueType: 'text' | 'number' | 'toggle'
   onDuplicateChange?: (hasDuplicate: boolean) => void
+  // Những khoá mà GIÁ TRỊ là bí mật (vd access_token của Haravan): ô nhập
+  // che thành chấm tròn và chặn copy/cut. Dán vào vẫn được — đó là cách
+  // duy nhất người dùng điền khoá — chỉ không lấy ngược ra được.
+  secretKeys?: string[]
 }
 
 interface Row {
@@ -28,7 +32,7 @@ function toRows(entries: Record<string, string>): Row[] {
 // và valueType. Dòng có khóa hoặc giá trị rỗng bị BỎ QUA khi gọi
 // onChange (không tính vào entries, không báo lỗi) — cho phép người
 // dùng gõ dở dang mà không bị validate ngay lập tức.
-export function KeyValueEditor({ entries, onChange, keyLabel, valueLabel, valueType, onDuplicateChange }: KeyValueEditorProps) {
+export function KeyValueEditor({ entries, onChange, keyLabel, valueLabel, valueType, onDuplicateChange, secretKeys }: KeyValueEditorProps) {
   const [rows, setRows] = useState<Row[]>(() => toRows(entries))
 
   useEffect(() => {
@@ -81,6 +85,7 @@ export function KeyValueEditor({ entries, onChange, keyLabel, valueLabel, valueT
       </div>
       {rows.map((row) => {
         const isDuplicate = row.key.trim() !== '' && (keyCounts.get(row.key) ?? 0) > 1
+        const isSecret = secretKeys?.includes(row.key.trim()) ?? false
         return (
           <div key={row.id} className="grid grid-cols-[1fr_1fr_auto] items-center gap-2">
             <input
@@ -100,6 +105,14 @@ export function KeyValueEditor({ entries, onChange, keyLabel, valueLabel, valueT
             ) : (
               <input
                 value={row.value}
+                type={isSecret ? 'password' : 'text'}
+                // Chromium đã chặn copy/cut trong ô password, nhưng chặn lại
+                // ở đây để không phụ thuộc vào hành vi của riêng một webview;
+                // autoComplete tắt để WebView2 không lưu khoá lại.
+                onCopy={isSecret ? (e) => e.preventDefault() : undefined}
+                onCut={isSecret ? (e) => e.preventDefault() : undefined}
+                autoComplete={isSecret ? 'new-password' : undefined}
+                spellCheck={isSecret ? false : undefined}
                 onChange={(e) => {
                   if (valueType === 'number' && e.target.value !== '' && !/^\d*$/.test(e.target.value)) return
                   updateValue(row.id, e.target.value)

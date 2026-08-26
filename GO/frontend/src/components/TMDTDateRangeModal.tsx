@@ -1,4 +1,5 @@
 import { useMemo, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { useModalEntrance } from '../lib/useModalEntrance'
 import {
   MAX_RANGE_DAYS,
@@ -90,7 +91,14 @@ export function TMDTDateRangeModal({ fileNames, onConfirm, onCancel }: Props) {
     return iso >= range.from && iso <= range.to
   }
 
-  return (
+  // Portal thẳng ra document.body vì ĐÚNG lý do đã ghi trong
+  // OrderContentModal.tsx: ProcessTab.tsx bọc ControlPanel trong div
+  // "animate-rise", mà animation đó dùng CSS transform với fill-mode
+  // "both" nên transform KHÔNG BAO GIỜ trở lại none. Một tổ tiên có
+  // transform là containing block mới cho con "position: fixed", nên
+  // lịch này bị nhốt trong dải toolbar cao ~60px thay vì phủ kín cửa sổ
+  // — đúng triệu chứng "modal nằm trong app, khuất không chọn được".
+  return createPortal(
     <div
       ref={backdropRef}
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
@@ -201,6 +209,7 @@ export function TMDTDateRangeModal({ fileNames, onConfirm, onCancel }: Props) {
           </button>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body,
   )
 }
