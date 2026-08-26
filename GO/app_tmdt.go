@@ -188,9 +188,9 @@ func summaryTMDTRows(fileName string, groups []summaryKeyCount) []processing.Ord
 			// DonGia mang TỔNG tiền của nhóm, không phải đơn giá một mã —
 			// giống hệt điều nhánh JIT đã làm với cột này, và frontend cộng
 			// dồn qua các ngày bằng đúng một phép cộng cho cả hai nhánh.
-			DonGia:      strconv.FormatFloat(g.money, 'f', 0, 64),
-			ShipTo:      g.shipTo,
-			EntryDate:   g.date,
+			DonGia:    strconv.FormatFloat(g.money, 'f', 0, 64),
+			ShipTo:    g.shipTo,
+			EntryDate: g.date,
 			// Làm tròn thay vì cắt: qty là float64 vì Số lượng × SLTP đi qua
 			// phép nhân số thực, và 7 cộng dồn có thể ra 6,999999999999999 —
 			// int() sẽ cắt xuống 6, sai một sản phẩm trong tin nhắn.
@@ -508,10 +508,16 @@ func (a *App) tmdtProductNamer() func(string) string {
 // trị sàn.
 func groupTMDTSummary(res tmdt.Result) []summaryKeyCount {
 	type key struct{ shop, date string }
-	agg := map[key]*summaryKeyCount{}
-	seenOrder := map[string]bool{}
+	// Khoá của hai bộ đếm dưới đây là STRUCT chứ không phải chuỗi nối:
+	// shop+ngày+mã nối thẳng có thể trùng nhau khi một trong ba phần rỗng
+	// (ngày rỗng ở dòng dữ liệu lạ), và một va chạm ở đây nuốt mất một đơn
+	// hoặc một mã khỏi tin nhắn mà không có dấu hiệu gì.
+	type seen struct{ shop, date, value string }
 
-	seenSKU := map[string]bool{}
+	agg := map[key]*summaryKeyCount{}
+	seenOrder := map[seen]bool{}
+
+	seenSKU := map[seen]bool{}
 
 	for _, r := range res.OrderRows {
 		// EntryDate là "dd/mm/yyyy"; PO của dòng tóm tắt cần đúng dạng đó.
@@ -533,14 +539,14 @@ func groupTMDTSummary(res tmdt.Result) []summaryKeyCount {
 		g.lines++
 		g.money += r.Qty * r.UnitPrice
 		g.qty += r.Qty
-		if !seenOrder[k.shop+k.date+r.Note] {
-			seenOrder[k.shop+k.date+r.Note] = true
+		if ord := (seen{k.shop, k.date, r.Note}); !seenOrder[ord] {
+			seenOrder[ord] = true
 			g.orders++
 		}
 		// #N/A không phải một mã hàng: đếm nó vào sẽ báo cho người nhận số
 		// mã cao hơn thực tế, đúng lúc dữ liệu đang có vấn đề.
-		if r.SKU != "" && r.SKU != lookup.NotAvailable && !seenSKU[k.shop+k.date+r.SKU] {
-			seenSKU[k.shop+k.date+r.SKU] = true
+		if sk := (seen{k.shop, k.date, r.SKU}); r.SKU != "" && r.SKU != lookup.NotAvailable && !seenSKU[sk] {
+			seenSKU[sk] = true
 			g.skus = append(g.skus, r.SKU)
 		}
 		if r.SKU == lookup.NotAvailable || r.CustomerCode == lookup.NotAvailable {
