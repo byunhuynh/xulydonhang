@@ -3,6 +3,7 @@ import { EventsOn, OnFileDrop, OnFileDropOff } from '../../wailsjs/runtime/runti
 import { useAppStore, type LockStatus } from '../store/appStore'
 import type { OrderRow } from '../types'
 import type { BatchProgress } from '../lib/batchProgress'
+import type { TMDTMissingCombo } from '../lib/tmdtMissing'
 
 export function useWailsEvents() {
   const appendLog = useAppStore((s) => s.appendLog)
@@ -14,6 +15,7 @@ export function useWailsEvents() {
   const setLockStatus = useAppStore((s) => s.setLockStatus)
   const deselectPO = useAppStore((s) => s.deselectPO)
   const setZaloQR = useAppStore((s) => s.setZaloQR)
+  const setTMDTMissing = useAppStore((s) => s.setTMDTMissing)
 
   useEffect(() => {
     const offLog = EventsOn('process:log', (line: string) => appendLog(line))
@@ -42,6 +44,10 @@ export function useWailsEvents() {
     // zalo:done là tín hiệu "batch đã kết thúc" - dọn nốt popup QR nếu vì
     // lý do gì đó vẫn còn hiện (EnsureLoggedIn đã tự gửi onQR("") trước
     // khi trả về, nhưng dọn lại ở đây cho chắc, không dựa vào đúng 1 chỗ).
+    // Nhánh TMĐT dừng giữa batch để hỏi mã còn thiếu. Sự kiện này chỉ
+    // phát khi thực sự có mã thiếu, và backend đang chờ trên channel cho
+    // tới khi modal gọi Resolve/Cancel (hoặc hết hạn 10 phút).
+    const offTMDTMissing = EventsOn('tmdt:missing', (list: TMDTMissingCombo[]) => setTMDTMissing(list))
     const offZaloDone = EventsOn('zalo:done', () => {
       appendLog('🏁 Đã kết thúc lượt gửi Zalo.')
       setZaloQR(null)
@@ -63,7 +69,8 @@ export function useWailsEvents() {
       offZaloQR()
       offZaloSent()
       offZaloDone()
+      offTMDTMissing()
       OnFileDropOff()
     }
-  }, [appendLog, upsertRow, setBatchProgress, setProcessing, setStt, addFiles, setLockStatus, deselectPO, setZaloQR])
+  }, [appendLog, upsertRow, setBatchProgress, setProcessing, setStt, addFiles, setLockStatus, deselectPO, setZaloQR, setTMDTMissing])
 }

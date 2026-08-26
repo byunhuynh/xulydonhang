@@ -6,6 +6,7 @@ import { SettingsModal } from './components/SettingsModal'
 import { TitleBar } from './components/TitleBar'
 import { LockOverlay } from './components/LockOverlay'
 import { ZaloQRModal } from './components/ZaloQRModal'
+import { TMDTMissingModal } from './components/TMDTMissingModal'
 import AnimatedBlueLogo from './components/AnimatedBlueLogo'
 import { useWailsEvents } from './hooks/useWailsEvents'
 import { useAppStore } from './store/appStore'
@@ -93,6 +94,9 @@ function App() {
       {isSettingsOpen && <SettingsModal onClose={() => setIsSettingsOpen(false)} />}
       {lockStatus !== 'unlocked' && <LockOverlay status={lockStatus} />}
       <ZaloQRModal />
+      {/* Cạnh ZaloQRModal chứ không nằm trong ControlPanel: modal này do sự
+          kiện backend điều khiển nên phải sống độc lập với tab đang mở. */}
+      <TMDTMissingModal />
       {startupState !== 'ready' && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-bg/95 backdrop-blur-sm">
           <div className="w-[min(420px,calc(100vw-32px))] rounded-2xl border border-border bg-panel p-8 text-center shadow-2xl">

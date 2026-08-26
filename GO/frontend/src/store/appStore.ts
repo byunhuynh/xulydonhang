@@ -11,6 +11,7 @@ import {
   type JITPeriodState,
 } from '../lib/jitPeriodState'
 import { createBatchProgress, type BatchProgress } from '../lib/batchProgress'
+import type { TMDTMissingCombo } from '../lib/tmdtMissing'
 
 export type LockStatus = 'checking' | 'unlocked' | 'locked'
 
@@ -36,6 +37,8 @@ interface AppState {
   clearReceivedAt: () => void
   zaloQR: string | null
   setZaloQR: (svgMarkup: string | null) => void
+  tmdtMissing: TMDTMissingCombo[] | null
+  setTMDTMissing: (list: TMDTMissingCombo[] | null) => void
   setFiles: (files: string[]) => void
   addFiles: (files: string[]) => void
   removeFiles: (files: string[]) => void
@@ -82,6 +85,10 @@ export const useAppStore = create<AppState>((set, get) => ({
   // nghĩa là không cần hiện popup QR (chưa tới lúc cần, hoặc đã đăng
   // nhập xong). Đẩy lên zalo:log/zalo:qr qua useWailsEvents.ts.
   zaloQR: null,
+  // Danh sách mã chưa khai báo mà nhánh TMĐT đang chờ người dùng bổ
+  // sung. null = không có modal. Backend đang CHỜ trên channel khi khác
+  // null, nên mọi đường đóng modal phải gọi Resolve hoặc Cancel.
+  tmdtMissing: null,
   setFiles: (files) => set({ files }),
   addFiles: (newFiles) =>
     set((state) => ({
@@ -172,4 +179,8 @@ export const useAppStore = create<AppState>((set, get) => ({
   // Chuỗi rỗng từ backend (zalo:qr) cũng coi như null - "không cần hiện
   // QR nữa" (đã đăng nhập, hoặc hết giờ chờ).
   setZaloQR: (svgMarkup) => set({ zaloQR: svgMarkup || null }),
+  // Danh sách rỗng cũng coi như "không có gì cần khai" để modal không bật
+  // với một form trống — backend chỉ phát sự kiện khi thực sự thiếu, đây
+  // là lớp phòng vệ thứ hai.
+  setTMDTMissing: (list) => set({ tmdtMissing: list && list.length > 0 ? list : null }),
 }))

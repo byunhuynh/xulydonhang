@@ -1,7 +1,9 @@
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { FaPaperPlane, FaCloudArrowUp, FaRocket, FaSpinner } from 'react-icons/fa6'
 import { useAppStore } from '../store/appStore'
-import { GetSTT, ProcessFiles, SendZaloMessages } from '../../wailsjs/go/main/App'
+import { GetSTT, InspectTMDTFiles, ProcessFiles, SendZaloMessages } from '../../wailsjs/go/main/App'
+import { TMDTDateRangeModal } from './TMDTDateRangeModal'
+import type { TMDTDateRange } from '../lib/tmdtDateRange'
 import { buildZaloMessageForPO, buildZaloMessageForJITFile, buildPriceBasisForPO } from '../lib/zaloMessage'
 import { groupKeyFor } from '../lib/zaloGrouping'
 
@@ -19,6 +21,10 @@ export function ControlPanel() {
   const receivedAt = useAppStore((s) => s.receivedAt)
   const jitPeriodState = useAppStore((s) => s.jitPeriodState)
 
+  // Danh sách file TMĐT đang chờ người dùng chọn khoảng ngày. Modal chỉ
+  // bật khi người dùng bấm "Xử lý" — thả file vào không hỏi gì.
+  const [pendingTMDT, setPendingTMDT] = useState<string[] | null>(null)
+
   useEffect(() => {
     GetSTT()
       .then(setStt)
@@ -31,11 +37,29 @@ export function ControlPanel() {
       appendLog('Không có file nào để xử lý!')
       return
     }
+    // Hỏi backend file nào là workbook TMĐT — nhận theo NỘI DUNG file chứ
+    // không theo đuôi hay tên, đúng cùng một phép thử mà runReservedBatch
+    // dùng để rẽ nhánh, nên modal lịch bật đúng bằng lúc nhánh TMĐT chạy.
+    let tmdtFiles: string[] = []
+    try {
+      tmdtFiles = await InspectTMDTFiles(files)
+    } catch (err) {
+      appendLog(`❌ Lỗi kiểm tra file TMĐT: ${String(err)}`)
+      return
+    }
+    if (tmdtFiles.length > 0) {
+      setPendingTMDT(tmdtFiles)
+      return
+    }
+    await startBatch({})
+  }
+
+  async function startBatch(ranges: Record<string, TMDTDateRange>) {
     resetRows()
     setProcessing(true)
     appendLog('🚀 Bắt đầu xử lý...')
     try {
-      await ProcessFiles(files, stt)
+      await ProcessFiles(files, stt, ranges)
     } catch (err) {
       appendLog(`❌ Lỗi xử lý: ${String(err)}`)
       setProcessing(false)
@@ -102,43 +126,57 @@ export function ControlPanel() {
   const hasSelection = selectedPOs.size > 0
 
   return (
-    <section className="flex flex-shrink-0 items-center gap-3 rounded-xl border border-border bg-panel px-4 py-3">
-      <div
-        title="Sẽ có ở giai đoạn sau"
-        className="flex items-center gap-2 rounded-lg border border-dashed border-border px-3 py-2 text-xs font-medium text-muted opacity-60"
-      >
-        <FaCloudArrowUp /> Push MISA
-        <span className="rounded-full bg-white/5 px-1.5 py-0.5 font-mono text-[8px] font-bold tracking-wide">
-          SẮP RA MẮT
-        </span>
-      </div>
-      {hasSelection ? (
-        <button
-          onClick={handleSendZalo}
-          className="ml-auto inline-flex items-center justify-center gap-2 rounded-lg px-5 py-2.5 text-sm font-extrabold tracking-wide text-white transition-transform hover:brightness-110 active:scale-[0.98]"
-          style={{ backgroundColor: '#0068FF' }}
+    <>
+      <section className="flex flex-shrink-0 items-center gap-3 rounded-xl border border-border bg-panel px-4 py-3">
+        <div
+          title="Sẽ có ở giai đoạn sau"
+          className="flex items-center gap-2 rounded-lg border border-dashed border-border px-3 py-2 text-xs font-medium text-muted opacity-60"
         >
-          <FaPaperPlane /> GỬI {selectedPOs.size} TIN ZALO
-        </button>
-      ) : (
-        <button
-          onClick={handleProcess}
-          disabled={isProcessing}
-          className={`ml-auto inline-flex items-center justify-center gap-2 rounded-lg bg-gradient-to-br from-accent to-[#1a9dc4] px-5 py-2.5 text-sm font-extrabold tracking-wide text-[#0a1620] transition-transform hover:brightness-110 active:scale-[0.98] disabled:opacity-60 ${
-            !isProcessing ? 'animate-pulse-glow' : ''
-          }`}
-        >
-          {isProcessing ? (
-            <>
-              <FaSpinner className="animate-spin" /> ĐANG XỬ LÝ...
-            </>
-          ) : (
-            <>
-              <FaRocket /> XỬ LÝ ĐƠN HÀNG
-            </>
-          )}
-        </button>
+          <FaCloudArrowUp /> Push MISA
+          <span className="rounded-full bg-white/5 px-1.5 py-0.5 font-mono text-[8px] font-bold tracking-wide">
+            SẮP RA MẮT
+          </span>
+        </div>
+        {hasSelection ? (
+          <button
+            onClick={handleSendZalo}
+            className="ml-auto inline-flex items-center justify-center gap-2 rounded-lg px-5 py-2.5 text-sm font-extrabold tracking-wide text-white transition-transform hover:brightness-110 active:scale-[0.98]"
+            style={{ backgroundColor: '#0068FF' }}
+          >
+            <FaPaperPlane /> GỬI {selectedPOs.size} TIN ZALO
+          </button>
+        ) : (
+          <button
+            onClick={handleProcess}
+            disabled={isProcessing}
+            className={`ml-auto inline-flex items-center justify-center gap-2 rounded-lg bg-gradient-to-br from-accent to-[#1a9dc4] px-5 py-2.5 text-sm font-extrabold tracking-wide text-[#0a1620] transition-transform hover:brightness-110 active:scale-[0.98] disabled:opacity-60 ${
+              !isProcessing ? 'animate-pulse-glow' : ''
+            }`}
+          >
+            {isProcessing ? (
+              <>
+                <FaSpinner className="animate-spin" /> ĐANG XỬ LÝ...
+              </>
+            ) : (
+              <>
+                <FaRocket /> XỬ LÝ ĐƠN HÀNG
+              </>
+            )}
+          </button>
+        )}
+      </section>
+      {pendingTMDT && (
+        <TMDTDateRangeModal
+          fileNames={pendingTMDT.map((p) => p.split(/[\\/]/).pop() ?? p)}
+          onCancel={() => setPendingTMDT(null)}
+          onConfirm={(range) => {
+            const ranges: Record<string, TMDTDateRange> = {}
+            for (const p of pendingTMDT) ranges[p] = range
+            setPendingTMDT(null)
+            void startBatch(ranges)
+          }}
+        />
       )}
-    </section>
+    </>
   )
 }
