@@ -101,9 +101,16 @@ export function MisaPushModal({ onClose }: MisaPushModalProps) {
     setGroups((cur) => cur && cur.map((g) => (g.key === key ? { ...g, selected: !g.selected } : g)))
   }
 
-  async function handlePush(force = false) {
+  // onlyBranch giới hạn lượt đẩy vào ĐÚNG một nhánh. Nút "ghi phần hợp lệ"
+  // nêu con số của riêng một nhánh, nên nó phải chỉ đẩy nhánh đó — hai
+  // nhánh cùng lỗi là hai nút mang hai con số khác nhau, mà bấm cái nào
+  // cũng ép cả hai thì con số trên nút thành nói dối.
+  async function handlePush(force = false, onlyBranch?: string) {
     if (!groups) return
-    const jobs = pendingGroups(groups, doneBranches).map((g) => ({
+    const pending = pendingGroups(groups, doneBranches).filter(
+      (g) => !onlyBranch || g.branch === onlyBranch,
+    )
+    const jobs = pending.map((g) => ({
       po: g.po,
       routeKey: g.routeKey,
       branch: g.branch,
@@ -230,7 +237,7 @@ export function MisaPushModal({ onClose }: MisaPushModalProps) {
                     {!r.ok && r.canForce && !isPushing && (
                       <button
                         type="button"
-                        onClick={() => handlePush(true)}
+                        onClick={() => handlePush(true, r.branch)}
                         className="self-start rounded-lg border border-warning/60 px-3 py-1.5 font-sans text-[11px] font-semibold text-warning transition-colors hover:bg-warning/10"
                       >
                         Chỉ ghi {r.valid} chứng từ hợp lệ, bỏ qua {r.invalid} dòng lỗi
