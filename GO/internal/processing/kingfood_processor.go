@@ -145,6 +145,7 @@ func (p *RealProcessor) processKingfoodSegment(filePath string, realPageNum int,
 		matched := false
 		finalPrice := realPrice
 
+		var leftmostPromo leftmostPromoFallback
 		for _, promo := range promos {
 			// CR normalization (openpyxl-vs-excelize \r round-trip
 			// divergence, same class of fix already shipped for BigC/
@@ -163,11 +164,13 @@ func (p *RealProcessor) processKingfoodSegment(filePath string, realPageNum int,
 				candidatePrice = realPrice - (realPrice * discount / 100)
 			}
 			finalPrice = candidatePrice
+			leftmostPromo.remember(value, promo.Column, candidatePrice)
 			if closeEnough(invoicePrice, candidatePrice) {
 				matched = true
 				break
 			}
 		}
+		leftmostPromo.apply(matched, &khuyenmai, &khuyenmaiColumn, &finalPrice)
 		if len(promos) == 0 && closeEnough(invoicePrice, realPrice) {
 			matched = true
 		}
@@ -201,44 +204,38 @@ func (p *RealProcessor) processKingfoodSegment(filePath string, realPageNum int,
 		// attempt, buildPromoBonusRow always called with index=0 (no
 		// "|"-split multi-CTKM loop).
 		//
-		// Gated on matched: a gift is part of the SAME CTKM that
-		// explains the invoice price — only build it once that CTKM
-		// is confirmed, never from khuyenmai's last-examined-but-
-		// unconfirmed value on a genuine price mismatch. Deliberate
-		// divergence from Python (this block runs unconditionally
-		// there).
-		if matched {
-			bonusRow, mainRowNote, mainRowBundleSku, added := buildPromoBonusRow(p.Store, khuyenmai,
-				coop.Product{Barcode: barcode, Qty: ouQty}, 0, entryDate, cancelDate, kingfoodDeliveryAddress,
-				kingfoodCustomerCode, description, warehouse, region, statCode, orderNum)
-			if added {
-				totalWeight += bonusRow.LineWeightKg
-				totalPackages += bonusRow.CaseCount
-				accumulatePromoItem(promoTotals, bonusRow.SKU, bonusRow.ProductName, bonusRow.Qty)
+		// NOT gated on matched — this block runs for every item,
+		// exactly like Python's does; see promoGiftOnMismatchRule.
+		bonusRow, mainRowNote, mainRowBundleSku, added := buildPromoBonusRow(p.Store, khuyenmai,
+			coop.Product{Barcode: barcode, Qty: ouQty}, 0, entryDate, cancelDate, kingfoodDeliveryAddress,
+			kingfoodCustomerCode, description, warehouse, region, statCode, orderNum)
+		if added {
+			totalWeight += bonusRow.LineWeightKg
+			totalPackages += bonusRow.CaseCount
+			accumulatePromoItem(promoTotals, bonusRow.SKU, bonusRow.ProductName, bonusRow.Qty)
 
-				// Kingfood's own no-{...}-brace fallback text
-				// (xulydonhang.py:4096, "KM Giao Rời - Không Che Barcode")
-				// differs from buildPromoBonusRow's shared Coop-flavored
-				// default ("KM Bó Kèm - Che Barcode"). Unlike FujiMart's
-				// equivalent fallback (which still writes AP because its own
-				// text contains "bó kèm"), Kingfood's fallback text does NOT
-				// contain "bó kèm"/"quấn kèm", so this ALSO needs to
-				// explicitly clear AP — matching Winmart's/Emart's identical
-				// fix, confirmed against xulydonhang.py:4092-4096 (only the
-				// cachbokem branch writes AP; the else/fallback branch never
-				// does).
-				if coop.ExtractBraceContent(khuyenmai) == "" {
-					mainRowNote = "KM Giao Rời - Không Che Barcode"
-					mainRowBundleSku = ""
-					bonusRow.PromoBundleSku = ""
-				}
-
-				rows[productRowIndex].PromoNote = mainRowNote
-				if mainRowBundleSku != "" {
-					rows[productRowIndex].PromoBundleSku = mainRowBundleSku
-				}
-				rows = append(rows, bonusRow)
+			// Kingfood's own no-{...}-brace fallback text
+			// (xulydonhang.py:4096, "KM Giao Rời - Không Che Barcode")
+			// differs from buildPromoBonusRow's shared Coop-flavored
+			// default ("KM Bó Kèm - Che Barcode"). Unlike FujiMart's
+			// equivalent fallback (which still writes AP because its own
+			// text contains "bó kèm"), Kingfood's fallback text does NOT
+			// contain "bó kèm"/"quấn kèm", so this ALSO needs to
+			// explicitly clear AP — matching Winmart's/Emart's identical
+			// fix, confirmed against xulydonhang.py:4092-4096 (only the
+			// cachbokem branch writes AP; the else/fallback branch never
+			// does).
+			if coop.ExtractBraceContent(khuyenmai) == "" {
+				mainRowNote = "KM Giao Rời - Không Che Barcode"
+				mainRowBundleSku = ""
+				bonusRow.PromoBundleSku = ""
 			}
+
+			rows[productRowIndex].PromoNote = mainRowNote
+			if mainRowBundleSku != "" {
+				rows[productRowIndex].PromoBundleSku = mainRowBundleSku
+			}
+			rows = append(rows, bonusRow)
 		}
 	}
 

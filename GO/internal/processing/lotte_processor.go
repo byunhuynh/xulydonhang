@@ -130,6 +130,7 @@ func (p *RealProcessor) processLotteSegment(filePath string, realPageNum int, te
 
 		// No SplitPromoText here (see function doc): Lotte's promo cell
 		// is used exactly as returned, not split into cm/cf variants.
+		var leftmostPromo leftmostPromoFallback
 		for _, promo := range promos {
 			value := promo.Value
 			lastExaminedPromo = value
@@ -142,11 +143,13 @@ func (p *RealProcessor) processLotteSegment(filePath string, realPageNum int, te
 				candidatePrice = realPrice - (realPrice * discount / 100)
 			}
 			finalPrice = candidatePrice
+			leftmostPromo.remember(value, promo.Column, candidatePrice)
 			if closeEnough(invoicePrice, candidatePrice) {
 				matched = true
 				break
 			}
 		}
+		leftmostPromo.apply(matched, &lastExaminedPromo, &lastExaminedPromoColumn, &finalPrice)
 		if len(promos) == 0 && closeEnough(invoicePrice, realPrice) {
 			matched = true
 		}
@@ -197,46 +200,41 @@ func (p *RealProcessor) processLotteSegment(filePath string, realPageNum int, te
 		// applies), matches Python exactly: laycachbo_khuyenmai's `{...}`
 		// extraction and the "X+1" regex both search the whole string
 		// regardless of where "|" appears in it.
-		// Gated on matched: a gift is part of the SAME CTKM that explains
-		// the invoice price — only build a bonus row once that CTKM is
-		// actually confirmed, never from lastExaminedPromo's last-
-		// examined-but-unconfirmed value on a genuine price mismatch.
-		// Deliberate divergence from Python (xulydonhang.py:2196's "if
-		// kiemtra:" block runs unconditionally, regardless of giakhop).
-		if matched {
-			bonusRow, mainRowNote, mainRowBundleSku, added := buildPromoBonusRow(p.Store, lastExaminedPromo,
-				coop.Product{Barcode: barcode, Qty: qty}, 0, info.EntryDate, cancelDate, shipTo,
-				customerCode, description, warehouse, region, statCode, lotteOrderNumber(info.PONumber))
-			if added {
-				totalWeight += bonusRow.LineWeightKg
-				totalPackages += bonusRow.CaseCount
-				accumulatePromoItem(promoTotals, bonusRow.SKU, bonusRow.ProductName, bonusRow.Qty)
+		// NOT gated on matched (see promoGiftOnMismatchRule) — this block
+		// runs unconditionally, matching xulydonhang.py:2196's "if
+		// kiemtra:" block, which ignores giakhop.
+		bonusRow, mainRowNote, mainRowBundleSku, added := buildPromoBonusRow(p.Store, lastExaminedPromo,
+			coop.Product{Barcode: barcode, Qty: qty}, 0, info.EntryDate, cancelDate, shipTo,
+			customerCode, description, warehouse, region, statCode, lotteOrderNumber(info.PONumber))
+		if added {
+			totalWeight += bonusRow.LineWeightKg
+			totalPackages += bonusRow.CaseCount
+			accumulatePromoItem(promoTotals, bonusRow.SKU, bonusRow.ProductName, bonusRow.Qty)
 
-				// buildPromoBonusRow's no-brace fallback ("KM Bó Kèm - Che
-				// Barcode", which also flips isBundle true and writes AP)
-				// is Coop's own default (xulydonhang.py:1198's "... or 'KM
-				// Bó Kèm - Che Barcode'") and must stay unchanged there —
-				// Coop's AP-writing behavior in that branch is verified,
-				// already-shipped behavior from an earlier phase. Lotte's
-				// write_to_dondathang_lotte has a different no-brace
-				// branch (xulydonhang.py:2204-2217's "else:
-				// sheet[f'AO{current_row}'] = 'KM Giao Rời - Không Che
-				// Barcode'") that never writes AP at all in this case.
-				// Override the shared helper's Coop-flavored result here,
-				// scoped to Lotte only, rather than changing
-				// buildPromoBonusRow itself.
-				if coop.ExtractBraceContent(lastExaminedPromo) == "" {
-					mainRowNote = "KM Giao Rời - Không Che Barcode"
-					mainRowBundleSku = ""
-					bonusRow.PromoBundleSku = ""
-				}
-
-				rows[productRowIndex].PromoNote = mainRowNote
-				if mainRowBundleSku != "" {
-					rows[productRowIndex].PromoBundleSku = mainRowBundleSku
-				}
-				rows = append(rows, bonusRow)
+			// buildPromoBonusRow's no-brace fallback ("KM Bó Kèm - Che
+			// Barcode", which also flips isBundle true and writes AP)
+			// is Coop's own default (xulydonhang.py:1198's "... or 'KM
+			// Bó Kèm - Che Barcode'") and must stay unchanged there —
+			// Coop's AP-writing behavior in that branch is verified,
+			// already-shipped behavior from an earlier phase. Lotte's
+			// write_to_dondathang_lotte has a different no-brace
+			// branch (xulydonhang.py:2204-2217's "else:
+			// sheet[f'AO{current_row}'] = 'KM Giao Rời - Không Che
+			// Barcode'") that never writes AP at all in this case.
+			// Override the shared helper's Coop-flavored result here,
+			// scoped to Lotte only, rather than changing
+			// buildPromoBonusRow itself.
+			if coop.ExtractBraceContent(lastExaminedPromo) == "" {
+				mainRowNote = "KM Giao Rời - Không Che Barcode"
+				mainRowBundleSku = ""
+				bonusRow.PromoBundleSku = ""
 			}
+
+			rows[productRowIndex].PromoNote = mainRowNote
+			if mainRowBundleSku != "" {
+				rows[productRowIndex].PromoBundleSku = mainRowBundleSku
+			}
+			rows = append(rows, bonusRow)
 		}
 	}
 

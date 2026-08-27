@@ -50,6 +50,81 @@ func finalizePromoItems(totals map[string]*PromoItemSummary) []PromoItemSummary 
 	return items
 }
 
+// leftmostPromoFallback implements the cross-vendor tie-break for a product
+// whose row has SEVERAL date-range columns active at the same time — real
+// sheets overlap campaigns (BigC's "C617 30/07-26/08" and "C618 13/08-09/09"
+// both cover 20/08), so a single product can offer more than one CTKM on the
+// order's entry date.
+//
+// The rule (quyết định của người dùng, 2026-08-27): whichever active CTKM's
+// computed price actually matches the PO price wins — that is the promo loop's
+// own closeEnough/break. When NONE of them matches, fall back to the LEFTMOST
+// active column rather than whichever candidate the loop happened to examine
+// last. On these sheets the newest campaign sits leftmost, so this picks the
+// most recent CTKM. The fallback decides all three things at once — the price
+// written to column Y, the promo text in AQ, and (via promoGiftOnMismatchRule)
+// which gift row is built — so a mismatched row can never pair one column's
+// price with another column's gift.
+//
+// Usage in every vendor's promo loop: call remember once per non-empty
+// candidate (it keeps only the first), then apply once after the loop.
+type leftmostPromoFallback struct {
+	set    bool
+	promo  string
+	column string
+	price  float64
+}
+
+// remember records this candidate as the leftmost one, if none was recorded
+// yet. price is the candidate's own computed price, so apply can restore the
+// exact pairing the loop may have overwritten with later candidates.
+func (f *leftmostPromoFallback) remember(promo, column string, price float64) {
+	if f.set {
+		return
+	}
+	f.set, f.promo, f.column, f.price = true, promo, column, price
+}
+
+// apply rewrites the caller's running promo/column/price to the leftmost
+// candidate's when no candidate matched the PO price. A no-op on a match (the
+// matched candidate is already the right answer) and when the product had no
+// usable candidate at all.
+func (f *leftmostPromoFallback) apply(matched bool, promo, column *string, price *float64) {
+	if matched || !f.set {
+		return
+	}
+	*promo, *column, *price = f.promo, f.column, f.price
+}
+
+// promoGiftOnMismatchRule documents one cross-vendor business rule in a
+// single place; every vendor's per-item promo-bonus block points here
+// instead of repeating the same paragraph nine times.
+//
+// A per-item gift row is built from the promo text WITHOUT gating on
+// whether that promo's discount actually matched the PO price. Reason:
+// on a mismatch appliedUnitPrice still writes the SYSTEM price into
+// column Y — i.e. exactly the price this CTKM's own "GIẢM x%" produced.
+// Once the discount half of a CTKM lands in the workbook, its gift half
+// must land with it; applying one half and dropping the other leaves a
+// discounted price on the sheet with no matching bonus line (quyết định
+// của người dùng, 2026-08-27, sau đơn BigC PO 2634058339690: BigC ra
+// giá gốc 64.434 cho TP30473/TP30466 trong khi CTKM đang chạy là "GIẢM
+// 35% + Tặng 1 túi NRC gạo 800ml TP30343", giá 41.882 vẫn được ghi
+// xuống Y nhưng 150 túi quà TP30343 thì bị bỏ mất).
+//
+// Nothing is applied silently: a mismatched product row is still
+// red-filled with a warning comment for the user to confirm (see
+// excelwriter's PriceMismatch and App.ConfirmPrice). An earlier version
+// of this port gated the whole block on `matched`; removing that gate
+// restores the original Python behaviour, which ran it unconditionally.
+//
+// Which CTKM the gift comes from on a mismatch is decided by
+// leftmostPromoFallback, which pins the promo text, its column and the
+// price written to Y to the same single candidate — so a mismatched row
+// can never pair one column's discounted price with another column's
+// gift.
+const promoGiftOnMismatchRule = "per-item gift rows are built even on a price mismatch"
+
 // xPlus1Pattern mirrors the "(\d+)\s*\+\s*1" match inside
 // write_to_dondathang's promo-bonus-quantity logic.
 var xPlus1Pattern = regexp.MustCompile(`(\d+)\s*\+\s*1`)

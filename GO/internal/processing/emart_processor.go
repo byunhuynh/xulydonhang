@@ -164,6 +164,7 @@ func (p *RealProcessor) processEmartSegment(filePath string, realPageNum int, te
 		matched := false
 		finalPrice := realPrice
 
+		var leftmostPromo leftmostPromoFallback
 		for _, promo := range promos {
 			// Same CR normalization BigC's own promo.Value read needed
 			// (bigc_processor.go:270): openpyxl's write/read round-trip
@@ -187,11 +188,13 @@ func (p *RealProcessor) processEmartSegment(filePath string, realPageNum int, te
 				candidatePrice = realPrice - (realPrice * discount / 100)
 			}
 			finalPrice = candidatePrice
+			leftmostPromo.remember(value, promo.Column, candidatePrice)
 			if closeEnough(invoicePrice, candidatePrice) {
 				matched = true
 				break
 			}
 		}
+		leftmostPromo.apply(matched, &lastExaminedPromo, &lastExaminedPromoColumn, &finalPrice)
 		if len(promos) == 0 && closeEnough(invoicePrice, realPrice) {
 			matched = true
 		}
@@ -228,55 +231,49 @@ func (p *RealProcessor) processEmartSegment(filePath string, realPageNum int, te
 		// loops over "|"-split promo parts with its own i==0/i>0 AO/AP
 		// placement branch, which buildPromoBonusRow's own index
 		// parameter already models.
-		// Gated on matched — same rule as Coop's identical loop: a gift
-		// is part of the SAME CTKM that explains the invoice price, so
-		// only grant it once that CTKM is actually confirmed (matched),
-		// never from lastExaminedPromo's last-examined-but-unconfirmed
-		// value on a genuine price mismatch. Deliberate divergence from
-		// Python (xulydonhang.py:5203's split runs unconditionally).
-		if matched {
-			currentRowIndex := productRowIndex
-			for i, promoPart := range strings.Split(lastExaminedPromo, "|") {
-				rows[currentRowIndex].PromoContent = lastExaminedPromo
+		// NOT gated on matched (see promoGiftOnMismatchRule) — this split
+		// runs unconditionally, matching xulydonhang.py:5203.
+		currentRowIndex := productRowIndex
+		for i, promoPart := range strings.Split(lastExaminedPromo, "|") {
+			rows[currentRowIndex].PromoContent = lastExaminedPromo
 
-				bonusRow, mainRowNote, mainRowBundleSku, added := buildPromoBonusRow(p.Store, promoPart,
-					coop.Product{Barcode: barcode, Qty: qty}, i, entryDate, cancelDate, storeName,
-					emartCustomerCode, description, warehouse, region, statCode, orderNum)
-				if !added {
-					continue
-				}
-				totalWeight += bonusRow.LineWeightKg
-				totalPackages += bonusRow.CaseCount
-				accumulatePromoItem(promoTotals, bonusRow.SKU, bonusRow.ProductName, bonusRow.Qty)
-				bonusRow.NoCaseCount = true
-				bonusRow.SiteCode = shortCode
-
-				// Emart's own no-{...}-brace fallback
-				// (xulydonhang.py:5230/:5240, "KM Rời - Không Che Barcode")
-				// never writes AP, for EITHER i==0 or i>0 — a third distinct
-				// fallback string from Coop's default ("KM Bó Kèm - Che
-				// Barcode") and Winmart's ("KM Giao Rời - Không Che
-				// Barcode"). Override the shared helper's Coop-flavored
-				// result here, scoped to Emart only, for BOTH branches
-				// (unlike Lotte/Winmart, which only ever call with index 0).
-				if coop.ExtractBraceContent(promoPart) == "" {
-					mainRowNote = "KM Rời - Không Che Barcode"
-					mainRowBundleSku = ""
-					bonusRow.PromoBundleSku = ""
-					if i != 0 {
-						bonusRow.PromoNote = "KM Rời - Không Che Barcode"
-					}
-				}
-
-				if i == 0 {
-					rows[productRowIndex].PromoNote = mainRowNote
-					if mainRowBundleSku != "" {
-						rows[productRowIndex].PromoBundleSku = mainRowBundleSku
-					}
-				}
-				rows = append(rows, bonusRow)
-				currentRowIndex = len(rows) - 1
+			bonusRow, mainRowNote, mainRowBundleSku, added := buildPromoBonusRow(p.Store, promoPart,
+				coop.Product{Barcode: barcode, Qty: qty}, i, entryDate, cancelDate, storeName,
+				emartCustomerCode, description, warehouse, region, statCode, orderNum)
+			if !added {
+				continue
 			}
+			totalWeight += bonusRow.LineWeightKg
+			totalPackages += bonusRow.CaseCount
+			accumulatePromoItem(promoTotals, bonusRow.SKU, bonusRow.ProductName, bonusRow.Qty)
+			bonusRow.NoCaseCount = true
+			bonusRow.SiteCode = shortCode
+
+			// Emart's own no-{...}-brace fallback
+			// (xulydonhang.py:5230/:5240, "KM Rời - Không Che Barcode")
+			// never writes AP, for EITHER i==0 or i>0 — a third distinct
+			// fallback string from Coop's default ("KM Bó Kèm - Che
+			// Barcode") and Winmart's ("KM Giao Rời - Không Che
+			// Barcode"). Override the shared helper's Coop-flavored
+			// result here, scoped to Emart only, for BOTH branches
+			// (unlike Lotte/Winmart, which only ever call with index 0).
+			if coop.ExtractBraceContent(promoPart) == "" {
+				mainRowNote = "KM Rời - Không Che Barcode"
+				mainRowBundleSku = ""
+				bonusRow.PromoBundleSku = ""
+				if i != 0 {
+					bonusRow.PromoNote = "KM Rời - Không Che Barcode"
+				}
+			}
+
+			if i == 0 {
+				rows[productRowIndex].PromoNote = mainRowNote
+				if mainRowBundleSku != "" {
+					rows[productRowIndex].PromoBundleSku = mainRowBundleSku
+				}
+			}
+			rows = append(rows, bonusRow)
+			currentRowIndex = len(rows) - 1
 		}
 	}
 

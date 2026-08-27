@@ -115,6 +115,7 @@ func (p *RealProcessor) processFujimartSegment(filePath string, realPageNum int,
 		matched := false
 		finalPrice := realPrice
 
+		var leftmostPromo leftmostPromoFallback
 		for _, promo := range promos {
 			// Same CR normalization BigC's/Emart's own promo.Value read
 			// needed (bigc_processor.go:254, emart_processor.go:163):
@@ -141,11 +142,13 @@ func (p *RealProcessor) processFujimartSegment(filePath string, realPageNum int,
 				candidatePrice = realPrice - (realPrice * discount / 100)
 			}
 			finalPrice = candidatePrice
+			leftmostPromo.remember(value, promo.Column, candidatePrice)
 			if closeEnough(invoicePrice, candidatePrice) {
 				matched = true
 				break
 			}
 		}
+		leftmostPromo.apply(matched, &khuyenmai, &khuyenmaiColumn, &finalPrice)
 		if len(promos) == 0 && closeEnough(invoicePrice, realPrice) {
 			matched = true
 		}
@@ -178,43 +181,39 @@ func (p *RealProcessor) processFujimartSegment(filePath string, realPageNum int,
 		// Per-item promo bonus row (xulydonhang.py:2949-3007) — single
 		// attempt, buildPromoBonusRow always called with index=0 (no
 		// "|"-split multi-CTKM loop, matching Winmart's/Lotte's shape,
-		// not Coop's/Emart's). Gated on matched: a gift is part of the
-		// SAME CTKM that explains the invoice price — only build it once
-		// that CTKM is confirmed, never from khuyenmai's last-examined-
-		// but-unconfirmed value on a genuine mismatch. Deliberate
-		// divergence from Python (this block runs unconditionally there).
-		if matched {
-			bonusRow, mainRowNote, mainRowBundleSku, added := buildPromoBonusRow(p.Store, khuyenmai,
-				coop.Product{Barcode: barcode, Qty: ouQty}, 0, entryDate, cancelDate, storeInfo,
-				fujimartCustomerCode, description, warehouse, region, statCode, orderNum)
-			if added {
-				totalWeight += bonusRow.LineWeightKg
-				totalPackages += bonusRow.CaseCount
-				accumulatePromoItem(promoTotals, bonusRow.SKU, bonusRow.ProductName, bonusRow.Qty)
+		// not Coop's/Emart's). NOT gated on matched — this block runs for
+		// every item, exactly like Python's does; see
+		// promoGiftOnMismatchRule.
+		bonusRow, mainRowNote, mainRowBundleSku, added := buildPromoBonusRow(p.Store, khuyenmai,
+			coop.Product{Barcode: barcode, Qty: ouQty}, 0, entryDate, cancelDate, storeInfo,
+			fujimartCustomerCode, description, warehouse, region, statCode, orderNum)
+		if added {
+			totalWeight += bonusRow.LineWeightKg
+			totalPackages += bonusRow.CaseCount
+			accumulatePromoItem(promoTotals, bonusRow.SKU, bonusRow.ProductName, bonusRow.Qty)
 
-				// FujiMart's own no-{...}-brace fallback text
-				// (xulydonhang.py:2973, "KM Bó Kèm - Không Che Barcode")
-				// differs from buildPromoBonusRow's shared Coop-flavored
-				// default ("KM Bó Kèm - Che Barcode") — but BOTH strings
-				// contain "bó kèm", so buildPromoBonusRow's own internal
-				// bundle-SKU (AP) computation is unaffected by this text
-				// override; only the AO note text itself needs overriding.
-				// Python writes this fallback text ONLY onto the main
-				// product row (xulydonhang.py:2973, at current_row, before
-				// current_row is incremented for the bonus row) — never
-				// onto the bonus row itself, matching buildPromoBonusRow's
-				// own index==0 behavior (which likewise never sets the
-				// bonus row's own PromoNote).
-				if coop.ExtractBraceContent(khuyenmai) == "" {
-					mainRowNote = "KM Bó Kèm - Không Che Barcode"
-				}
-
-				rows[productRowIndex].PromoNote = mainRowNote
-				if mainRowBundleSku != "" {
-					rows[productRowIndex].PromoBundleSku = mainRowBundleSku
-				}
-				rows = append(rows, bonusRow)
+			// FujiMart's own no-{...}-brace fallback text
+			// (xulydonhang.py:2973, "KM Bó Kèm - Không Che Barcode")
+			// differs from buildPromoBonusRow's shared Coop-flavored
+			// default ("KM Bó Kèm - Che Barcode") — but BOTH strings
+			// contain "bó kèm", so buildPromoBonusRow's own internal
+			// bundle-SKU (AP) computation is unaffected by this text
+			// override; only the AO note text itself needs overriding.
+			// Python writes this fallback text ONLY onto the main
+			// product row (xulydonhang.py:2973, at current_row, before
+			// current_row is incremented for the bonus row) — never
+			// onto the bonus row itself, matching buildPromoBonusRow's
+			// own index==0 behavior (which likewise never sets the
+			// bonus row's own PromoNote).
+			if coop.ExtractBraceContent(khuyenmai) == "" {
+				mainRowNote = "KM Bó Kèm - Không Che Barcode"
 			}
+
+			rows[productRowIndex].PromoNote = mainRowNote
+			if mainRowBundleSku != "" {
+				rows[productRowIndex].PromoBundleSku = mainRowBundleSku
+			}
+			rows = append(rows, bonusRow)
 		}
 	}
 

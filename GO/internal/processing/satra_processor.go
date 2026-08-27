@@ -176,6 +176,7 @@ func (p *RealProcessor) processSatraSegment(filePath string, realPageNum int, te
 		matched := false
 		finalPrice := realPrice
 
+		var leftmostPromo leftmostPromoFallback
 		for _, promo := range promos {
 			value := promo.Value
 			lastExaminedPromo = value
@@ -188,11 +189,13 @@ func (p *RealProcessor) processSatraSegment(filePath string, realPageNum int, te
 				candidatePrice = realPrice - (realPrice * discount / 100)
 			}
 			finalPrice = candidatePrice
+			leftmostPromo.remember(value, promo.Column, candidatePrice)
 			if closeEnough(invoicePrice, candidatePrice) {
 				matched = true
 				break
 			}
 		}
+		leftmostPromo.apply(matched, &lastExaminedPromo, &lastExaminedPromoColumn, &finalPrice)
 		if len(promos) == 0 && closeEnough(invoicePrice, realPrice) {
 			matched = true
 		}
@@ -238,35 +241,29 @@ func (p *RealProcessor) processSatraSegment(filePath string, realPageNum int, te
 		// Coop uses; the AQ-write-every-iteration / i==0-vs-i>0 off-by-one
 		// this mirrors is the same quirk documented in detail on Coop's
 		// equivalent loop in coop_processor.go).
-		// Gated on matched — same rule as Coop's identical loop: a gift
-		// is part of the SAME CTKM that explains the invoice price, so
-		// only grant it once that CTKM is actually confirmed (matched),
-		// never from lastExaminedPromo's last-examined-but-unconfirmed
-		// value on a genuine price mismatch. Deliberate divergence from
-		// Python (xulydonhang.py:2555's split runs unconditionally).
-		if matched {
-			currentRowIndex := productRowIndex
-			for i, promoPart := range strings.Split(lastExaminedPromo, "|") {
-				rows[currentRowIndex].PromoContent = lastExaminedPromo
+		// NOT gated on matched (see promoGiftOnMismatchRule) — this split
+		// runs unconditionally, matching xulydonhang.py:2555.
+		currentRowIndex := productRowIndex
+		for i, promoPart := range strings.Split(lastExaminedPromo, "|") {
+			rows[currentRowIndex].PromoContent = lastExaminedPromo
 
-				bonusRow, mainRowNote, mainRowBundleSku, added := buildPromoBonusRow(p.Store, promoPart,
-					coop.Product{Barcode: barcode, Qty: qty}, i, entryDate, cancelDate, shipTo,
-					customerCode, noteText, warehouse, region, statCode, satraOrderNumber(poNumber))
-				if !added {
-					continue
-				}
-				totalWeight += bonusRow.LineWeightKg
-				totalPackages += bonusRow.CaseCount
-				accumulatePromoItem(promoTotals, bonusRow.SKU, bonusRow.ProductName, bonusRow.Qty)
-				if i == 0 {
-					rows[productRowIndex].PromoNote = mainRowNote
-					if mainRowBundleSku != "" {
-						rows[productRowIndex].PromoBundleSku = mainRowBundleSku
-					}
-				}
-				rows = append(rows, bonusRow)
-				currentRowIndex = len(rows) - 1
+			bonusRow, mainRowNote, mainRowBundleSku, added := buildPromoBonusRow(p.Store, promoPart,
+				coop.Product{Barcode: barcode, Qty: qty}, i, entryDate, cancelDate, shipTo,
+				customerCode, noteText, warehouse, region, statCode, satraOrderNumber(poNumber))
+			if !added {
+				continue
 			}
+			totalWeight += bonusRow.LineWeightKg
+			totalPackages += bonusRow.CaseCount
+			accumulatePromoItem(promoTotals, bonusRow.SKU, bonusRow.ProductName, bonusRow.Qty)
+			if i == 0 {
+				rows[productRowIndex].PromoNote = mainRowNote
+				if mainRowBundleSku != "" {
+					rows[productRowIndex].PromoBundleSku = mainRowBundleSku
+				}
+			}
+			rows = append(rows, bonusRow)
+			currentRowIndex = len(rows) - 1
 		}
 	}
 

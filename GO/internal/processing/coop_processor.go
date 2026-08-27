@@ -363,6 +363,7 @@ func (p *RealProcessor) processSegment(filePath string, realPageNum int, text, p
 		// price real fixtures show (e.g. a genuine 30%-off SKU priced at
 		// 42158 writes Y=29510.6 with a price-mismatch flag in Python,
 		// not Y=42158).
+		var leftmostPromo leftmostPromoFallback
 		for _, promo := range promos {
 			value := coop.SplitPromoText(promo.Value, system)
 			lastExaminedPromo = value
@@ -375,11 +376,13 @@ func (p *RealProcessor) processSegment(filePath string, realPageNum int, text, p
 				candidatePrice = realPrice - (realPrice * discount / 100)
 			}
 			finalPrice = candidatePrice
+			leftmostPromo.remember(value, promo.Column, candidatePrice)
 			if closeEnough(invoicePrice, candidatePrice) {
 				matched = true
 				break
 			}
 		}
+		leftmostPromo.apply(matched, &lastExaminedPromo, &lastExaminedPromoColumn, &finalPrice)
 		// Python's raw-price fallback comparison ("if not results:",
 		// xulydonhang.py:1131-1147) only runs when NO promotions were
 		// found at all — not merely when none of the found promotions'
@@ -441,37 +444,28 @@ func (p *RealProcessor) processSegment(filePath string, realPageNum int, text, p
 		// bonus row — an off-by-one quirk in the original that this
 		// mirrors exactly rather than "fixing", since golden-fixture
 		// parity is the point.
-		// Gated on matched: a gift is part of the SAME CTKM that explains
-		// the invoice price, not a separate thing — when no promo's
-		// discount actually matched the invoice (a genuine price
-		// mismatch), lastExaminedPromo is just whichever promo was
-		// examined LAST (see the price loop above), not a confirmed
-		// applicable one, so granting a gift from it would be a guess.
-		// Deliberate divergence from Python (xulydonhang.py:1181's
-		// nhieuCtkm split runs unconditionally, even after a mismatch) —
-		// confirmed as the intended business rule, not preserved.
-		if matched {
-			currentRowIndex := productRowIndex
-			for i, promoPart := range strings.Split(lastExaminedPromo, "|") {
-				rows[currentRowIndex].PromoContent = lastExaminedPromo
+		// NOT gated on matched (see promoGiftOnMismatchRule) — this split
+		// runs unconditionally, matching xulydonhang.py:1181.
+		currentRowIndex := productRowIndex
+		for i, promoPart := range strings.Split(lastExaminedPromo, "|") {
+			rows[currentRowIndex].PromoContent = lastExaminedPromo
 
-				bonusRow, mainRowNote, mainRowBundleSku, added := buildPromoBonusRow(p.Store, promoPart, product, i, entryDate, cancelDate, shipTo,
-					customerCode, description, warehouse, region, statCode, orderNumber(info.PONumber))
-				if !added {
-					continue
-				}
-				totalWeight += bonusRow.LineWeightKg
-				totalPackages += bonusRow.CaseCount
-				accumulatePromoItem(promoTotals, bonusRow.SKU, bonusRow.ProductName, bonusRow.Qty)
-				if i == 0 {
-					rows[productRowIndex].PromoNote = mainRowNote
-					if mainRowBundleSku != "" {
-						rows[productRowIndex].PromoBundleSku = mainRowBundleSku
-					}
-				}
-				rows = append(rows, bonusRow)
-				currentRowIndex = len(rows) - 1
+			bonusRow, mainRowNote, mainRowBundleSku, added := buildPromoBonusRow(p.Store, promoPart, product, i, entryDate, cancelDate, shipTo,
+				customerCode, description, warehouse, region, statCode, orderNumber(info.PONumber))
+			if !added {
+				continue
 			}
+			totalWeight += bonusRow.LineWeightKg
+			totalPackages += bonusRow.CaseCount
+			accumulatePromoItem(promoTotals, bonusRow.SKU, bonusRow.ProductName, bonusRow.Qty)
+			if i == 0 {
+				rows[productRowIndex].PromoNote = mainRowNote
+				if mainRowBundleSku != "" {
+					rows[productRowIndex].PromoBundleSku = mainRowBundleSku
+				}
+			}
+			rows = append(rows, bonusRow)
+			currentRowIndex = len(rows) - 1
 		}
 	}
 

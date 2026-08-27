@@ -22,7 +22,31 @@ import (
 // "260727-01013-00057.pdf:0:D". The source PDF filename is required so an
 // entry added as evidence for one specific PDF's cell doesn't silently
 // suppress the same row/column check on every other fixture too.
-var knownDivergences_Lotte = map[string]bool{}
+var knownDivergences_Lotte = map[string]bool{
+	// All three cells below are the SAME single divergence, on the same
+	// SKU (TP30671), and are the only place any vendor's golden fixtures
+	// exercise leftmostPromoFallback (processor_shared.go).
+	//
+	// TP30671's row has THREE promo columns active on 12-13/08/2026 —
+	// "SĐBS 12/08-08/09" = "25%", "POST 2617 12/08-08/09" = "giảm 25%",
+	// and "POST 2616 29/07-25/08" = "giảm 25%" — and the PO price matches
+	// none of them (all three compute the same 30600 against a different
+	// invoice price), so the row is a genuine price mismatch. Python then
+	// leaves khuyenmai holding whichever candidate it examined LAST
+	// ("giảm 25%"); this port deliberately falls back to the LEFTMOST
+	// active column instead ("25%"), per the rule documented on
+	// leftmostPromoFallback (quyết định của người dùng, 2026-08-27).
+	//
+	// Scoped to column AQ only, and only these three cells: all three
+	// columns carry the same 25% discount, so every other cell on these
+	// rows — Y (30600 either way), the mismatch comment/red fill, the
+	// gift rows, the weights — is unaffected and still compared normally.
+	// The divergence is purely which of three equivalent CTKM labels is
+	// displayed.
+	"260812-01001-00338.pdf:5:AQ": true,
+	"260812-01012-00321.pdf:1:AQ": true,
+	"260813-01016-00156.pdf:7:AQ": true,
+}
 
 func loadFrozenLottePricingSource(t *testing.T) *fixturePricingSource {
 	t.Helper()

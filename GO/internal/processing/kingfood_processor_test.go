@@ -130,11 +130,11 @@ func TestParseKingfoodPrice(t *testing.T) {
 // braces. The price CSV's own "Giá" column is "52195" (a bare integer,
 // not "52195.073"): pricing.Index.ParseIndex strips every "." from that
 // column as a Vietnamese thousands separator (never a decimal point), so
-// a literal "52195.073" would parse to 52195073, not 52195.073 — this
-// bonus row now only builds once matched is true (see the per-item promo
-// bonus row's own "Gated on matched" comment in kingfood_processor.go),
-// and closeEnough's tolerance (an absolute 1đ) comfortably covers the
-// 0.073 gap between realPrice=52195 and the real invoicePrice=52195.073.
+// a literal "52195.073" would parse to 52195073, not 52195.073 — and
+// closeEnough's tolerance (an absolute 1đ) comfortably covers the 0.073
+// gap between realPrice=52195 and the real invoicePrice=52195.073, so
+// this test exercises the matched-price path rather than
+// promoGiftOnMismatchRule's.
 func TestRealProcessor_KingfoodNoBraceBonusRowDoesNotWriteAP(t *testing.T) {
 	store, err := productdata.Load("productdata/testdata/data.xlsx")
 	if err != nil {

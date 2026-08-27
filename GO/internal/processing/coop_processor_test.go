@@ -234,13 +234,11 @@ func TestRealProcessor_NonCoopFileProducesFailedRow(t *testing.T) {
 // "3564270") together with two internal SKUs already present in the
 // productdata test fixture (SP0001, SP0002) as the promo's bonus-item
 // mentions. Price is "33726" (the real extracted invoice price for this
-// barcode, confirmed by direct probe), not an arbitrary value: the note/
-// bundle-SKU/bonus-row logic under test now only runs once matched is
-// true (see processCoopSegment's own "Gated on matched" comment), so this
-// test needs a genuinely matching price to exercise it. The companion
-// mismatch scenario (khuyenmai still populated, but no note/bonus row at
-// all) is covered separately by
-// TestRealProcessor_PromoContentSetButNoBonusRowOnMismatch below.
+// barcode, confirmed by direct probe), not an arbitrary value, so this
+// test pins the ordinary matched-price shape. The note/bundle-SKU/
+// bonus-row logic under test also runs on a price mismatch (see
+// promoGiftOnMismatchRule); that companion scenario is covered by
+// TestRealProcessor_PromoBonusRowStillBuiltOnMismatch below.
 func TestRealProcessor_PromoBonusRowFieldsMatchPythonRowTarget(t *testing.T) {
 	store, err := productdata.Load("productdata/testdata/data.xlsx")
 	if err != nil {
@@ -325,21 +323,26 @@ func TestRealProcessor_PromoBonusRowFieldsMatchPythonRowTarget(t *testing.T) {
 	}
 }
 
-// TestRealProcessor_PromoContentSetButNoBonusRowOnMismatch regression-tests
-// the companion half of the bug
-// TestRealProcessor_PromoBonusRowFieldsMatchPythonRowTarget covers: khuyenmai
-// (PromoContent) is set on every examined promo candidate, not only on a
-// price match, so it must still be populated when the product row ends up
-// a price mismatch (xulydonhang.py:1085) — but, per this Go port's
-// deliberate divergence from Python (see processCoopSegment's own "Gated
-// on matched" comment), the note/bundle-SKU/bonus-row machinery must NOT
-// run at all on a genuine mismatch, since a gift is only ever part of the
-// SAME CTKM that's confirmed to explain the invoice price.
+// TestRealProcessor_PromoBonusRowStillBuiltOnMismatch regression-tests the
+// companion half of the bug TestRealProcessor_PromoBonusRowFieldsMatchPythonRowTarget
+// covers: khuyenmai (PromoContent) is set on every examined promo candidate,
+// not only on a price match (xulydonhang.py:1085), and so is the whole
+// note/bundle-SKU/bonus-row machinery.
+//
+// A gift row must be built even when the row is flagged a price mismatch.
+// Reason (quyết định của người dùng, 2026-08-27): on a mismatch the port
+// deliberately writes the SYSTEM price to column Y (see appliedUnitPrice) —
+// i.e. the price the CTKM's own "GIẢM x%" already produced. Once that
+// discounted price is what lands in the workbook, the SAME CTKM's gift must
+// land with it; applying one half of a promotion and silently dropping the
+// other half would put a discounted price on the sheet with no matching
+// bonus line. The product row is still red-filled + commented for the user
+// to confirm, so nothing is applied silently.
 //
 // Uses the same real sample PDF/barcode/promo as the sibling test above,
 // but with a price ("500000") engineered to NOT match the real invoice
 // price (33726), so matched stays false throughout.
-func TestRealProcessor_PromoContentSetButNoBonusRowOnMismatch(t *testing.T) {
+func TestRealProcessor_PromoBonusRowStillBuiltOnMismatch(t *testing.T) {
 	store, err := productdata.Load("productdata/testdata/data.xlsx")
 	if err != nil {
 		t.Fatalf("Load productdata failed: %v", err)
@@ -354,8 +357,12 @@ func TestRealProcessor_PromoContentSetButNoBonusRowOnMismatch(t *testing.T) {
 	pricingSource := &fixturePricingSource{index: pricing.ParseIndex(priceCsv)}
 
 	rp := &RealProcessor{Store: store, Pricing: pricingSource, ExcelPath: excelPath}
-	if _, err := rp.Process(context.Background(), "testdata/sample_coop_order.pdf"); err != nil {
+	rows, err := rp.Process(context.Background(), "testdata/sample_coop_order.pdf")
+	if err != nil {
 		t.Fatalf("Process returned error: %v", err)
+	}
+	if len(rows) == 0 || rows[0].PriceMismatchCount == 0 {
+		t.Fatalf("test setup broken: want the product row flagged as a price mismatch, got %+v", rows)
 	}
 
 	f, err := excelize.OpenFile(excelPath)
@@ -376,26 +383,120 @@ func TestRealProcessor_PromoContentSetButNoBonusRowOnMismatch(t *testing.T) {
 		return ""
 	}
 
-	var mainRow []string
+	var mainRow, bonusRow0, bonusRow1 []string
 	for _, row := range sheetRows {
 		switch cell(row, colSKU) {
 		case "3564270":
 			mainRow = row
-		case "SP0001", "SP0002":
-			t.Errorf("found a %s bonus row, want none: a genuine price mismatch must not build a gift row", cell(row, colSKU))
+		case "SP0001":
+			bonusRow0 = row
+		case "SP0002":
+			bonusRow1 = row
 		}
 	}
 	if mainRow == nil {
 		t.Fatalf("missing expected main row")
 	}
+	if bonusRow0 == nil || bonusRow1 == nil {
+		t.Fatalf("missing gift rows on a price mismatch: bonus0=%v bonus1=%v (the CTKM's discounted price was written to Y, so its gift must be written too)", bonusRow0, bonusRow1)
+	}
 
 	if got := cell(mainRow, colPromoContent); got != promoValue {
 		t.Errorf("main row PromoContent = %q, want %q (khuyenmai must be set even on mismatch)", got, promoValue)
 	}
-	if got := cell(mainRow, colPromoNote); got != "" {
-		t.Errorf("main row PromoNote = %q, want empty (no confirmed CTKM on a genuine mismatch)", got)
+	if got := cell(mainRow, colPromoNote); got != "Bó Kèm - Che Barcode" {
+		t.Errorf("main row PromoNote = %q, want %q even on mismatch", got, "Bó Kèm - Che Barcode")
 	}
-	if got := cell(mainRow, colPromoBundleSku); got != "" {
-		t.Errorf("main row PromoBundleSku = %q, want empty (no confirmed CTKM on a genuine mismatch)", got)
+	if got := cell(mainRow, colPromoBundleSku); got != "4270_0001_1" {
+		t.Errorf("main row PromoBundleSku = %q, want %q even on mismatch", got, "4270_0001_1")
+	}
+	if got := cell(bonusRow1, colPromoNote); got != "Combo 2" {
+		t.Errorf("bonus row 1 PromoNote = %q, want %q", got, "Combo 2")
+	}
+}
+
+// TestRealProcessor_UnmatchedPriceFallsBackToLeftmostPromoColumn pins the
+// tie-break rule for a SKU whose row has SEVERAL date-range columns active at
+// once (real sheets overlap campaigns — e.g. BigC's "C617 30/07-26/08" and
+// "C618 13/08-09/09" both cover 20/08).
+//
+// Rule (quyết định của người dùng, 2026-08-27): whichever active CTKM's price
+// actually matches the PO wins. If NONE matches, fall back to the LEFTMOST
+// active column — not whichever happened to be examined last. On these sheets
+// the newest campaign sits on the left, so leftmost is the most recent CTKM,
+// and it is the one whose discounted price lands in column Y and whose gift
+// (and AO/AP note) is applied.
+//
+// Two columns are active here, both with a discount and a different gift SKU,
+// and the real invoice price (33726) matches neither computed price, so the
+// fallback is the only thing deciding the outcome.
+func TestRealProcessor_UnmatchedPriceFallsBackToLeftmostPromoColumn(t *testing.T) {
+	store, err := productdata.Load("productdata/testdata/data.xlsx")
+	if err != nil {
+		t.Fatalf("Load productdata failed: %v", err)
+	}
+	excelPath := copyTestWorkbookForProcessor(t)
+
+	const leftPromo = "cm Giảm 10% Tang SP0001 {Bó Kèm - Che Barcode}"
+	const rightPromo = "cm Giảm 20% Tang SP0002 {Combo 2}"
+	priceCsv := [][]string{
+		{"STT", "Mã hàng", "Tên", "Giá", "1/1-31/12", "1/1-30/12"},
+		{"1", "3564270", "Nước giặt", "500000", leftPromo, rightPromo},
+	}
+	pricingSource := &fixturePricingSource{index: pricing.ParseIndex(priceCsv)}
+
+	rp := &RealProcessor{Store: store, Pricing: pricingSource, ExcelPath: excelPath}
+	rows, err := rp.Process(context.Background(), "testdata/sample_coop_order.pdf")
+	if err != nil {
+		t.Fatalf("Process returned error: %v", err)
+	}
+	if len(rows) == 0 || rows[0].PriceMismatchCount == 0 {
+		t.Fatalf("test setup broken: want the product row flagged as a price mismatch, got %+v", rows)
+	}
+
+	f, err := excelize.OpenFile(excelPath)
+	if err != nil {
+		t.Fatalf("failed reopening written workbook: %v", err)
+	}
+	defer f.Close()
+	sheetRows, err := f.GetRows("Don dat hang")
+	if err != nil {
+		t.Fatalf("failed reading Don dat hang rows: %v", err)
+	}
+
+	const colSKU, colUnitPrice, colPromoNote, colPromoContent = 16, 24, 40, 42
+	cell := func(row []string, idx int) string {
+		if idx < len(row) {
+			return row[idx]
+		}
+		return ""
+	}
+
+	var mainRow, leftGift []string
+	for _, row := range sheetRows {
+		switch cell(row, colSKU) {
+		case "3564270":
+			mainRow = row
+		case "SP0001":
+			leftGift = row
+		case "SP0002":
+			t.Errorf("found an SP0002 gift row: the RIGHT column's gift must not win when no CTKM matched")
+		}
+	}
+	if mainRow == nil {
+		t.Fatalf("missing expected main row")
+	}
+	if leftGift == nil {
+		t.Fatalf("missing the leftmost column's SP0001 gift row")
+	}
+
+	if got := cell(mainRow, colPromoContent); got != leftPromo {
+		t.Errorf("main row PromoContent (AQ) = %q, want the LEFTMOST column's %q", got, leftPromo)
+	}
+	if got := cell(mainRow, colUnitPrice); got != "450000" {
+		t.Errorf("main row UnitPrice (Y) = %q, want %q (500000 less the LEFT column's 10%%, not the right column's 20%%)", got, "450000")
+	}
+	if got := cell(mainRow, colPromoNote); got != "Bó Kèm - Che Barcode" {
+		t.Errorf("main row PromoNote (AO) = %q, want the LEFTMOST column's %q", got, "Bó Kèm - Che Barcode")
 	}
 }

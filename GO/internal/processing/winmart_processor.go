@@ -218,6 +218,7 @@ func (p *RealProcessor) processWinmartSegment(filePath string, realPageNum int, 
 		matched := false
 		finalPrice := realPrice
 
+		var leftmostPromo leftmostPromoFallback
 		for _, promo := range promos {
 			value := promo.Value
 			if value == "" {
@@ -230,11 +231,13 @@ func (p *RealProcessor) processWinmartSegment(filePath string, realPageNum int, 
 				candidatePrice = realPrice - (realPrice * discount / 100)
 			}
 			finalPrice = candidatePrice
+			leftmostPromo.remember(value, promo.Column, candidatePrice)
 			if closeEnough(invoicePrice, candidatePrice) {
 				matched = true
 				break
 			}
 		}
+		leftmostPromo.apply(matched, &khuyenmai, &khuyenmaiColumn, &finalPrice)
 		if len(promos) == 0 && closeEnough(invoicePrice, finalPrice) {
 			matched = true
 		}
@@ -278,33 +281,27 @@ func (p *RealProcessor) processWinmartSegment(filePath string, realPageNum int, 
 		// — override the shared helper's result here, scoped to Winmart
 		// only, rather than changing buildPromoBonusRow itself.
 		//
-		// Gated on matched: a gift is part of the SAME CTKM that
-		// explains the invoice price — only build it once that CTKM
-		// is confirmed, never from khuyenmai's last-examined-but-
-		// unconfirmed value on a genuine price mismatch. Deliberate
-		// divergence from Python (this block runs unconditionally
-		// there).
-		if matched {
-			bonusRow, mainRowNote, mainRowBundleSku, added := buildPromoBonusRow(p.Store, khuyenmai,
-				coop.Product{Barcode: barcode, Qty: ouQty}, 0, entryDate, cancelDate, deliveryAddress,
-				customerCode, description, warehouse, region, statCode, orderNum)
-			if added {
-				totalWeight += bonusRow.LineWeightKg
-				totalPackages += bonusRow.CaseCount
-				accumulatePromoItem(promoTotals, bonusRow.SKU, bonusRow.ProductName, bonusRow.Qty)
+		// NOT gated on matched — this block runs for every item,
+		// exactly like Python's does; see promoGiftOnMismatchRule.
+		bonusRow, mainRowNote, mainRowBundleSku, added := buildPromoBonusRow(p.Store, khuyenmai,
+			coop.Product{Barcode: barcode, Qty: ouQty}, 0, entryDate, cancelDate, deliveryAddress,
+			customerCode, description, warehouse, region, statCode, orderNum)
+		if added {
+			totalWeight += bonusRow.LineWeightKg
+			totalPackages += bonusRow.CaseCount
+			accumulatePromoItem(promoTotals, bonusRow.SKU, bonusRow.ProductName, bonusRow.Qty)
 
-				if coop.ExtractBraceContent(khuyenmai) == "" {
-					mainRowNote = "KM Giao Rời - Không Che Barcode"
-					mainRowBundleSku = ""
-					bonusRow.PromoBundleSku = ""
-				}
-
-				rows[productRowIndex].PromoNote = mainRowNote
-				if mainRowBundleSku != "" {
-					rows[productRowIndex].PromoBundleSku = mainRowBundleSku
-				}
-				rows = append(rows, bonusRow)
+			if coop.ExtractBraceContent(khuyenmai) == "" {
+				mainRowNote = "KM Giao Rời - Không Che Barcode"
+				mainRowBundleSku = ""
+				bonusRow.PromoBundleSku = ""
 			}
+
+			rows[productRowIndex].PromoNote = mainRowNote
+			if mainRowBundleSku != "" {
+				rows[productRowIndex].PromoBundleSku = mainRowBundleSku
+			}
+			rows = append(rows, bonusRow)
 		}
 	}
 

@@ -810,3 +810,144 @@ func TestRealProcessor_ProcessesBigcDocument_PriceMismatchDetailsAcrossStores(t 
 		}
 	}
 }
+
+// TestRealProcessor_BigcPerItemGiftStillBuiltOnPriceMismatch reproduces the
+// bug reported against PO 2634058339690 (26/08/2026): BigC issued that PO at
+// the undiscounted list price (64.434) while the active CTKM column
+// ("C617 30/07-26/08") reads "GIẢM 35% + Tặng 1 túi NRC gạo 800ml TP30343",
+// so the row was flagged a price mismatch and — under an earlier "if matched"
+// gate — the TP30343 gift row was silently dropped along with it.
+//
+// The rule this locks in (quyết định của người dùng, 2026-08-27): on a
+// mismatch the port writes the SYSTEM price to column Y (appliedUnitPrice),
+// i.e. the price that CTKM's own "GIẢM 35%" produced. If the discount half of
+// a CTKM lands in the workbook, the gift half must land with it.
+//
+// Uses the real production data.xlsx (like the golden test) because the small
+// productdata fixture has neither TP30473 nor TP30343.
+func TestRealProcessor_BigcPerItemGiftStillBuiltOnPriceMismatch(t *testing.T) {
+	store, err := productdata.Load("../../../data.xlsx")
+	if err != nil {
+		t.Fatalf("Load production productdata failed: %v", err)
+	}
+
+	const promoValue = "GIẢM 35% + Tặng 1 túi NRC gạo 800ml TP30343 "
+	// List price 64434 minus 35% expects 41882.1, but the PO below quotes
+	// the undiscounted 64434 — exactly the real PO's shape, so matched
+	// stays false.
+	priceCsv := [][]string{
+		{"STT", "Mã hàng", "Tên", "Đơn giá", "1/1-31/12"},
+		{"1", "TP30473", "Nước rửa chén Blue chiết xuất gạo túi 2.1L", "64434", promoValue},
+	}
+	priceIndex := pricing.ParseIndex(priceCsv)
+	priceList := []bigc.Product{{Barcode: "8936156730473", UnitPrice: 64434}}
+
+	storeText := "FM LOGISTIC VSIP 2 (806)\n" +
+		"Some Address Line\n" +
+		"Vietnam\n" +
+		"Store One\n" +
+		"8936156730473\n" +
+		"TH6 NRC BLUE CHIET XUAT GAO TUI 2.1L\n" +
+		"Pack\n" +
+		"1\n" +
+		"6\n" +
+		"2\n"
+
+	rp := &RealProcessor{Store: store}
+	result := rp.processBigcStorePage(storeText, priceList, priceIndex,
+		"ĐĐHBIGC-2634058339690", "26/08/2026", "31/08/2026",
+		"MN_MT_BIGCAC", "FM LOGISTIC VSIP 2 (806)", "BIGC PO2634058339690",
+		"LA_KHO2026", "MT_MN", "LA", false)
+
+	if result.saigia != 1 {
+		t.Fatalf("test setup broken: saigia = %d, want 1 (the PO price must NOT match the 35%%-off price)", result.saigia)
+	}
+	if len(result.rows) != 2 {
+		t.Fatalf("processBigcStorePage returned %d rows, want 2 (product row + TP30343 gift row): %+v", len(result.rows), result.rows)
+	}
+
+	productRow, giftRow := result.rows[0], result.rows[1]
+	if productRow.SKU != "TP30473" || !productRow.PriceMismatch {
+		t.Fatalf("row 0 = SKU %q PriceMismatch %v, want TP30473 flagged as a mismatch", productRow.SKU, productRow.PriceMismatch)
+	}
+	if productRow.PromoNote != "KM Rời - Không Che Barcode" {
+		t.Errorf("product row PromoNote (AO) = %q, want %q even on a mismatch", productRow.PromoNote, "KM Rời - Không Che Barcode")
+	}
+	if giftRow.SKU != "TP30343" {
+		t.Errorf("gift row SKU (Q) = %q, want TP30343", giftRow.SKU)
+	}
+	if !giftRow.IsPromoItem {
+		t.Errorf("gift row IsPromoItem (U) = false, want true")
+	}
+	if giftRow.Qty != 12 {
+		t.Errorf("gift row Qty (X) = %v, want 12 (SKU/OU 6 * OU Qty 2)", giftRow.Qty)
+	}
+
+	var promoQty float64
+	for _, item := range result.promoItems {
+		if item.SKU == "TP30343" {
+			promoQty = item.Qty
+		}
+	}
+	if promoQty != 12 {
+		t.Errorf("PromoItems TP30343 qty = %v, want 12 (the Zalo/UI summary must list the gift too)", promoQty)
+	}
+}
+
+// TestRealProcessor_BigcUnmatchedPriceFallsBackToLeftmostPromoColumn is the
+// BigC half of TestRealProcessor_UnmatchedPriceFallsBackToLeftmostPromoColumn
+// (see that test for the rule). BigC needs its own coverage because its promo
+// loop is shaped differently from the shared one: it only recomputes finalPrice
+// for a candidate that actually carries a "GIẢM x%", so before this rule an
+// unmatched item could pair one column's carried-over price with a different
+// column's gift.
+func TestRealProcessor_BigcUnmatchedPriceFallsBackToLeftmostPromoColumn(t *testing.T) {
+	store, err := productdata.Load("../../../data.xlsx")
+	if err != nil {
+		t.Fatalf("Load production productdata failed: %v", err)
+	}
+
+	const leftPromo = "GIẢM 35% + Tặng 1 túi NRC gạo 800ml TP30343 "
+	const rightPromo = "GIẢM 25% + Tặng 1 chai NRC gạo 1.2L TP30442"
+	priceCsv := [][]string{
+		{"STT", "Mã hàng", "Tên", "Đơn giá", "1/1-31/12", "1/1-30/12"},
+		{"1", "TP30473", "Nước rửa chén Blue chiết xuất gạo túi 2.1L", "64434", leftPromo, rightPromo},
+	}
+	priceIndex := pricing.ParseIndex(priceCsv)
+	priceList := []bigc.Product{{Barcode: "8936156730473", UnitPrice: 64434}}
+
+	storeText := "FM LOGISTIC VSIP 2 (806)\n" +
+		"Some Address Line\n" +
+		"Vietnam\n" +
+		"Store One\n" +
+		"8936156730473\n" +
+		"TH6 NRC BLUE CHIET XUAT GAO TUI 2.1L\n" +
+		"Pack\n" +
+		"1\n" +
+		"6\n" +
+		"2\n"
+
+	rp := &RealProcessor{Store: store}
+	result := rp.processBigcStorePage(storeText, priceList, priceIndex,
+		"ĐĐHBIGC-2634058339690", "26/08/2026", "31/08/2026",
+		"MN_MT_BIGCAC", "FM LOGISTIC VSIP 2 (806)", "BIGC PO2634058339690",
+		"LA_KHO2026", "MT_MN", "LA", false)
+
+	if result.saigia != 1 {
+		t.Fatalf("test setup broken: saigia = %d, want 1 (neither column's price may match the PO)", result.saigia)
+	}
+	if len(result.rows) != 2 {
+		t.Fatalf("processBigcStorePage returned %d rows, want 2 (product row + gift row): %+v", len(result.rows), result.rows)
+	}
+
+	productRow, giftRow := result.rows[0], result.rows[1]
+	if productRow.PromoContent != leftPromo {
+		t.Errorf("product row PromoContent (AQ) = %q, want the LEFTMOST column's %q", productRow.PromoContent, leftPromo)
+	}
+	if productRow.UnitPrice != 41882.1 {
+		t.Errorf("product row UnitPrice (Y) = %v, want 41882.1 (64434 less the LEFT column's 35%%, not the right column's 25%%)", productRow.UnitPrice)
+	}
+	if giftRow.SKU != "TP30343" {
+		t.Errorf("gift row SKU (Q) = %q, want TP30343 (the LEFTMOST column's gift, not TP30442)", giftRow.SKU)
+	}
+}

@@ -344,6 +344,7 @@ func (p *RealProcessor) processBigcStorePage(storePageText string, priceList []b
 		khuyenmaiColumn := ""
 		matched := false
 
+		var leftmostPromo leftmostPromoFallback
 		for _, promo := range promos {
 			if promo.Value == "" {
 				continue
@@ -381,6 +382,7 @@ func (p *RealProcessor) processBigcStorePage(storePageText string, priceList []b
 				// by resetting finalPrice every iteration.
 				finalPrice = realPrice - (realPrice * discount / 100)
 			}
+			leftmostPromo.remember(khuyenmai, promo.Column, finalPrice)
 			if closeEnough(invoicePrice, finalPrice) {
 				matched = true
 				break
@@ -389,6 +391,11 @@ func (p *RealProcessor) processBigcStorePage(storePageText string, priceList []b
 		if len(promos) == 0 && closeEnough(invoicePrice, finalPrice) {
 			matched = true
 		}
+		// Also settles the carry-over quirk documented on the loop above:
+		// on a mismatch the promo text, its column and finalPrice are all
+		// reset together to the leftmost candidate's, so this item can no
+		// longer end up with one column's price and another's khuyenmai.
+		leftmostPromo.apply(matched, &khuyenmai, &khuyenmaiColumn, &finalPrice)
 		unitPrice := appliedUnitPrice(matched, invoicePrice, finalPrice)
 		skuLog = append(skuLog, formatSkuLogLine(barcode, productInfo.Name, matched, invoicePrice, finalPrice, khuyenmai, khuyenmaiColumn))
 
@@ -407,59 +414,52 @@ func (p *RealProcessor) processBigcStorePage(storePageText string, priceList []b
 		bonusQty := qtyOrdPcs
 		bonusBarcode := ""
 		var promoNote, promoBundleSku string
-		// Gated on matched: a gift is part of the SAME CTKM that
-		// explains the invoice price — only compute/attach a gift
-		// (and its PromoNote/PromoBundleSku on the product row
-		// below) once this item's own khuyenmai is confirmed as
-		// the one matching the invoice price, never on a genuine
-		// price mismatch. Deliberate divergence from Python (this
-		// whole block runs unconditionally there).
-		if matched {
-			bonusSku := p.Store.FindSkusMentioned(khuyenmai)
-			if len(bonusSku) > 0 {
-				bonusBarcode = strings.Join(bonusSku, ", ")
+		// NOT gated on matched (see promoGiftOnMismatchRule) — this
+		// block runs for every item, exactly like Python's does.
+		bonusSku := p.Store.FindSkusMentioned(khuyenmai)
+		if len(bonusSku) > 0 {
+			bonusBarcode = strings.Join(bonusSku, ", ")
+		}
+		if xm := xPlus1Pattern.FindStringSubmatch(khuyenmai); xm != nil {
+			// xPlus1Pattern is already in scope here — it's declared in
+			// processor_shared.go (Task 0), same package `processing`
+			// as this file, so no new import or helper is needed.
+			x, _ := strconv.Atoi(xm[1])
+			if bonusBarcode == "" {
+				bonusBarcode = barcode
 			}
-			if xm := xPlus1Pattern.FindStringSubmatch(khuyenmai); xm != nil {
-				// xPlus1Pattern is already in scope here — it's declared in
-				// processor_shared.go (Task 0), same package `processing`
-				// as this file, so no new import or helper is needed.
-				x, _ := strconv.Atoi(xm[1])
-				if bonusBarcode == "" {
-					bonusBarcode = barcode
-				}
-				if x >= 2 {
-					bonusQty = math.Floor(qtyOrdPcs / float64(x))
-				}
+			if x >= 2 {
+				bonusQty = math.Floor(qtyOrdPcs / float64(x))
 			}
+		}
 
-			if bonusBarcode != "" {
-				// xulydonhang.py:4769's laycachbo_khuyenmai(value) uses the
-				// leftover "value" loop variable from the promo-matching
-				// loop above, not "khuyenmai" — this plan's Global
-				// Constraints section documents this as a confirmed Python
-				// quirk NOT being ported; using khuyenmai (this item's own
-				// resolved promo string) here instead, per Phase 2b's
-				// "correct main flow" policy. Flag via knownDivergences_BigC
-				// during Task 8 if a real fixture traces a mismatch to this.
-				bundleNote := coop.ExtractBraceContent(khuyenmai)
-				if bundleNote != "" {
-					promoNote = bundleNote
-					lower := strings.ToLower(bundleNote)
-					if strings.Contains(lower, "bó kèm") || strings.Contains(lower, "quấn kèm") {
-						// xulydonhang.py:4774-4775 — same AP value written on
-						// BOTH the product row and the bonus row. Not
-						// observed in any of the 29 real fixtures (cachbokem
-						// is always empty for BigC's actual promo data), but
-						// ported for fidelity in case it's ever hit.
-						promoBundleSku = fmt.Sprintf("%s_%s_1", coop.LastFourDigits(barcode), coop.LastFourDigits(bonusBarcode))
-					}
-				} else {
-					// BigC's per-item no-brace fallback text is genuinely
-					// different from Coop/Satra's "KM Bó Kèm - Che Barcode"
-					// (xulydonhang.py:4777: "KM Rời - Không Che Barcode") —
-					// confirmed during planning, not a transcription error.
-					promoNote = "KM Rời - Không Che Barcode"
+		if bonusBarcode != "" {
+			// xulydonhang.py:4769's laycachbo_khuyenmai(value) uses the
+			// leftover "value" loop variable from the promo-matching
+			// loop above, not "khuyenmai" — this plan's Global
+			// Constraints section documents this as a confirmed Python
+			// quirk NOT being ported; using khuyenmai (this item's own
+			// resolved promo string) here instead, per Phase 2b's
+			// "correct main flow" policy. Flag via knownDivergences_BigC
+			// during Task 8 if a real fixture traces a mismatch to this.
+			bundleNote := coop.ExtractBraceContent(khuyenmai)
+			if bundleNote != "" {
+				promoNote = bundleNote
+				lower := strings.ToLower(bundleNote)
+				if strings.Contains(lower, "bó kèm") || strings.Contains(lower, "quấn kèm") {
+					// xulydonhang.py:4774-4775 — same AP value written on
+					// BOTH the product row and the bonus row. Not
+					// observed in any of the 29 real fixtures (cachbokem
+					// is always empty for BigC's actual promo data), but
+					// ported for fidelity in case it's ever hit.
+					promoBundleSku = fmt.Sprintf("%s_%s_1", coop.LastFourDigits(barcode), coop.LastFourDigits(bonusBarcode))
 				}
+			} else {
+				// BigC's per-item no-brace fallback text is genuinely
+				// different from Coop/Satra's "KM Bó Kèm - Che Barcode"
+				// (xulydonhang.py:4777: "KM Rời - Không Che Barcode") —
+				// confirmed during planning, not a transcription error.
+				promoNote = "KM Rời - Không Che Barcode"
 			}
 		}
 
