@@ -12,11 +12,12 @@ import (
 	"order-processor/internal/processing/manualentry"
 )
 
-// manualEntryOrderNumber đánh dấu rõ đây là đơn nhập tay (khác hẳn
-// "ĐĐH{VENDOR}-{po}" của mọi vendor tự động khác) - để người xem
-// dondathang.xlsx/MISA biết ngay đây không phải đơn đọc từ PDF.
+// manualEntryOrderNumber dùng ĐÚNG quy ước "ĐĐH{VENDOR}-{po}" mọi vendor
+// khác đã dùng (vd satraOrderNumber, lotteOrderNumber) - theo yêu cầu
+// thực tế, đơn nhập tay ghi vào dondathang.xlsx PHẢI trông y hệt đơn tự
+// động, không cần đánh dấu riêng gì cả.
 func manualEntryOrderNumber(system, po string) string {
-	return fmt.Sprintf("ĐĐHTAY-%s-%s", strings.ToUpper(system), po)
+	return fmt.Sprintf("ĐĐH%s-%s", strings.ToUpper(system), po)
 }
 
 // processManualEntryDocument xử lý TOÀN BỘ file "đơn hàng tay.xlsx" -
@@ -106,10 +107,13 @@ func (p *RealProcessor) processManualEntryOrder(filePath, po string, lines []man
 
 	region, statCode, warehouse := regionInfo(customerCode)
 	orderNumber := manualEntryOrderNumber(system, po)
-	// (nhập tay) trong cả 2 chỗ hiện ra trên dondathang.xlsx (dòng tiêu
-	// đề S và Description L) - đúng ý orderNumber, để phân biệt rõ với
-	// đơn tự động ngay trong file Excel, không chỉ trên UI.
-	titleText := fmt.Sprintf("%s %s (nhập tay)", strings.ToUpper(system), po)
+	// KHÔNG đánh dấu "(nhập tay)" ở đây - theo yêu cầu thực tế, dòng tiêu
+	// đề (S) và Description (L) trong dondathang.xlsx phải trông y hệt
+	// đơn tự động, đúng quy ước "{VENDOR} {po}" mọi vendor khác dùng (vd
+	// satraOrderNumber's titleText/noteText). "nhập tay" vẫn còn đánh dấu
+	// ở OrderRow.Page (chỉ hiện trên UI, không ghi vào Excel) để người
+	// dùng vẫn phân biệt được trên bảng kết quả.
+	titleText := fmt.Sprintf("%s %s", strings.ToUpper(system), po)
 	noteText := titleText
 
 	var rows []excelwriter.Row
