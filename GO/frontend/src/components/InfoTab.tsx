@@ -125,23 +125,21 @@ export function InfoTab() {
         </section>
         <section className="rounded-2xl border border-border bg-panel p-4">
           <SectionHeader index="04" title="Phát triển bởi" />
-          <div className="flex items-center gap-3 pt-1">
+          <div className="flex flex-col items-center pt-1 text-center">
             <img
               src="/qr.jpg"
               alt="QR liên hệ"
-              className="no-drag h-14 w-14 shrink-0 rounded-lg border border-border object-cover"
+              className="no-drag h-28 w-28 shrink-0 rounded-lg border border-border object-cover"
               draggable={false}
             />
-            <div className="min-w-0">
-              <p className="text-sm font-bold text-ink">Huỳnh Đạt Thành</p>
-              <p className="text-[10px] font-semibold uppercase tracking-wider text-accent">Tác giả &amp; bảo trì</p>
-              <p className="mt-1.5 flex items-center gap-1.5 text-[11px] text-ink/80">
-                <FaPhone className="shrink-0 text-muted" size={10} /> 0947.940.391
-              </p>
-              <p className="mt-0.5 flex items-center gap-1.5 truncate text-[11px] text-ink/80">
-                <FaEnvelope className="shrink-0 text-muted" size={10} /> byun.huynh@gmail.com
-              </p>
-            </div>
+            <p className="mt-2.5 text-sm font-bold text-ink">Huỳnh Đạt Thành</p>
+            <p className="text-[10px] font-semibold uppercase tracking-wider text-accent">Tác giả &amp; bảo trì</p>
+            <p className="mt-1.5 flex items-center gap-1.5 text-[11px] text-ink/80">
+              <FaPhone className="shrink-0 text-muted" size={10} /> 0947.940.391
+            </p>
+            <p className="mt-0.5 flex items-center gap-1.5 text-[11px] text-ink/80">
+              <FaEnvelope className="shrink-0 text-muted" size={10} /> byun.huynh@gmail.com
+            </p>
           </div>
         </section>
       </div>
