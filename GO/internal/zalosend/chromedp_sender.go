@@ -789,6 +789,41 @@ func waitForPastedContentInBrowser(ctx context.Context, lines []richtext.ParsedL
 	)
 }
 
+// dismissLinkPreview đóng thẻ xem trước link ("#linkPreview") mà Zalo TỰ
+// SINH ra ngay phía trên ô soạn tin khi nội dung dán có URL - xác nhận
+// qua HTML thật lấy từ DevTools (chạy Chrome có giao diện, đúng profile
+// thật, người dùng tự thao tác và gửi lại): thẻ này có id="linkPreview",
+// nút đóng là "<i class=\"fa fa-Close_24_Line preview-close\">" bên
+// trong. Để nguyên rồi bấm Enter, Zalo gửi thẻ preview đó THÀNH 1 TIN
+// RIÊNG kèm theo tin văn bản (người nhận thấy 2 tin trùng lặp thay vì
+// 1) - bấm nút đóng này TRƯỚC khi Enter để chỉ còn đúng 1 tin.
+//
+// Việc Zalo tải xong metadata (ảnh/tiêu đề trang) để DỰNG ra thẻ preview
+// cần round-trip mạng, chậm hơn hẳn tốc độ dán chữ thường - nên dò LẶP
+// LẠI có giới hạn (không phải 1 lần) thay vì kiểm tra ngay lập tức, đợi
+// thẻ preview thật sự xuất hiện rồi mới đóng. Không tìm thấy trong thời
+// gian chờ (link không tạo được preview, hoặc Zalo đổi hành vi) không
+// phải lỗi - best-effort, không chặn cả lượt gửi.
+func dismissLinkPreview(ctx context.Context) {
+	deadline := time.Now().Add(3 * time.Second)
+	for time.Now().Before(deadline) {
+		var closed bool
+		err := chromedp.Run(ctx, chromedp.Evaluate(`
+			(() => {
+				const btn = document.querySelector('#linkPreview .preview-close');
+				if (!btn) return false;
+				btn.click();
+				return true;
+			})()
+		`, &closed))
+		if err == nil && closed {
+			chromedp.Run(ctx, chromedp.Sleep(200*time.Millisecond))
+			return
+		}
+		chromedp.Run(ctx, chromedp.Sleep(300*time.Millisecond))
+	}
+}
+
 // sendPastedMessage dán (paste) TOÀN BỘ message dưới dạng 1 khối HTML
 // (qua richtext.BuildHTML — mỗi dòng thành 1 <div>, không có cú pháp
 // markup nào thì vẫn ra <div> thường) trong 1 sự kiện paste DUY NHẤT,
@@ -852,6 +887,10 @@ func sendPastedMessage(ctx context.Context, markupText string) (bool, string, er
 	}
 	if err := waitForPastedContentInBrowser(ctx, lines); err != nil {
 		return false, "", err
+	}
+
+	if strings.Contains(markupText, "http") {
+		dismissLinkPreview(ctx)
 	}
 
 	needsIndent := false
