@@ -12,6 +12,7 @@ import (
 	"order-processor/internal/driveupload"
 	"order-processor/internal/processing/coop"
 	"order-processor/internal/processing/excelwriter"
+	"order-processor/internal/processing/manualentry"
 	"order-processor/internal/processing/pricing"
 	"order-processor/internal/processing/productdata"
 	"order-processor/internal/processing/vendor"
@@ -60,6 +61,26 @@ func emitOrderRow(emit func(OrderRow), row OrderRow) OrderRow {
 }
 
 func (p *RealProcessor) process(ctx context.Context, filePath string, emit func(OrderRow)) ([]OrderRow, error) {
+	// Nhận diện qua TÊN SHEET (manualentry.IsWorkbook), không phải đuôi
+	// file - PHẢI kiểm tra TRƯỚC extractPageTexts: file .xlsx không phải
+	// PDF/.txt hợp lệ, gọi thẳng extractPageTexts sẽ báo lỗi "không đọc
+	// được file" thay vì được xử lý đúng ở đây. Đây là lối vào cho đơn
+	// nhập tay (file gốc thực chất là ảnh chụp/scan, không đọc tự động
+	// được - xem "trang không có văn bản" bên dưới) - xem
+	// manualentry/read.go's doc comment.
+	if manualentry.IsWorkbook(filePath) {
+		rows, manualErr := p.processManualEntryDocument(filePath, emit)
+		if manualErr != nil {
+			row := emitIdentifiedOrderRow(emit, filePath, "file", OrderRow{
+				FileName:   filepath.Base(filePath),
+				Status:     fmt.Sprintf("%s - %v", StatusFailed, manualErr),
+				StatusKind: StatusKindFailed,
+			})
+			return []OrderRow{row}, nil
+		}
+		return rows, nil
+	}
+
 	pageTexts, pageNumbers, err := extractPageTexts(filePath)
 	if err != nil {
 		row := emitIdentifiedOrderRow(emit, filePath, "file", OrderRow{
