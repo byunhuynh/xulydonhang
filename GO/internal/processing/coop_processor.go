@@ -95,6 +95,28 @@ func (p *RealProcessor) process(ctx context.Context, filePath string, emit func(
 	for pageIdx, text := range pageTexts {
 		pageLabel := fmt.Sprintf("%d/%d", pageIdx+1, len(pageTexts))
 		physicalPage := pageNumbers[pageIdx]
+
+		// Trang không trích được CHỮ NÀO cả (thường gặp: file PDF thực
+		// chất là ảnh chụp/scan nhúng vào, không có lớp văn bản thật -
+		// xác nhận qua trường hợp thật "246990 HA THANH149.pdf", 1 trang
+		// Satra chứa ảnh JPEG nhúng, extractPageTexts trả về text rỗng)
+		// - báo NGAY nguyên nhân cụ thể ở đây, TRƯỚC khi gọi
+		// vendor.Identify (chuỗi rỗng chắc chắn không khớp vendor nào,
+		// sẽ rơi vào default bên dưới với thông báo chung chung
+		// "không nhận diện được nhà cung cấp" - không sai nhưng không
+		// giúp người dùng hiểu ĐÚNG lý do là do ảnh, không phải do PDF
+		// dạng lạ/hỏng). Không có OCR trong app này (quyết định có chủ
+		// đích - xem doc comment fujimart/extract.go's "Không cần OCR"),
+		// nên trường hợp này chỉ có thể xử lý tay.
+		if strings.TrimSpace(text) == "" {
+			rows = append(rows, emitIdentifiedOrderRow(emit, filePath, fmt.Sprintf("page:%d:segment:1", physicalPage), OrderRow{
+				FileName: filepath.Base(filePath), Page: pageLabel,
+				Status:     StatusFailed + " - trang không có văn bản (có thể là ảnh chụp/scan hoặc trang trống) - cần nhập tay",
+				StatusKind: StatusKindFailed,
+			}))
+			continue
+		}
+
 		v := vendor.Identify(text)
 
 		switch v {
