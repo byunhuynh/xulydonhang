@@ -179,3 +179,57 @@ test('không ghi nhớ đơn chưa tick hoặc chưa có nhánh', () => {
   ])
   assert.deepEqual(remembered, {})
 })
+
+test('dòng THẤT BẠI không phải là đơn: không vào groups, cũng không vào skipped', () => {
+  // Một trang PDF không đọc được sinh ra OrderRow thất bại với po/system
+  // rỗng và không có excelRows. Trước đây nó vẫn được tính là một "đơn",
+  // rơi vào skipped và hiện ra cảnh báo đỏ "1 đơn không đẩy được ... ()"
+  // — cái ngoặc rỗng chính là po/system rỗng của trang hỏng đó. Hợp đồng
+  // này khớp với TestMoiDonThanhCongDeuCoExcelRows bên Go, vốn đã miễn
+  // trừ các dòng thất bại khỏi yêu cầu phải có ExcelRows.
+  const { groups, skipped } = buildMisaGroups(
+    [
+      row({ po: '', system: '', statusKind: 'failed', status: '❌ Thất bại - không đọc được', excelRows: [] }),
+      row({ po: 'PO-B', system: 'Coop', excelRows: [9] }),
+    ],
+    testGroupKey,
+  )
+  assert.equal(groups.length, 1)
+  assert.equal(groups[0].po, 'PO-B')
+  assert.deepEqual(skipped, [])
+})
+
+test('nhiều trang hỏng của các file khác nhau vẫn không sinh cảnh báo nào', () => {
+  const { groups, skipped } = buildMisaGroups(
+    [
+      row({ po: '', system: '', sourceId: 'a.pdf', statusKind: 'failed', excelRows: [] }),
+      row({ po: '', system: '', sourceId: 'b.pdf', statusKind: 'failed', excelRows: [] }),
+    ],
+    testGroupKey,
+  )
+  assert.deepEqual(groups, [])
+  assert.deepEqual(skipped, [])
+})
+
+test('trang hỏng nằm cùng đơn với trang tốt không làm mất đơn đó', () => {
+  // File JIT nhiều trang: trang 2 hỏng nhưng trang 1 đã ghi được dòng.
+  const { groups, skipped } = buildMisaGroups(
+    [
+      row({ system: 'JIT-CHOICE', sourceId: 'awb.pdf', po: 'PO-1', excelRows: [9] }),
+      row({ system: 'JIT-CHOICE', sourceId: 'awb.pdf', po: '', statusKind: 'failed', excelRows: [] }),
+    ],
+    testGroupKey,
+  )
+  assert.equal(groups.length, 1)
+  assert.deepEqual(groups[0].excelRows, [9])
+  assert.deepEqual(skipped, [])
+})
+
+test('đơn thật thiếu excelRows VẪN phải cảnh báo (không bị fix thất bại nuốt mất)', () => {
+  const { groups, skipped } = buildMisaGroups(
+    [row({ po: 'PO-A', system: 'Coop', statusKind: 'done', excelRows: [] })],
+    testGroupKey,
+  )
+  assert.deepEqual(groups, [])
+  assert.deepEqual(skipped, [{ key: 'PO-A', po: 'PO-A', system: 'Coop' }])
+})

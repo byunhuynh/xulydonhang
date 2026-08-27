@@ -53,12 +53,23 @@ export interface MisaBuildResult {
 // Một đơn có ÍT NHẤT một dòng hợp lệ vẫn vào `groups` như cũ, chỉ gộp
 // những dòng hợp lệ (dòng thiếu excelRows của đơn đó không đóng góp gì
 // vào excelRows của nhóm, nhưng không làm cả đơn bị coi là bỏ).
+//
+// Dòng THẤT BẠI thì bị loại hẳn từ đầu, không vào groups lẫn skipped: nó
+// là một trang PDF không đọc được, không phải một đơn. Trang như vậy có
+// po/system rỗng, nên trước đây mọi trang hỏng của cả lô dồn chung vào
+// khoá "" và hiện lên thành cảnh báo đỏ "1 đơn không đẩy được ... ()" —
+// cái ngoặc rỗng chính là po/system rỗng đó, và nó CHẶN luôn nút đẩy
+// (canPush) dù mọi đơn thật đều sẵn sàng. Bảng kết quả đã tô đỏ những
+// trang này rồi; modal push không có gì để nói thêm. Cùng hợp đồng với
+// TestMoiDonThanhCongDeuCoExcelRows bên Go, vốn cũng chỉ đòi ExcelRows ở
+// các dòng KHÔNG thất bại.
 export function buildMisaGroups(rows: OrderRow[], groupKey: (row: OrderRow) => string): MisaBuildResult {
   const order: string[] = []
   const byKey = new Map<string, MisaGroupSeed>()
   const hasValidRow = new Set<string>()
 
   for (const row of rows) {
+    if (row.statusKind === 'failed') continue
     const key = groupKey(row)
     let seed = byKey.get(key)
     if (!seed) {
