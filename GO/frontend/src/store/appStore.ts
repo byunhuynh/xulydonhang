@@ -21,6 +21,11 @@ export interface MisaPushResult {
   valid: number
   invalid: number
   message: string
+  // canForce chỉ bật khi MISA ĐÃ đọc được file, chỉ ra dòng nào hỏng, và
+  // còn dòng hợp lệ để ghi. Lỗi đăng nhập hay sai bộ dữ liệu thì ghi phần
+  // hợp lệ không cứu được gì nên backend để false — đừng suy ra từ
+  // invalid > 0 ở đây.
+  canForce?: boolean
 }
 
 interface AppState {

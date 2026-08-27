@@ -21,7 +21,7 @@ export function MisaRouteOptions():Promise<Array<main.MisaRouteInfo>>;
 
 export function ProcessFiles(arg1:Array<string>,arg2:Record<string, main.TMDTDateRange>):Promise<void>;
 
-export function PushMisa(arg1:Array<main.MisaPushJob>):Promise<void>;
+export function PushMisa(arg1:Array<main.MisaPushJob>,arg2:boolean):Promise<void>;
 
 export function RefreshZaloQR():Promise<void>;
 

@@ -101,7 +101,7 @@ var misaDatabaseKey = map[string]string{
 // PushMisa đẩy các nhóm đơn đã chọn lên AMIS Kế toán trong một goroutine
 // nền, phát misa:log/misa:pushed/misa:done — cùng khuôn
 // SendZaloMessages/runZaloBatch.
-func (a *App) PushMisa(jobs []MisaPushJob) {
+func (a *App) PushMisa(jobs []MisaPushJob, force bool) {
 	if len(jobs) == 0 {
 		return
 	}
@@ -116,10 +116,10 @@ func (a *App) PushMisa(jobs []MisaPushJob) {
 		a.emitter.Emit("misa:log", "⚠️ Đã có một lượt đẩy MISA đang chạy, vui lòng đợi hoàn tất.")
 		return
 	}
-	go a.runMisaPush(a.emitter, jobs)
+	go a.runMisaPush(a.emitter, jobs, force)
 }
 
-func (a *App) runMisaPush(emitter Emitter, jobs []MisaPushJob) {
+func (a *App) runMisaPush(emitter Emitter, jobs []MisaPushJob, force bool) {
 	defer func() {
 		if r := recover(); r != nil {
 			emitter.Emit("misa:log", fmt.Sprintf("❌ Lỗi không mong muốn: %v", r))
@@ -144,14 +144,14 @@ func (a *App) runMisaPush(emitter Emitter, jobs []MisaPushJob) {
 		if len(rows) == 0 {
 			continue
 		}
-		a.pushOneBranch(emitter, settings.Misa, branch, rows)
+		a.pushOneBranch(emitter, settings.Misa, branch, rows, force)
 	}
 }
 
 // pushOneBranch tách workbook cho đúng một nhánh rồi đẩy. Mọi lỗi ở đây
 // chỉ dừng nhánh này — nhánh còn lại vẫn chạy, vì người dùng thà vào sổ
 // được một nửa còn hơn phải làm lại cả hai.
-func (a *App) pushOneBranch(emitter Emitter, misaCfg map[string]string, branch string, rows []int) {
+func (a *App) pushOneBranch(emitter Emitter, misaCfg map[string]string, branch string, rows []int, force bool) {
 	label := misaBranchLabel[branch]
 
 	fail := func(format string, args ...any) {
@@ -159,6 +159,9 @@ func (a *App) pushOneBranch(emitter Emitter, misaCfg map[string]string, branch s
 		emitter.Emit("misa:log", fmt.Sprintf("❌ %s: %s", label, msg))
 		emitter.Emit("misa:pushed", map[string]any{
 			"branch": branch, "ok": false, "valid": 0, "invalid": 0, "message": msg,
+			// Lỗi ở đây (chưa khai bộ dữ liệu, không tách được file, đăng
+			// nhập hỏng) là loại mà ghi phần hợp lệ không cứu được gì.
+			"canForce": false,
 		})
 	}
 
@@ -204,18 +207,33 @@ func (a *App) pushOneBranch(emitter Emitter, misaCfg map[string]string, branch s
 		SidURL:      strings.TrimSpace(misaCfg["sid_url"]),
 		Database:    database,
 		FilePath:    tmpPath,
+		Force:       force,
 		Log:         func(line string) { emitter.Emit("misa:log", fmt.Sprintf("   %s: %s", label, line)) },
 	})
 
 	if err != nil {
-		// Liệt kê ĐỦ dòng hỏng, không chỉ dòng đầu nằm trong thông điệp
-		// lỗi — sửa được hết trong một lượt thay vì lặp lại từng dòng.
+		valid, invalid, canForce := 0, 0, false
 		if res != nil {
+			// Liệt kê ĐỦ dòng hỏng, không chỉ dòng đầu nằm trong thông điệp
+			// lỗi — sửa được hết trong một lượt thay vì lặp lại từng dòng.
 			for _, e := range res.RowErrors {
 				emitter.Emit("misa:log", fmt.Sprintf("   %s: ✗ %s", label, e))
 			}
+			valid, invalid = res.ValidRows, len(res.RowErrors)
+			// Chỉ đề nghị ghi phần hợp lệ khi MISA THẬT SỰ đã đọc được file
+			// và chỉ ra dòng nào hỏng, VÀ còn dòng hợp lệ để ghi. Lỗi đăng
+			// nhập, sai bộ dữ liệu hay thiếu cột bắt buộc thì Force không
+			// cứu được gì — đề nghị ở đó chỉ khiến người dùng bấm vô ích.
+			// Lượt đã bật Force rồi mà vẫn lỗi thì cũng không đề nghị lại.
+			canForce = !force && invalid > 0 && valid > 0
 		}
-		fail("%v", err)
+		msg := err.Error()
+		emitter.Emit("misa:log", fmt.Sprintf("❌ %s: %s", label, msg))
+		emitter.Emit("misa:pushed", map[string]any{
+			"branch": branch, "ok": false,
+			"valid": valid, "invalid": invalid,
+			"message": msg, "canForce": canForce,
+		})
 		return
 	}
 

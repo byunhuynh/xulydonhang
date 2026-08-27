@@ -23,6 +23,12 @@ type Request struct {
 	// BaseURL để trống thì dùng host thật của AMIS Kế toán; test trỏ vào
 	// server giả qua đây.
 	BaseURL string
+
+	// Force cho phep GHI SO du con dong khong hop le - MISA bo qua dung
+	// nhung dong do va bao thanh cong. Mac dinh false vi day la duong de
+	// tuong da day du ma thuc ra thieu don; chi bat khi nguoi dung nhin
+	// thay danh sach dong hong va co y day phan con lai.
+	Force bool
 	// Log nhận từng dòng tiến độ; để nil thì im lặng.
 	Log func(string)
 }
@@ -46,7 +52,8 @@ type HTTPPusher struct{}
 // phải trả là một lời gọi cấp token thêm — cấp token mới không giết
 // token đang có, nên vô hại.
 //
-// Luôn Commit=true, Force=false: MISA kiểm tra cả file trước, không dòng
+// Luôn Commit=true. Force do bên gọi quyết: mặc định false nên MISA kiểm
+// tra cả file trước, không dòng
 // nào lỗi thì ghi sổ luôn; còn dòng lỗi thì CẢ NHÁNH không ghi gì. Kết
 // quả vẫn được trả về kèm lỗi để bên gọi liệt kê đủ các dòng hỏng.
 func (p *HTTPPusher) Push(ctx context.Context, req Request) (*misa.ImportResult, error) {
@@ -90,6 +97,6 @@ func (p *HTTPPusher) Push(ctx context.Context, req Request) (*misa.ImportResult,
 		TableName:  misa.TableSAOrder,
 		SheetIndex: -1,
 		Commit:     true,
-		Force:      false,
+		Force:      req.Force,
 	})
 }

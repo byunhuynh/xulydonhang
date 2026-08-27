@@ -132,7 +132,7 @@ func TestRunMisaPush_MỗiNhánhMộtLầnĐẩyĐúngDòng(t *testing.T) {
 		{PO: "A", RouteKey: "Lotte", Branch: misapush.BranchHTLA, ExcelRows: []int{9, 10}},
 		{PO: "B", RouteKey: "Emart", Branch: misapush.BranchHaThanh, ExcelRows: []int{11}},
 		{PO: "C", RouteKey: "Satra", Branch: misapush.BranchHTLA, ExcelRows: []int{13, 12}},
-	})
+	}, false)
 
 	if len(pusher.requests) != 2 {
 		t.Fatalf("số lần Push = %d, want 2 (một nhánh một lần, không phải một đơn một lần)", len(pusher.requests))
@@ -156,7 +156,7 @@ func TestRunMisaPush_KhôngGọiChoNhánhRỗng(t *testing.T) {
 
 	app.runMisaPush(app.emitter, []MisaPushJob{
 		{PO: "A", RouteKey: "Lotte", Branch: misapush.BranchHTLA, ExcelRows: []int{9}},
-	})
+	}, false)
 
 	if len(pusher.requests) != 1 {
 		t.Fatalf("số lần Push = %d, want 1", len(pusher.requests))
@@ -173,7 +173,7 @@ func TestRunMisaPush_LoạiTrùngVàSắpTăngDần(t *testing.T) {
 	app.runMisaPush(app.emitter, []MisaPushJob{
 		{PO: "A", RouteKey: "Lotte", Branch: misapush.BranchHTLA, ExcelRows: []int{11, 9}},
 		{PO: "B", RouteKey: "Satra", Branch: misapush.BranchHTLA, ExcelRows: []int{9, 10}},
-	})
+	}, false)
 
 	if want := []string{"PO-9", "PO-10", "PO-11"}; !reflect.DeepEqual(pusher.rowsSeen[0], want) {
 		t.Errorf("dòng đã đẩy = %v, want %v", pusher.rowsSeen[0], want)
@@ -187,7 +187,7 @@ func TestRunMisaPush_ThiếuTênBộDữLiệuThìBỏNhánhĐóThôi(t *testing
 	app.runMisaPush(emitter, []MisaPushJob{
 		{PO: "A", RouteKey: "Lotte", Branch: misapush.BranchHTLA, ExcelRows: []int{9}},
 		{PO: "B", RouteKey: "Emart", Branch: misapush.BranchHaThanh, ExcelRows: []int{10}},
-	})
+	}, false)
 
 	if len(pusher.requests) != 1 || pusher.requests[0].Database != "HÀ THÀNH" {
 		t.Fatalf("requests = %#v, want đúng một lần cho HÀ THÀNH", pusher.requests)
@@ -210,7 +210,7 @@ func TestRunMisaPush_NhánhLỗiKhôngChặnNhánhCònLại(t *testing.T) {
 	app.runMisaPush(emitter, []MisaPushJob{
 		{PO: "A", RouteKey: "Lotte", Branch: misapush.BranchHTLA, ExcelRows: []int{9}},
 		{PO: "B", RouteKey: "Emart", Branch: misapush.BranchHaThanh, ExcelRows: []int{10}},
-	})
+	}, false)
 
 	if len(pusher.requests) != 2 {
 		t.Fatalf("số lần Push = %d, want 2 — nhánh lỗi không được chặn nhánh kia", len(pusher.requests))
@@ -230,7 +230,7 @@ func TestRunMisaPush_XoáFileTạmKểCảKhiLỗi(t *testing.T) {
 
 	app.runMisaPush(app.emitter, []MisaPushJob{
 		{PO: "A", RouteKey: "Lotte", Branch: misapush.BranchHTLA, ExcelRows: []int{9}},
-	})
+	}, false)
 
 	if len(pusher.requests) != 1 {
 		t.Fatalf("số lần Push = %d, want 1", len(pusher.requests))
@@ -245,7 +245,7 @@ func TestPushMisa_TừChốiKhiĐangXửLýLô(t *testing.T) {
 	app, emitter := newTestAppForPush(t, pusher, defaultMisaCfg())
 	app.processing.Store(true)
 
-	app.PushMisa([]MisaPushJob{{PO: "A", RouteKey: "Lotte", Branch: misapush.BranchHTLA, ExcelRows: []int{9}}})
+	app.PushMisa([]MisaPushJob{{PO: "A", RouteKey: "Lotte", Branch: misapush.BranchHTLA, ExcelRows: []int{9}}}, false)
 
 	if len(pusher.requests) != 0 {
 		t.Error("đã đẩy dù đang có lô xử lý chạy — workbook lúc đó đang bị ghi dở")
@@ -260,7 +260,7 @@ func TestPushMisa_TừChốiLờiGọiThứHaiKhiĐangĐẩy(t *testing.T) {
 	app, emitter := newTestAppForPush(t, pusher, defaultMisaCfg())
 	app.pushing.Store(true)
 
-	app.PushMisa([]MisaPushJob{{PO: "A", RouteKey: "Lotte", Branch: misapush.BranchHTLA, ExcelRows: []int{9}}})
+	app.PushMisa([]MisaPushJob{{PO: "A", RouteKey: "Lotte", Branch: misapush.BranchHTLA, ExcelRows: []int{9}}}, false)
 
 	if len(pusher.requests) != 0 {
 		t.Error("đã đẩy dù đang có lượt đẩy khác chạy")
@@ -288,7 +288,7 @@ func TestRunMisaPush_TruyềnPhiênVàSidURLXuốngPusher(t *testing.T) {
 
 	app.runMisaPush(app.emitter, []MisaPushJob{
 		{PO: "A", RouteKey: "Lotte", Branch: misapush.BranchHTLA, ExcelRows: []int{9}},
-	})
+	}, false)
 
 	req := pusher.requests[0]
 	if req.SessionPath != app.misaSessionPath {

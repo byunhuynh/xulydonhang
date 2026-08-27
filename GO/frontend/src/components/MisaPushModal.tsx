@@ -101,7 +101,7 @@ export function MisaPushModal({ onClose }: MisaPushModalProps) {
     setGroups((cur) => cur && cur.map((g) => (g.key === key ? { ...g, selected: !g.selected } : g)))
   }
 
-  async function handlePush() {
+  async function handlePush(force = false) {
     if (!groups) return
     const jobs = pendingGroups(groups, doneBranches).map((g) => ({
       po: g.po,
@@ -127,7 +127,7 @@ export function MisaPushModal({ onClose }: MisaPushModalProps) {
     clearMisaResults()
     setPushing(true)
     try {
-      await PushMisa(jobs)
+      await PushMisa(jobs, force)
     } catch (err) {
       appendLog(`❌ Lỗi đẩy MISA: ${String(err)}`)
       setPushing(false)
@@ -217,13 +217,26 @@ export function MisaPushModal({ onClose }: MisaPushModalProps) {
             {misaResults.length > 0 && (
               <div className="mt-3 flex flex-col gap-1 border-t border-border pt-3">
                 {misaResults.map((r) => (
-                  <p
-                    key={r.branch}
-                    className={`font-sans text-xs ${r.ok ? 'text-success' : 'text-danger'}`}
-                  >
-                    {MISA_BRANCH_OPTIONS.find((o) => o.value === r.branch)?.label ?? r.branch}:{' '}
-                    {r.ok ? `đã ghi ${r.valid} chứng từ vào sổ` : r.message}
-                  </p>
+                  <div key={r.branch} className="flex flex-col gap-1.5">
+                    <p className={`font-sans text-xs ${r.ok ? 'text-success' : 'text-danger'}`}>
+                      {MISA_BRANCH_OPTIONS.find((o) => o.value === r.branch)?.label ?? r.branch}:{' '}
+                      {r.ok ? `đã ghi ${r.valid} chứng từ vào sổ` : r.message}
+                    </p>
+                    {/* Chỉ hiện khi backend nói canForce: MISA đã đọc được
+                        file, chỉ ra dòng hỏng, và còn dòng hợp lệ. Nhãn nêu
+                        THẲNG con số bỏ lại, vì đây là đường ghi thiếu đơn
+                        vào sổ kế toán mà MISA vẫn báo thành công — người
+                        bấm phải thấy mình đang bỏ lại bao nhiêu. */}
+                    {!r.ok && r.canForce && !isPushing && (
+                      <button
+                        type="button"
+                        onClick={() => handlePush(true)}
+                        className="self-start rounded-lg border border-warning/60 px-3 py-1.5 font-sans text-[11px] font-semibold text-warning transition-colors hover:bg-warning/10"
+                      >
+                        Chỉ ghi {r.valid} chứng từ hợp lệ, bỏ qua {r.invalid} dòng lỗi
+                      </button>
+                    )}
+                  </div>
                 ))}
               </div>
             )}
@@ -246,7 +259,10 @@ export function MisaPushModal({ onClose }: MisaPushModalProps) {
               </span>
               <button
                 type="button"
-                onClick={handlePush}
+                // PHẢI bọc trong arrow: onClick={handlePush} sẽ truyền
+                // MouseEvent vào tham số force, mà object là truthy — bấm
+                // nút thường cũng thành ghi ép, bỏ qua dòng lỗi im lặng.
+                onClick={() => handlePush(false)}
                 disabled={!ready || isPushing}
                 className="inline-flex items-center gap-2 rounded-lg bg-accent px-4 py-2 font-sans text-xs font-bold text-[#0a1620] transition-opacity disabled:cursor-not-allowed disabled:opacity-40"
               >
