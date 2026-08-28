@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -50,6 +51,22 @@ const orderFolderName = "đơn hàng"
 // khi khởi động lại app. Mỗi job có deadline RIÊNG — job chậm không ăn
 // mất thời gian của job sau.
 const zaloJobTimeout = 90 * time.Second
+
+// isZaloTimeoutErr báo lỗi gửi Zalo có phải do HẾT GIỜ hay không - dùng
+// cả errors.Is LẪN kiểm tra chuỗi: thực tế quan sát log cho thấy lỗi
+// chromedp/cdproto trả về khi context hết hạn không phải lúc nào cũng bọc
+// đúng chuỗi %w tới context.DeadlineExceeded (một số lớp bên dưới stringify
+// bằng %v làm đứt chain errors.Is), dù chuỗi hiển thị vẫn luôn là "context
+// deadline exceeded" - kiểm tra chuỗi làm lưới an toàn thứ 2.
+func isZaloTimeoutErr(err error) bool {
+	if err == nil {
+		return false
+	}
+	if errors.Is(err, context.DeadlineExceeded) {
+		return true
+	}
+	return strings.Contains(err.Error(), "context deadline exceeded")
+}
 
 // App struct
 type App struct {
@@ -791,9 +808,22 @@ func (a *App) runZaloBatch(emitter Emitter, jobs []ZaloJob) {
 		emitter.Emit("zalo:log", fmt.Sprintf("📤 Đang gửi %s → %s...", label, r.contact))
 		// Deadline riêng cho từng job, giải phóng timer ngay khi job xong
 		// (không defer tới cuối vòng lặp) — batch dài không tích luỹ timer.
-		jobCtx, cancel := context.WithTimeout(ctx, zaloJobTimeout)
-		sendErr := a.zaloSender.SendMessage(jobCtx, r.contact, r.job.Message)
-		cancel()
+		// Thử lại 1 lần NẾU lỗi là hết giờ (context.DeadlineExceeded): đây
+		// là kiểu lỗi ngẫu nhiên do Chrome/Zalo Web đơ tạm thời ở 1 bước
+		// nào đó (thực tế người dùng xác nhận lỗi này xảy ra ngẫu nhiên,
+		// không cố định ở vị trí tin nhắn hay việc đổi liên hệ) - không thử
+		// lại các lỗi khác (vd "không tìm thấy hội thoại") vì gửi lại
+		// chắc chắn cũng lỗi y hệt, chỉ tốn thời gian.
+		var sendErr error
+		for attempt := 1; attempt <= 2; attempt++ {
+			jobCtx, cancel := context.WithTimeout(ctx, zaloJobTimeout)
+			sendErr = a.zaloSender.SendMessage(jobCtx, r.contact, r.job.Message)
+			cancel()
+			if sendErr == nil || !isZaloTimeoutErr(sendErr) || attempt == 2 {
+				break
+			}
+			emitter.Emit("zalo:log", fmt.Sprintf("⏱️ %s: hết giờ, thử gửi lại lần 2...", label))
+		}
 		if sendErr != nil {
 			emitter.Emit("zalo:log", fmt.Sprintf("❌ Gửi %s thất bại: %v", label, sendErr))
 			emitter.Emit("zalo:sent", map[string]any{"po": r.job.PO, "ok": false})

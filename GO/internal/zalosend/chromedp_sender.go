@@ -525,6 +525,15 @@ func (c *ChromedpSender) SendMessage(ctx context.Context, contactQuery, message 
 
 	ok, body, err := sendPastedMessage(runCtx, message)
 	if err != nil {
+		// Dán/gửi thất bại giữa chừng: xoá lastContact để lần gửi KẾ TIẾP
+		// (kể cả lần thử lại tự động ở app.go) buộc phải mở lại hội thoại
+		// từ đầu thay vì tưởng nhầm "đã mở sẵn" rồi thao tác tiếp trên
+		// đúng trạng thái trang đã gây treo — không có dòng này, lỗi sẽ
+		// lặp lại y hệt ở MỌI lần gửi sau tới cùng liên hệ này trong cùng
+		// phiên trình duyệt, cho tới khi khởi động lại app.
+		c.mu.Lock()
+		c.lastContact = ""
+		c.mu.Unlock()
 		return fmt.Errorf("zalosend: gửi tin tới %q: %w", contactQuery, err)
 	}
 	// Port của chromedp.Run(ctx, chromedp.Sleep(1*time.Second)) ngay
@@ -533,6 +542,9 @@ func (c *ChromedpSender) SendMessage(ctx context.Context, contactQuery, message 
 	// SendMessage return.
 	chromedp.Run(runCtx, chromedp.Sleep(1*time.Second))
 	if !ok {
+		c.mu.Lock()
+		c.lastContact = ""
+		c.mu.Unlock()
 		if len(body) > 300 {
 			body = body[:300]
 		}
@@ -850,12 +862,12 @@ func sendPastedMessage(ctx context.Context, markupText string) (bool, string, er
 	// sau.
 	const composeInputSelector = `#richInput, [contenteditable="true"]`
 	if err := chromedp.Run(ctx, chromedp.Click(composeInputSelector, chromedp.ByQuery)); err != nil {
-		return false, "", err
+		return false, "", fmt.Errorf("click ô soạn tin: %w", err)
 	}
 	chromedp.Run(ctx, chromedp.Sleep(150*time.Millisecond))
 
 	if err := ensureFormatMode(ctx); err != nil {
-		return false, "", err
+		return false, "", fmt.Errorf("bật/tắt định dạng: %w", err)
 	}
 
 	lines := richtext.ParseDocument(markupText)
@@ -883,10 +895,10 @@ func sendPastedMessage(ctx context.Context, markupText string) (bool, string, er
 		})()
 	`, string(args)), nil))
 	if err != nil {
-		return false, "", err
+		return false, "", fmt.Errorf("dán nội dung: %w", err)
 	}
 	if err := waitForPastedContentInBrowser(ctx, lines); err != nil {
-		return false, "", err
+		return false, "", fmt.Errorf("chờ xác nhận đã dán: %w", err)
 	}
 
 	if strings.Contains(markupText, "http") {
@@ -902,12 +914,12 @@ func sendPastedMessage(ctx context.Context, markupText string) (bool, string, er
 	}
 	if needsIndent {
 		if err := applyIndents(ctx, lines); err != nil {
-			return false, "", err
+			return false, "", fmt.Errorf("canh lề danh sách: %w", err)
 		}
 	}
 
 	if err := pressEnter(ctx); err != nil {
-		return false, "", err
+		return false, "", fmt.Errorf("bấm Enter gửi: %w", err)
 	}
 	// Không còn chờ xác nhận qua network response (bản trước chờ tới 25s
 	// mỗi tin, luôn timeout với hội thoại NHÓM vì endpoint gửi tin nhóm
@@ -955,10 +967,10 @@ func openConversation(ctx context.Context, contactQuery string) (bool, error) {
 			})()
 		`, nil),
 	); err != nil {
-		return false, err
+		return false, fmt.Errorf("xoá ô tìm kiếm: %w", err)
 	}
 	if err := chromedp.Run(ctx, chromedp.SendKeys("#contact-search-input", contactQuery, chromedp.ByQuery)); err != nil {
-		return false, err
+		return false, fmt.Errorf("gõ tên liên hệ vào ô tìm kiếm: %w", err)
 	}
 	// Chờ lâu hơn bản gốc 1500ms: send_message.py gõ CÓ chủ đích delay
 	// 40ms GIỮA MỖI phím (page.keyboard.type(..., delay=40)) để Zalo kịp
@@ -979,14 +991,14 @@ func openConversation(ctx context.Context, contactQuery string) (bool, error) {
 		})()
 	`, &coords))
 	if err != nil {
-		return false, err
+		return false, fmt.Errorf("lấy toạ độ kết quả tìm kiếm: %w", err)
 	}
 	if coords == nil {
 		return false, nil
 	}
 
 	if err := chromedp.Run(ctx, chromedp.MouseClickXY(coords.X, coords.Y)); err != nil {
-		return false, err
+		return false, fmt.Errorf("click chọn kết quả tìm kiếm: %w", err)
 	}
 	chromedp.Run(ctx, chromedp.Sleep(1500*time.Millisecond))
 
