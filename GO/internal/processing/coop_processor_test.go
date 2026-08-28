@@ -500,3 +500,203 @@ func TestRealProcessor_UnmatchedPriceFallsBackToLeftmostPromoColumn(t *testing.T
 		t.Errorf("main row PromoNote (AO) = %q, want the LEFTMOST column's %q", got, "Bó Kèm - Che Barcode")
 	}
 }
+
+// --- Coopmart / Coopfood CTKM scoping ---------------------------------
+//
+// Coop is two systems sharing one promo sheet, and a CTKM can belong to
+// only one of them. The sheet marks that at two levels, both taken from
+// the real snapshot in coop/testdata/fixtures/_frozen_pricing.json: a
+// standalone "CF"/"CM" token in the COLUMN name ("CTKM CF", "CNMS 11+12
+// CM", "CNMS 14+15 Dành riêng CF"), or in the CELL text itself ("CF 1+1 |
+// CF 2+1 tặng NLS 1L TP30565 {KM Giao Rời - Che Barcode}"). A CTKM with
+// no marker applies to both. See coop.PromoForSystem.
+//
+// sample_coop_order.pdf's customer resolves to COOPMART (the default
+// branch of RealProcessor.Process's system lookup), so a CF-scoped CTKM
+// must not reach it.
+
+// TestRealProcessor_CfOnlyColumnIsSkippedForCoopmart pins the important
+// half of the rule: a skipped column must be indistinguishable from a
+// column that was never in the sheet. Not merely "no gift row" — the
+// SKU's price has to be reconciled against the RAW price (no phantom
+// discount, no spurious "sai giá" flag) and its AQ cell left empty.
+func TestRealProcessor_CfOnlyColumnIsSkippedForCoopmart(t *testing.T) {
+	// Both runs use the same sheet except for the CF-only campaign, and
+	// are compared against each other rather than against fixed numbers:
+	// "behaves exactly like a column that is not in the sheet" IS the
+	// property under test, and the sample PDF carries other products of
+	// its own whose reconciliation is beside the point here.
+	run := func(t *testing.T, promoColumn, promoCell string) (int, map[string]string) {
+		t.Helper()
+		store, err := productdata.Load("productdata/testdata/data.xlsx")
+		if err != nil {
+			t.Fatalf("Load productdata failed: %v", err)
+		}
+		excelPath := copyTestWorkbookForProcessor(t)
+
+		// 33726 is this barcode's real extracted invoice price, so with
+		// the CF column correctly skipped the row reconciles cleanly.
+		priceCsv := [][]string{
+			{"STT", "Mã hàng", "Tên", "Giá", promoColumn},
+			{"1", "3564270", "Nước giặt", "33726", promoCell},
+		}
+		pricingSource := &fixturePricingSource{index: pricing.ParseIndex(priceCsv)}
+
+		rp := &RealProcessor{Store: store, Pricing: pricingSource, ExcelPath: excelPath}
+		rows, err := rp.Process(context.Background(), "testdata/sample_coop_order.pdf")
+		if err != nil {
+			t.Fatalf("Process returned error: %v", err)
+		}
+		if len(rows) == 0 {
+			t.Fatal("Process returned no rows")
+		}
+
+		f, err := excelize.OpenFile(excelPath)
+		if err != nil {
+			t.Fatalf("failed reopening written workbook: %v", err)
+		}
+		defer f.Close()
+		sheetRows, err := f.GetRows("Don dat hang")
+		if err != nil {
+			t.Fatalf("failed reading Don dat hang rows: %v", err)
+		}
+
+		const colSKU, colUnitPrice, colPromoContent = 16, 24, 42
+		cell := func(row []string, idx int) string {
+			if idx < len(row) {
+				return row[idx]
+			}
+			return ""
+		}
+		written := map[string]string{}
+		for _, row := range sheetRows {
+			if sku := cell(row, colSKU); sku != "" {
+				written[sku] = cell(row, colUnitPrice) + "|" + cell(row, colPromoContent)
+			}
+		}
+		return rows[0].PriceMismatchCount, written
+	}
+
+	withCF, withCFRows := run(t, "CTKM CF 1/1-31/12", "CF Giảm 10% Tang SP0001 {Bó Kèm - Che Barcode}")
+	without, withoutRows := run(t, "1/1-31/12", "")
+
+	if withCF != without {
+		t.Errorf("PriceMismatchCount = %d with a Coopfood-only campaign, %d without it — a skipped CTKM must not create a price mismatch", withCF, without)
+	}
+	if _, ok := withCFRows["SP0001"]; ok {
+		t.Error("found an SP0001 gift row, want none (its CTKM is Coopfood-only)")
+	}
+	if withCFRows["3564270"] != withoutRows["3564270"] {
+		t.Errorf("product row (unit price|AQ) = %q with a Coopfood-only campaign, %q without it", withCFRows["3564270"], withoutRows["3564270"])
+	}
+}
+
+// TestRealProcessor_CfOnlyColumnLosesLeftmostFallbackToApplicableColumn
+// covers the ordering trap: the leftmost-column fallback
+// (TestRealProcessor_UnmatchedPriceFallsBackToLeftmostPromoColumn) must
+// pick the leftmost column that APPLIES to this system, not the leftmost
+// column outright. Here the CF-only campaign sits leftmost and neither
+// column's price matches the PO, so if the CF column were still in the
+// running it would win the fallback and put a Coopfood gift on a Coopmart
+// order.
+func TestRealProcessor_CfOnlyColumnLosesLeftmostFallbackToApplicableColumn(t *testing.T) {
+	store, err := productdata.Load("productdata/testdata/data.xlsx")
+	if err != nil {
+		t.Fatalf("Load productdata failed: %v", err)
+	}
+	excelPath := copyTestWorkbookForProcessor(t)
+
+	const cmPromo = "cm Giảm 20% Tang SP0002 {Combo 2}"
+	priceCsv := [][]string{
+		{"STT", "Mã hàng", "Tên", "Giá", "CTKM CF 1/1-31/12", "1/1-30/12"},
+		// The leftmost cell carries NO marker of its own — only its
+		// COLUMN name scopes it to Coopfood, so this pins the
+		// column-level rule specifically.
+		{"1", "3564270", "Nước giặt", "500000", "Giảm 10% Tang SP0001 {Bó Kèm - Che Barcode}", cmPromo},
+	}
+	pricingSource := &fixturePricingSource{index: pricing.ParseIndex(priceCsv)}
+
+	rp := &RealProcessor{Store: store, Pricing: pricingSource, ExcelPath: excelPath}
+	rows, err := rp.Process(context.Background(), "testdata/sample_coop_order.pdf")
+	if err != nil {
+		t.Fatalf("Process returned error: %v", err)
+	}
+	if len(rows) == 0 || rows[0].PriceMismatchCount == 0 {
+		t.Fatalf("test setup broken: want the product row flagged as a price mismatch, got %+v", rows)
+	}
+
+	f, err := excelize.OpenFile(excelPath)
+	if err != nil {
+		t.Fatalf("failed reopening written workbook: %v", err)
+	}
+	defer f.Close()
+	sheetRows, err := f.GetRows("Don dat hang")
+	if err != nil {
+		t.Fatalf("failed reading Don dat hang rows: %v", err)
+	}
+
+	const colSKU, colPromoContent = 16, 42
+	cell := func(row []string, idx int) string {
+		if idx < len(row) {
+			return row[idx]
+		}
+		return ""
+	}
+	sawSP0002 := false
+	for _, row := range sheetRows {
+		switch cell(row, colSKU) {
+		case "SP0001":
+			t.Error("found an SP0001 gift row, want none (its CTKM is Coopfood-only)")
+		case "SP0002":
+			sawSP0002 = true
+		case "3564270":
+			if got := cell(row, colPromoContent); got != cmPromo {
+				t.Errorf("main row PromoContent = %q, want %q", got, cmPromo)
+			}
+		}
+	}
+	if !sawSP0002 {
+		t.Error("missing the SP0002 gift row from the Coopmart-applicable CTKM")
+	}
+}
+
+// TestRealProcessor_CfOnlyInvoicePromotionIsSkippedForCoopmart covers the
+// invoice-level ("Hóa Đơn") CTKM, which reached buildInvoiceBonusRow
+// without passing through any system split at all — so a Coopfood-only
+// invoice gift was landing on every Coopmart order.
+func TestRealProcessor_CfOnlyInvoicePromotionIsSkippedForCoopmart(t *testing.T) {
+	store, err := productdata.Load("productdata/testdata/data.xlsx")
+	if err != nil {
+		t.Fatalf("Load productdata failed: %v", err)
+	}
+	excelPath := copyTestWorkbookForProcessor(t)
+
+	priceCsv := [][]string{
+		{"STT", "Mã hàng", "Tên", "Giá", "1/1-31/12"},
+		{"1", "3564270", "Nước giặt", "33726", ""},
+		{"2", "Hóa Đơn", "", "0", "CF 20000 SP0001 {Combo 2}"},
+	}
+	pricingSource := &fixturePricingSource{index: pricing.ParseIndex(priceCsv)}
+
+	rp := &RealProcessor{Store: store, Pricing: pricingSource, ExcelPath: excelPath}
+	if _, err := rp.Process(context.Background(), "testdata/sample_coop_order.pdf"); err != nil {
+		t.Fatalf("Process returned error: %v", err)
+	}
+
+	f, err := excelize.OpenFile(excelPath)
+	if err != nil {
+		t.Fatalf("failed reopening written workbook: %v", err)
+	}
+	defer f.Close()
+	sheetRows, err := f.GetRows("Don dat hang")
+	if err != nil {
+		t.Fatalf("failed reading Don dat hang rows: %v", err)
+	}
+
+	const colSKU = 16
+	for _, row := range sheetRows {
+		if colSKU < len(row) && row[colSKU] == "SP0001" {
+			t.Fatal("found the invoice-level SP0001 gift row, want none (that CTKM is Coopfood-only)")
+		}
+	}
+}

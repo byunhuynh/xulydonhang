@@ -387,7 +387,7 @@ func (p *RealProcessor) processSegment(filePath string, realPageNum int, text, p
 		realPriceStr, _ := priceIndex.FindPrice(product.Barcode)
 		realPrice, _ := strconv.ParseFloat(strings.ReplaceAll(realPriceStr, ",", ""), 64)
 
-		promos := priceIndex.FindPromotions(product.Barcode, entryDate)
+		promos := coopPromosForSystem(priceIndex.FindPromotions(product.Barcode, entryDate), system)
 		lastExaminedPromo := ""
 		lastExaminedPromoColumn := ""
 		matched := false
@@ -408,12 +408,12 @@ func (p *RealProcessor) processSegment(filePath string, realPageNum int, text, p
 		// not Y=42158).
 		var leftmostPromo leftmostPromoFallback
 		for _, promo := range promos {
-			value := coop.SplitPromoText(promo.Value, system)
+			// promo.Value is already the text that applies to this
+			// system, and is never empty — coopPromosForSystem did both
+			// the splitting and the filtering.
+			value := promo.Value
 			lastExaminedPromo = value
 			lastExaminedPromoColumn = promo.Column
-			if value == "" {
-				continue
-			}
 			candidatePrice := realPrice
 			if discount := coop.ExtractDiscount(value); discount != 0 {
 				candidatePrice = realPrice - (realPrice * discount / 100)
@@ -512,7 +512,7 @@ func (p *RealProcessor) processSegment(filePath string, realPageNum int, text, p
 		}
 	}
 
-	if invoicePromo := priceIndex.FindInvoicePromotion(entryDate); invoicePromo != "" {
+	if invoicePromo := coopInvoicePromotion(priceIndex, entryDate, system); invoicePromo != "" {
 		if bonusRow, added := buildInvoiceBonusRow(p.Store, invoicePromo, totalValue, entryDate, cancelDate,
 			shipTo, customerCode, description, warehouse, region, statCode, orderNumber(info.PONumber)); added {
 			totalWeight += bonusRow.LineWeightKg
@@ -591,4 +591,55 @@ func (p *RealProcessor) processSegment(filePath string, realPageNum int, text, p
 // NOT the resolved system (COOPMART/COOPFOOD) — preserve exactly.
 func orderNumber(poNumber string) string {
 	return fmt.Sprintf("ĐĐHCOOP-%s", poNumber)
+}
+
+// coopPromosForSystem drops every CTKM that does not belong to this
+// order's Coop system (Coopmart or Coopfood) and rewrites the rest to
+// the text that actually applies to it — see coop.PromoForSystem for the
+// two marker levels the sheet uses.
+//
+// Filtering HERE, before the price loop, rather than inside it, is the
+// whole point: a skipped CTKM has to be indistinguishable from one the
+// sheet never carried, and three separate behaviours depend on that. It
+// must not become lastExaminedPromo (that would blank out the AQ cell of
+// a real CTKM found in an earlier column), it must not enter the
+// leftmost-column tie-break, and it must not keep len(promos) non-zero —
+// which would suppress the raw-price fallback and flag a perfectly
+// correct Coopmart price as "sai giá" just because a Coopfood campaign
+// happened to be running that week.
+//
+// Every returned Promotion has a non-empty Value.
+func coopPromosForSystem(promos []pricing.Promotion, system string) []pricing.Promotion {
+	// An empty system means "not a Coop order at all" — the manual-entry
+	// path is shared by every vendor, and only Coop splits into two
+	// systems. Nothing is filtered, and values are left untouched rather
+	// than run through SplitPromoText, so a Lotte or BigC promo cell that
+	// happens to contain the letters "cf"/"cm" is still applied whole.
+	// The Coop PDF path always passes COOPMART or COOPFOOD, never "".
+	if strings.TrimSpace(system) == "" {
+		return promos
+	}
+
+	var out []pricing.Promotion
+	for _, promo := range promos {
+		value, ok := coop.PromoForSystem(promo.Column, promo.Value, system)
+		if !ok {
+			continue
+		}
+		out = append(out, pricing.Promotion{Column: promo.Column, Value: value})
+	}
+	return out
+}
+
+// coopInvoicePromotion is FindInvoicePromotion plus the same system
+// scoping the per-SKU promotions get. The invoice-level ("Hóa Đơn") CTKM
+// used to reach buildInvoiceBonusRow with no system split at all, so a
+// Coopfood-only invoice gift landed on every Coopmart order too. Returns
+// the first invoice CTKM that applies to this system, mirroring
+// FindInvoicePromotion's own "take the first active column" rule.
+func coopInvoicePromotion(idx *pricing.Index, entryDate, system string) string {
+	for _, promo := range coopPromosForSystem(idx.InvoicePromotions(entryDate), system) {
+		return promo.Value
+	}
+	return ""
 }

@@ -85,6 +85,15 @@ func (idx *Index) FindPrice(sku string) (string, bool) {
 }
 
 var wsPattern = regexp.MustCompile(`\s+`)
+
+// dateRangePattern requires a HYPHEN between the two dates, and that is
+// load-bearing rather than incidental. The Coop sheet's owner parks a
+// campaign by writing its dates with a space instead ("Riêng 17/07
+// 30/08", "CTKM CF 17/07 30/09" — both live in the sheet today): the
+// column stops matching here and goes dormant, cells and all, without
+// being deleted. Do NOT "fix" this into accepting a space — it would
+// reactivate every parked campaign in the sheet at once. Locked by
+// TestFindPromotions_SpaceSeparatedDatesAreNotARange.
 var dateRangePattern = regexp.MustCompile(`(\d{1,2}/\d{1,2})-(\d{1,2}/\d{1,2})`)
 var yearSuffixPattern = regexp.MustCompile(`/\d{4}$`)
 
@@ -134,11 +143,20 @@ func (idx *Index) FindPromotions(sku, timeToCheck string) []Promotion {
 // since exactly one date-range column is expected to be active at a
 // time in practice). Returns "" if nothing matched.
 func (idx *Index) FindInvoicePromotion(timeToCheck string) string {
-	promos := idx.FindPromotions("Hóa Đơn", timeToCheck)
+	promos := idx.InvoicePromotions(timeToCheck)
 	if len(promos) == 0 {
 		return ""
 	}
 	return promos[0].Value
+}
+
+// InvoicePromotions is FindInvoicePromotion's underlying lookup with the
+// column names kept. Coop needs them: which of the two systems
+// (Coopmart/Coopfood) a CTKM belongs to can be written in the campaign
+// name, so it has to scope the invoice-level CTKM itself rather than
+// take FindInvoicePromotion's already-collapsed first value.
+func (idx *Index) InvoicePromotions(timeToCheck string) []Promotion {
+	return idx.FindPromotions("Hóa Đơn", timeToCheck)
 }
 
 func normalizeDDMM(s string) (string, error) {

@@ -100,13 +100,40 @@ func (p *RealProcessor) processManualEntryOrder(filePath, po string, lines []man
 		return OrderRow{}, fmt.Errorf("thiếu Mã khách hàng")
 	}
 
-	priceIndex, err := p.Pricing.FetchIndex(strings.ToUpper(system))
+	// Coop bán qua HAI hệ thống (Coopmart/Coopfood) dùng chung một sheet
+	// giá/khuyến mãi, và một CTKM có thể chỉ thuộc về một trong hai (xem
+	// coop.PromoForSystem). Đơn nhập tay phải biết mình thuộc hệ thống
+	// nào trước khi áp bất kỳ CTKM nào, nếu không đơn Coopmart gõ tay sẽ
+	// ăn hết CTKM riêng của Coopfood và ngược lại.
+	//
+	// Cột "Hệ thống" chấp nhận cả tên vendor ("COOP" — suy ra hệ thống
+	// con từ mã khách hàng, y như đường PDF) lẫn tên hệ thống con gõ
+	// thẳng ("COOPMART"/"COOPFOOD" — người dùng nói rõ thì tin người
+	// dùng). Cả hai đều đọc sheet "COOP", nên vendorKey mới là thứ đi
+	// tra giá và đặt số ĐĐH; giá trị gõ tay chỉ đổi phần mô tả (L), đúng
+	// như đường PDF ghi "COOPFOOD PO...".
+	//
+	// coopSystem để RỖNG với mọi vendor khác — họ không có khái niệm này
+	// và coopPromosForSystem sẽ không lọc gì cả.
+	vendorKey := strings.ToUpper(strings.TrimSpace(system))
+	coopSystem := ""
+	switch vendorKey {
+	case "COOPMART", "COOPFOOD":
+		coopSystem = vendorKey
+		vendorKey = "COOP"
+	case "COOP":
+		if coopSystem = p.Store.GetSystemForCustomer(customerCode); coopSystem != "COOPFOOD" {
+			coopSystem = "COOPMART"
+		}
+	}
+
+	priceIndex, err := p.Pricing.FetchIndex(vendorKey)
 	if err != nil {
 		return OrderRow{}, fmt.Errorf("không tải được giá/khuyến mãi cho hệ thống %q: %w", system, err)
 	}
 
 	region, statCode, warehouse := regionInfo(customerCode)
-	orderNumber := manualEntryOrderNumber(system, po)
+	orderNumber := manualEntryOrderNumber(vendorKey, po)
 	// KHÔNG đánh dấu "(nhập tay)" ở đây - theo yêu cầu thực tế, dòng tiêu
 	// đề (S) và Description (L) trong dondathang.xlsx phải trông y hệt
 	// đơn tự động, đúng quy ước "{VENDOR} {po}" mọi vendor khác dùng (vd
@@ -155,7 +182,7 @@ func (p *RealProcessor) processManualEntryOrder(filePath, po string, lines []man
 		realPriceStr, _ := priceIndex.FindPrice(barcode)
 		realPrice, _ := strconv.ParseFloat(strings.ReplaceAll(realPriceStr, ",", ""), 64)
 
-		promos := priceIndex.FindPromotions(barcode, entryDate)
+		promos := coopPromosForSystem(priceIndex.FindPromotions(barcode, entryDate), coopSystem)
 		lastExaminedPromo := ""
 		lastExaminedPromoColumn := ""
 		matched := false
@@ -239,7 +266,7 @@ func (p *RealProcessor) processManualEntryOrder(filePath, po string, lines []man
 		return OrderRow{}, fmt.Errorf("không có dòng sản phẩm hợp lệ nào (thiếu Mã hàng hoặc Số lượng <= 0)")
 	}
 
-	if invoicePromo := priceIndex.FindInvoicePromotion(entryDate); invoicePromo != "" {
+	if invoicePromo := coopInvoicePromotion(priceIndex, entryDate, coopSystem); invoicePromo != "" {
 		if bonusRow, added := buildInvoiceBonusRow(p.Store, invoicePromo, totalValue, entryDate, cancelDate,
 			shipTo, customerCode, noteText, warehouse, region, statCode, orderNumber); added {
 			totalWeight += bonusRow.LineWeightKg

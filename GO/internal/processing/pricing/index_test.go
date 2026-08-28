@@ -60,3 +60,34 @@ func TestParseIndex_FindPromotionsWithinDateRange(t *testing.T) {
 		t.Fatalf("FindPromotions outside range = %d promos, want 0", len(none))
 	}
 }
+
+// TestFindPromotions_SpaceSeparatedDatesAreNotARange locks in behaviour the
+// Coop sheet's owner relies on DELIBERATELY: writing a campaign's two dates
+// with a space instead of a hyphen ("Riêng 17/07 30/08", "CTKM CF 17/07
+// 30/09" — both verbatim from the live sheet) is how a column is parked. It
+// stops matching dateRangePattern, so the campaign goes dormant without
+// deleting it or its cells.
+//
+// This is NOT a parsing gap to be repaired. Loosening dateRangePattern to
+// accept a space would silently reactivate every parked campaign in the
+// sheet at once. Confirmed with the sheet's owner, 2026-08-28: "phần 'Riêng
+// 17/07 30/08' là do tôi cố tình bỏ '-' để né".
+func TestFindPromotions_SpaceSeparatedDatesAreNotARange(t *testing.T) {
+	parked := ParseIndex([][]string{
+		{"STT", "Mã hàng", "Tên", "Giá", "Riêng 17/07 30/08"},
+		{"1", "SKU1", "Nước giặt", "1000", "Giảm 10%"},
+	})
+	if promos := parked.FindPromotions("SKU1", "01/08"); len(promos) != 0 {
+		t.Errorf("FindPromotions on a space-separated column = %v, want none (that column is parked on purpose)", promos)
+	}
+
+	// Control: the same campaign with a real hyphen is live, so the test
+	// above is about the separator and nothing else.
+	live := ParseIndex([][]string{
+		{"STT", "Mã hàng", "Tên", "Giá", "Riêng 17/07-30/08"},
+		{"1", "SKU1", "Nước giặt", "1000", "Giảm 10%"},
+	})
+	if promos := live.FindPromotions("SKU1", "01/08"); len(promos) != 1 {
+		t.Errorf("FindPromotions on a hyphenated column = %v, want exactly 1", promos)
+	}
+}
