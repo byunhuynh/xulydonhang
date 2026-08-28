@@ -12,6 +12,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/wailsapp/wails/v2/pkg/options"
 	"github.com/wailsapp/wails/v2/pkg/runtime"
 
 	"order-processor/internal/applock"
@@ -265,6 +266,26 @@ func (a *App) startup(ctx context.Context) {
 	})
 
 	go a.runLockChecker(ctx)
+}
+
+// onSecondInstanceLaunch chay TRONG ban dang mo, khi nguoi dung mo app them
+// mot lan nua. Wails da chan ban thu hai lai (xem singleInstanceID trong
+// main.go) va chi chuyen tin sang day, viec con lai la keo cua so cu ra
+// truoc mat nguoi dung - neu khong ho se thay mot cu double-click khong lam
+// gi ca va tuong app hong.
+//
+// runtime.WindowShow lo ca hai trang thai an: cua so dang thu nho thi duoc
+// khoi phuc, cua so dang bi che thi duoc dua len truoc va nhan focus.
+//
+// ctx con nil nghia la ban dau chua chay xong startup - double-click hai lan
+// that nhanh la du. Goi runtime.WindowShow(nil) se panic, keo sap dung ban
+// dang can duoc danh thuc, nen truong hop do bo qua: cua so sap tu hien ra
+// bang duong khoi dong binh thuong roi.
+func (a *App) onSecondInstanceLaunch(options.SecondInstanceData) {
+	if a.ctx == nil {
+		return
+	}
+	runtime.WindowShow(a.ctx)
 }
 
 // runLockChecker periodically re-checks applock.Check and emits its

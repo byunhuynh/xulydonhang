@@ -22,7 +22,24 @@ func main() {
 		return
 	}
 
-	err = wails.Run(&options.App{
+	err = wails.Run(appOptions(app))
+
+	if err != nil {
+		reportFatalError("chạy ứng dụng", err)
+	}
+}
+
+// singleInstanceID dat ten cho mutex Windows ma Wails dung de nhan ra da co
+// mot ban dang chay. Chuoi nay phai co dinh giua cac ban build: doi no la
+// mot ban cu va mot ban moi khong con thay nhau, va nguoi dung lai mo duoc
+// hai cua so.
+const singleInstanceID = "blue-ha-thanh-order-processor"
+
+// appOptions dung cau hinh cho wails.Run. Tach khoi main() de test doc duoc
+// - dac biet la de xac nhan chot mot-ban-chay that su co mat, thu ma main()
+// khong cho kiem tra tu ben ngoai.
+func appOptions(app *App) *options.App {
+	return &options.App{
 		Title:     "Blue Hà Thành - Order System v3.0",
 		Width:     1440,
 		Height:    900,
@@ -40,10 +57,14 @@ func main() {
 		DragAndDrop: &options.DragAndDrop{
 			EnableFileDrop: true,
 		},
-	})
-
-	if err != nil {
-		reportFatalError("chạy ứng dụng", err)
+		// Chi cho phep MOT ban chay. Wails giu mot mutex ten theo
+		// singleInstanceID: ban thu hai thay mutex da ton tai thi gui tin cho
+		// ban dau roi tu thoat, nen nguoi dung khong bao gio co hai cua so
+		// cung ghi vao mot so dat hang.
+		SingleInstanceLock: &options.SingleInstanceLock{
+			UniqueId:               singleInstanceID,
+			OnSecondInstanceLaunch: app.onSecondInstanceLaunch,
+		},
 	}
 }
 
