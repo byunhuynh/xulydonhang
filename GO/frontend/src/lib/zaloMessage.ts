@@ -28,6 +28,19 @@ import type { OrderRow, PriceMismatchDetail } from "../types";
 // thì an toàn: không test nào nạp zaloGrouping trực tiếp.
 export const TMDT_SOURCE_PREFIX = "tmdt|";
 
+// MANUAL_ENTRY_PAGE_MARKER khớp Page: "nhập tay" mà
+// manualentry_processor.go gắn cho MỌI đơn xử lý qua "đơn hàng tay.xlsx"
+// (chỉ hiện trên UI, không ghi vào Excel - xem comment ở đó). Đơn nhập
+// tay không có PDF nguồn nào được tải lên Drive, nên link tra cứu
+// "bluedonhang.pages.dev/?po=..." (trỏ tới trang tra soát dựng từ PDF
+// gốc) không có ý nghĩa gì cho loại đơn này - dùng marker này để ẩn hẳn
+// dòng link khỏi tin Zalo thay vì hiện 1 link chết.
+const MANUAL_ENTRY_PAGE_MARKER = "nhập tay";
+
+function isManualEntryRow(row: OrderRow): boolean {
+  return row.page === MANUAL_ENTRY_PAGE_MARKER;
+}
+
 /**
  * tmdtShopFromGroupKey trả tên shop của một nhóm TMĐT, hoặc chuỗi rỗng khi
  * key không phải nhóm TMĐT — dùng chung ở mọi nơi cần hỏi "nhóm này có
@@ -311,7 +324,10 @@ export function buildZaloMessage(
     mismatches: row.priceMismatchDetails ?? [],
     priceBasisBySku,
     promoItems: row.promoItems ?? [],
-    orderUrl: row.po ? `https://bluedonhang.pages.dev/?po=${row.po}` : "",
+    orderUrl:
+      row.po && !isManualEntryRow(row)
+        ? `https://bluedonhang.pages.dev/?po=${row.po}`
+        : "",
     processedAt,
   });
 }
@@ -355,9 +371,10 @@ export function buildZaloMessageForPO(
 ): string {
   if (rows.length === 0) return "";
   const first = rows[0];
-  const orderUrl = first.po
-    ? `https://bluedonhang.pages.dev/?po=${first.po}`
-    : "";
+  const orderUrl =
+    first.po && !isManualEntryRow(first)
+      ? `https://bluedonhang.pages.dev/?po=${first.po}`
+      : "";
 
   const totalDonGia = rows.reduce((sum, r) => sum + (Number(r.donGia) || 0), 0);
   const totalPackages = rows.reduce(
