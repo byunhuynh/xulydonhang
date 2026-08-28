@@ -118,8 +118,8 @@ func TestBuildQtyAndUnitPrice(t *testing.T) {
 	if row.Description != wantDesc {
 		t.Errorf("Description = %q,\nmuốn                %q", row.Description, wantDesc)
 	}
-	if row.ShipTo != "HN" || row.Warehouse != "TP_HN_12" || row.RegionCode != "TMĐT_MB" || row.StatCode != "HN" {
-		t.Errorf("cụm kho = %q/%q/%q/%q, muốn HN/TP_HN_12/TMĐT_MB/HN",
+	if row.ShipTo != "HN" || row.Warehouse != "TP_HN_13" || row.RegionCode != "TMĐT_MB" || row.StatCode != "HN" {
+		t.Errorf("cụm kho = %q/%q/%q/%q, muốn HN/TP_HN_13/TMĐT_MB/HN",
 			row.ShipTo, row.Warehouse, row.RegionCode, row.StatCode)
 	}
 	if row.CustomerCode != "MN_TMDT_00016" {
@@ -135,8 +135,8 @@ func TestBuildLongAnWarehouse(t *testing.T) {
 	line.KhoBan = "Miền Nam - Kho mặc định"
 	res := Build([]OrderLine{line}, fakeTables(t), Options{})
 	row := res.OrderRows[0]
-	if row.ShipTo != "LA" || row.Warehouse != "LA_KHOTMDT" || row.RegionCode != "TMĐT_MN" || row.StatCode != "LA" {
-		t.Errorf("cụm kho = %q/%q/%q/%q, muốn LA/LA_KHOTMDT/TMĐT_MN/LA",
+	if row.ShipTo != "LA" || row.Warehouse != "LA_TP" || row.RegionCode != "TMĐT_MN" || row.StatCode != "LA" {
+		t.Errorf("cụm kho = %q/%q/%q/%q, muốn LA/LA_TP/TMĐT_MN/LA",
 			row.ShipTo, row.Warehouse, row.RegionCode, row.StatCode)
 	}
 }

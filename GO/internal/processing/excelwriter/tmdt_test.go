@@ -43,7 +43,7 @@ func TestWriteTMDTRows(t *testing.T) {
 		Description:  "TMĐT-TikTok - Tẩy lồng máy giặt Blue - 585694438276170905 - Ngày đổ 23/08/2026 - HN",
 		SKU:          "TP10127",
 		ProductName:  "Bột tẩy lồng Blue Túi 150g - MỚI SẢN XUẤT",
-		Warehouse:    "TP_HN_12",
+		Warehouse:    "TP_HN_13",
 		Qty:          1,
 		UnitPrice:    26851.85185185185,
 		RegionCode:   "TMĐT_MB",
@@ -58,7 +58,7 @@ func TestWriteTMDTRows(t *testing.T) {
 		SKU:          "TP32743",
 		ProductName:  "Bột tẩy lồng máy giặt Blue 150g",
 		IsPromoItem:  true,
-		Warehouse:    "LA_KHOTMDT",
+		Warehouse:    "LA_TP",
 		Qty:          1,
 		UnitPrice:    0,
 		RegionCode:   "TMĐT_MN",
@@ -85,11 +85,11 @@ func TestWriteTMDTRows(t *testing.T) {
 		"C9": "Chưa thực hiện", "D9": "23/08/2026", "E9": "HN",
 		"G9": "MN_TMDT_00016", "Q9": "TP10127",
 		"S9": "Bột tẩy lồng Blue Túi 150g - MỚI SẢN XUẤT",
-		"T9": "Không", "U9": "Không", "V9": "TP_HN_12", "X9": "1",
+		"T9": "Không", "U9": "Không", "V9": "TP_HN_13", "X9": "1",
 		"AE9": "8", "AJ9": "TMĐT_MB", "AM9": "HN",
 		"AO9": "585694438276170905", "AV9": "15",
 		// Dòng thứ hai: hàng tặng, kho Long An.
-		"U10": "Có", "Y10": "0", "V10": "LA_KHOTMDT", "AJ10": "TMĐT_MN",
+		"U10": "Có", "Y10": "0", "V10": "LA_TP", "AJ10": "TMĐT_MN",
 	}
 	for cell, expect := range want {
 		got, err := f.GetCellValue(sheetName, cell)

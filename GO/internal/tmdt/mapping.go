@@ -137,12 +137,17 @@ func ChannelLabel(raw string) string {
 	return s
 }
 
-// warehouseOf quy đổi tên kho của Haravan ra bộ 4 mã mà AMIS cần.
+// warehouseOf quy đổi tên kho của Haravan ra bộ mã mà AMIS cần: shipTo đi
+// vào CẢ HAI cột E và AM, maKho vào V, maDonVi vào AJ.
+//
+// Mã kho đổi ngày 27/08/2026 theo yêu cầu người dùng: TP_HN_12 → TP_HN_13,
+// LA_KHOTMDT → LA_TP. Chỉ nhánh TMĐT đổi; nhánh JIT (jit_airway_processor.go)
+// và các vendor bán lẻ vẫn giữ mã cũ của họ.
 func warehouseOf(khoBan string) (shipTo, maKho, maDonVi string) {
 	if strings.EqualFold(strings.TrimSpace(khoBan), "Kho Hà Nội") {
-		return "HN", "TP_HN_12", "TMĐT_MB"
+		return "HN", "TP_HN_13", "TMĐT_MB"
 	}
-	return "LA", "LA_KHOTMDT", "TMĐT_MN"
+	return "LA", "LA_TP", "TMĐT_MN"
 }
 
 func Build(lines []OrderLine, tables *lookup.Tables, opt Options) Result {

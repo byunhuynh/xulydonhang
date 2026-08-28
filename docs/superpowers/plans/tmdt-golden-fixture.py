@@ -86,13 +86,21 @@ EXP_HEAD = ["A", "B", "C", "D", "E", "G", "L", "Q", "T", "U", "V", "X", "Y", "AE
 gwb = openpyxl.load_workbook(GOLDEN, read_only=True, data_only=True)
 gws = gwb["Don dat hang"]
 m = 0
+# Mã kho đổi ngày 27/08/2026 (warehouseOf trong internal/tmdt/mapping.go).
+# "mẫu chuẩn.xlsx" là file người dùng dựng TRƯỚC lần đổi đó nên vẫn mang mã
+# cũ; đổi tại đây để chạy lại script không lặng lẽ kéo golden về mã cũ và
+# làm đỏ golden test. Bỏ hai dòng này đi khi mẫu chuẩn được dựng lại.
+KHO_DOI_TEN = {"TP_HN_12": "TP_HN_13", "LA_KHOTMDT": "LA_TP"}
+V = EXP_HEAD.index("V")
 with open(os.path.join(OUT, "expected_dondathang.csv"), "w", newline="", encoding="utf-8") as fh:
     w = csv.writer(fh)
     w.writerow(EXP_HEAD)
     for row in gws.iter_rows(min_row=9, values_only=True):
         if not row or not row[0]:
             continue
-        w.writerow([s(row[c]) if c < len(row) else "" for c in EXP_COLS])
+        out = [s(row[c]) if c < len(row) else "" for c in EXP_COLS]
+        out[V] = KHO_DOI_TEN.get(out[V], out[V])
+        w.writerow(out)
         m += 1
 print("expected_dondathang.csv:", m, "dòng")
 
