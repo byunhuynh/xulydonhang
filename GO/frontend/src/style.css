@@ -16,6 +16,60 @@ html, body, #root {
   margin: 0;
 }
 
+/* Logo "Blue" nằm VẮT QUA ranh giới title bar / header: nửa trên trong
+   title bar, nửa dưới thò xuống header. Title bar và header là hai thẻ
+   riêng nên không phần tử nào nằm được trong cả hai - logo phải đặt
+   tuyệt đối so với gốc app. Ba chỗ phải khớp nhau (chiều cao title bar,
+   ô trống chừa trong header, lề trái chữ trên title bar) nên gom số vào
+   đây thay vì rải giá trị tuỳ ý ở từng file. */
+:root {
+  --titlebar-h: 32px;   /* = h-8 của TitleBar */
+  --brand-logo-h: 52px;
+  --brand-logo-w: 98px; /* = --brand-logo-h * 627 / 332 */
+  --brand-logo-x: 16px; /* = px-4 của header, để logo thẳng hàng lề trái */
+  /* Hàng thương hiệu + tab được nâng lên bấy nhiêu để canh giữa vào
+     đúng ranh giới title bar, giống logo. */
+  --brand-row-lift: 20px;
+  /* 3 nút cửa sổ, mỗi nút w-11 = 44px, cộng chút thoáng. */
+  --titlebar-buttons-w: 140px;
+}
+
+.brand-row {
+  margin-top: calc(-1 * var(--brand-row-lift));
+  padding-right: var(--titlebar-buttons-w);
+  /* Phần hàng này nhô lên che mất dải kéo cửa sổ của title bar. Cho cả
+     hàng trong suốt với chuột rồi bật lại đúng ở những thứ bấm được,
+     nhờ vậy chỗ trống giữa hàng vẫn kéo được cửa sổ như trước. */
+  pointer-events: none;
+}
+
+.brand-row button,
+.brand-row a,
+.brand-row input,
+.brand-row select {
+  pointer-events: auto;
+}
+
+.brand-logo {
+  position: absolute;
+  left: var(--brand-logo-x);
+  top: calc(var(--titlebar-h) - var(--brand-logo-h) / 2);
+  z-index: 30;
+  width: var(--brand-logo-w);
+  height: var(--brand-logo-h);
+  filter: drop-shadow(0 0 12px rgba(40, 197, 242, 0.4));
+}
+
+/* Ô trống trong header đúng bằng bề ngang logo, để chữ bên cạnh không
+   chui xuống dưới logo. */
+.brand-logo-slot {
+  flex: 0 0 var(--brand-logo-w);
+}
+
+/* Title bar KHÔNG có đường kẻ đáy: logo, tên app và các tab đều nằm vắt
+   qua ranh giới đó, kẻ một vạch ngang là gạch bỏ cả ba. Ranh giới vẫn
+   đọc được nhờ chênh tông nền (bg-panel so với bg-panel/60). */
+
 body {
   @apply bg-bg text-ink font-sans;
   user-select: none;

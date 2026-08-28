@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
-    "test": "node --experimental-strip-types --test src/lib/orderMismatchScope.test.ts src/lib/batchProgress.test.ts src/lib/jitFileGroups.test.ts src/lib/jitPeriodMenu.test.ts src/lib/jitPeriodState.test.ts src/lib/orderRowUpsert.test.ts src/lib/poPriceWarning.test.ts src/lib/tmdtDateRange.test.ts src/lib/tmdtMissing.test.ts src/lib/zaloMessage.test.ts src/lib/misaBranch.test.ts",
+    "test": "node --experimental-strip-types --test src/lib/orderMismatchScope.test.ts src/lib/batchProgress.test.ts src/lib/jitFileGroups.test.ts src/lib/jitPeriodMenu.test.ts src/lib/jitPeriodState.test.ts src/lib/orderRowUpsert.test.ts src/lib/poPriceWarning.test.ts src/lib/tmdtDateRange.test.ts src/lib/tmdtMissing.test.ts src/lib/zaloMessage.test.ts src/lib/misaBranch.test.ts src/lib/snakePath.test.ts",
     "preview": "vite preview"
   },
   "dependencies": {

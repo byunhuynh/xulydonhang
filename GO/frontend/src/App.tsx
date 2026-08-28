@@ -8,6 +8,7 @@ import { LockOverlay } from './components/LockOverlay'
 import { ZaloQRModal } from './components/ZaloQRModal'
 import { TMDTMissingModal } from './components/TMDTMissingModal'
 import AnimatedBlueLogo from './components/AnimatedBlueLogo'
+import StartupLogoLoader from './components/StartupLogoLoader'
 import { useWailsEvents } from './hooks/useWailsEvents'
 import { useAppStore } from './store/appStore'
 import { formatBatchProgress } from './lib/batchProgress'
@@ -42,14 +43,19 @@ function App() {
   }, [])
 
   return (
-    <div className="flex h-screen flex-col">
+    <div className="relative flex h-screen flex-col">
       <TitleBar />
-      <header className="flex items-center gap-1 border-b border-border bg-panel/60 px-4 pt-3">
-        <div className="mr-4 flex items-center gap-2.5 pb-3.5">
-          <AnimatedBlueLogo
-            active={isProcessing}
-            className="no-drag h-[26px] w-auto aspect-[627/332] drop-shadow-[0_0_12px_rgba(40,197,242,0.4)]"
-          />
+      {/* Vắt qua ranh giới title bar / header. wails-drag để kéo cửa sổ
+          bằng vùng logo vẫn được như phần còn lại của title bar. */}
+      <AnimatedBlueLogo active={isProcessing} className="brand-logo wails-drag" />
+      <header className="border-b border-border bg-panel/60 px-4">
+        {/* Cả hàng được NÂNG lên nằm vắt qua ranh giới title bar giống
+            logo, để logo, tên app và tab cùng canh giữa trên một đường
+            thay vì logo ở trên còn tab tụt xuống dưới. brand-row cũng
+            chừa sẵn lề phải cho 3 nút cửa sổ ở góc title bar. */}
+        <div className="brand-row relative z-10 flex items-center gap-1 pb-4">
+        <div className="mr-4 flex items-center gap-2.5">
+          <div className="brand-logo-slot" aria-hidden />
           <div className="flex flex-col leading-[1.15]">
             <span className="text-sm font-extrabold text-ink">Blue Hà Thành</span>
             <span className="font-mono text-[9.5px] tracking-wider text-muted">ORDER SYSTEM · V3.0</span>
@@ -64,12 +70,12 @@ function App() {
         <button
           type="button"
           onClick={() => setIsSettingsOpen(true)}
-          className="mb-3.5 ml-2 rounded-lg border border-border p-2 text-muted transition-colors hover:border-accent hover:text-accent"
+          className="ml-2 rounded-lg border border-border p-2 text-muted transition-colors hover:border-accent hover:text-accent"
           title="Cấu hình"
         >
           <FaGear size={14} />
         </button>
-        <div className="ml-auto mb-3.5 flex items-center gap-2 rounded-full border border-border px-3 py-1.5 font-mono text-[11px] text-muted">
+        <div className="ml-auto flex items-center gap-2 rounded-full border border-border px-3 py-1.5 font-mono text-[11px] text-muted">
           <span
             className={`h-1.5 w-1.5 rounded-full ${
               isProcessing ? 'animate-pulse bg-accent shadow-[0_0_8px_theme(colors.accent)]' : 'bg-success shadow-[0_0_8px_theme(colors.success)]'
@@ -83,6 +89,7 @@ function App() {
           ) : (
             'Sẵn sàng'
           )}
+        </div>
         </div>
       </header>
       <main className="flex-1 overflow-hidden p-4">
@@ -101,10 +108,7 @@ function App() {
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-bg/95 backdrop-blur-sm">
           <div className="w-[min(420px,calc(100vw-32px))] rounded-2xl border border-border bg-panel p-8 text-center shadow-2xl">
             {startupState === 'loading' ? (
-              <>
-                <div className="mx-auto mb-5 h-10 w-10 animate-spin rounded-full border-4 border-border border-t-accent" />
-                <p className="text-base font-semibold text-ink">Đang tải dữ liệu…</p>
-              </>
+              <StartupLogoLoader />
             ) : (
               <>
                 <p className="text-base font-semibold text-danger">Không tải được dữ liệu</p>

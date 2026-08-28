@@ -1,14 +1,18 @@
-/* CSS cho AnimatedBlueLogo. Wrapper cha quyết định kích thước (đặt
-   height + aspect-[627/332] lên chính thẻ .animated-blue-logo) và bóng đổ
-   (drop-shadow qua className) - component này cố tình không tự áp filter
-   riêng, để dùng lại được ở nhiều chỗ khác nhau trong app (logo header
-   lúc idle cần glow cyan khác với lúc dùng trong màn hình loading). */
+/* CSS cho AnimatedBlueLogo. Wrapper cha quyết định kích thước và bóng
+   đổ (qua className) - component này cố tình không tự áp filter riêng,
+   để dùng lại được ở nhiều chỗ khác nhau trong app (logo header lúc
+   idle cần glow cyan khác với lúc dùng trong màn hình loading). */
 
 .animated-blue-logo {
   display: inline-block;
   line-height: 0;
 }
 
+/* overflow: visible là BẮT BUỘC - lúc bò lên đỉnh và hai cạnh, dải sóng
+   thò ra ngoài viewBox đúng bằng khoảng cách nó vốn cách viền khối tím
+   (tối đa ~38 trên 332 đơn vị, tức ~11% chiều cao). Mặc định SVG cắt
+   cụt phần đó. Nhờ để viewBox nguyên bản (không nới ra) mà hộp bố cục
+   của logo vẫn đúng đúng tỉ lệ 627:332, canh hàng dễ đoán. */
 .animated-blue-logo svg {
   display: block;
   width: 100%;
@@ -16,6 +20,10 @@
   overflow: visible;
 }
 
-.animated-blue-logo .logo-cyan-stroke {
-  will-change: clip-path;
+/* Quầng cyan quanh dải sóng để lúc nó bò ra ngoài mép khối tím vẫn nổi
+   trên nền tối. GSAP ghi lại thuộc tính `d` mỗi khung hình nên báo
+   trình duyệt biết trước đây là phần thay đổi liên tục. */
+.animated-blue-logo__wave {
+  filter: drop-shadow(0 0 4px rgba(40, 197, 242, 0.6));
+  will-change: d;
 }

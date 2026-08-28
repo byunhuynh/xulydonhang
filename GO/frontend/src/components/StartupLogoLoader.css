@@ -1,0 +1,37 @@
+/* Bố cục cho StartupLogoLoader. Bản thân logo (kể cả quầng sáng và
+   chuyển động bò vòng) nằm ở AnimatedBlueLogo.css. */
+
+.startup-logo {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 26px;
+}
+
+.startup-logo__mark {
+  width: min(250px, 66vw);
+  aspect-ratio: 627 / 332;
+  /* Quầng sáng dịu dưới logo để khối logo không bị bẹt trên nền panel. */
+  filter: drop-shadow(0 10px 26px rgba(40, 197, 242, 0.18));
+}
+
+.startup-logo__label {
+  display: flex;
+  align-items: baseline;
+  font-size: 0.9375rem;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  color: #f1f0fb;
+}
+
+.startup-logo__dots {
+  display: inline-flex;
+}
+
+.startup-logo__dot {
+  display: inline-block;
+  color: #28c5f2;
+  /* GSAP nâng dần opacity lên 1; đặt sẵn 0.35 để lúc chưa chạy (hoặc
+     prefers-reduced-motion) ba dấu chấm vẫn hiện chứ không biến mất. */
+  opacity: 0.35;
+}
