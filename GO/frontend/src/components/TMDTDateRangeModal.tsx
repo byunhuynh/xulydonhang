@@ -75,6 +75,13 @@ export function TMDTDateRangeModal({ fileNames, onConfirm, onCancel }: Props) {
     setAnchor(null)
   }
 
+  // Lịch chỉ mở về phía sau ngày bắt đầu, nên bấm nhầm ngày bắt đầu là kẹt:
+  // mọi ngày trước đó đã bị vô hiệu hoá. Nút "Chọn lại" là đường thoát.
+  function resetSelection() {
+    setAnchor(null)
+    setRange(null)
+  }
+
   function applyPreset(preset: 'yesterday' | '3days' | '7days') {
     const r = presetRange(preset, today)
     // Preset cho ra khoảng đã hoàn tất ngay, không phải đang giữa lượt
@@ -109,7 +116,10 @@ export function TMDTDateRangeModal({ fileNames, onConfirm, onCancel }: Props) {
       <div ref={cardRef} className="w-full max-w-md rounded-lg border border-border bg-panel p-5 shadow-xl">
         <h2 className="font-sans text-base font-semibold text-ink">Lấy đơn TMĐT theo khoảng ngày</h2>
         <p className="mt-1 font-sans text-xs text-muted">
-          {fileNames.join(', ')} — chỉ lấy đến hết ngày hôm qua, tối đa {MAX_RANGE_DAYS} ngày.
+          {fileNames.join(', ')} — chỉ lấy đến hết ngày hôm qua.{' '}
+          {anchor
+            ? `Chọn ngày kết thúc trong vòng ${MAX_RANGE_DAYS} ngày kể từ ngày bắt đầu.`
+            : `Bấm ngày bắt đầu, rồi bấm ngày kết thúc — tối đa ${MAX_RANGE_DAYS} ngày.`}
         </p>
 
         <div className="mt-3 flex gap-1.5">
@@ -127,6 +137,15 @@ export function TMDTDateRangeModal({ fileNames, onConfirm, onCancel }: Props) {
               {label}
             </button>
           ))}
+          {anchor && (
+            <button
+              type="button"
+              onClick={resetSelection}
+              className="ml-auto rounded-md border border-border px-2.5 py-1 font-sans text-xs font-medium text-muted hover:bg-white/[0.04] hover:text-ink"
+            >
+              Chọn lại
+            </button>
+          )}
         </div>
 
         <div className="mt-4 flex items-center justify-between">

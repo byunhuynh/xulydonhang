@@ -26,16 +26,32 @@ test('isSelectableDay chặn hôm nay và tương lai', () => {
   assert.equal(isSelectableDay(parseISODate('2026-08-26'), today, null), false)
 })
 
-test('isSelectableDay chặn ngày cách mốc đã chọn quá 6 ngày', () => {
+test('isSelectableDay chỉ mở 7 ngày TIẾN TỚI kể từ mốc đã chọn', () => {
   const anchor = '2026-08-18'
+  // Chính ngày bắt đầu vẫn bấm được: cho ra khoảng 1 ngày.
+  assert.equal(isSelectableDay(parseISODate('2026-08-18'), today, anchor), true)
   // 18 → 24 là đúng 7 ngày tính cả hai đầu: hợp lệ.
   assert.equal(isSelectableDay(parseISODate('2026-08-24'), today, anchor), true)
-  // 17 → 18 ... đi về phía trước cũng vẫn trong 7 ngày.
-  assert.equal(isSelectableDay(parseISODate('2026-08-12'), today, anchor), true)
-  // Ngày thứ 8 ở cả hai phía: chặn.
+  // Mọi ngày TRƯỚC mốc bắt đầu đều bị chặn, kể cả khi còn trong 7 ngày.
+  assert.equal(isSelectableDay(parseISODate('2026-08-17'), today, anchor), false)
+  assert.equal(isSelectableDay(parseISODate('2026-08-12'), today, anchor), false)
+  // Ngày thứ 8 tính từ mốc: chặn.
   assert.equal(isSelectableDay(parseISODate('2026-08-11'), today, anchor), false)
   // Phía sau bị chặn bởi ràng buộc "≤ hôm qua" trước cả ràng buộc 7 ngày.
   assert.equal(isSelectableDay(parseISODate('2026-08-25'), today, anchor), false)
+})
+
+test('chưa chọn mốc nào thì ngày của tháng trước vẫn bấm được', () => {
+  assert.equal(isSelectableDay(parseISODate('2026-07-03'), today, null), true)
+})
+
+test('bấm 15/08 khi hôm nay 27/08 thì mở đúng 15/08 → 21/08', () => {
+  const now = parseISODate('2026-08-27')
+  const anchor = '2026-08-15'
+  assert.equal(isSelectableDay(parseISODate('2026-08-15'), now, anchor), true)
+  assert.equal(isSelectableDay(parseISODate('2026-08-21'), now, anchor), true)
+  assert.equal(isSelectableDay(parseISODate('2026-08-22'), now, anchor), false)
+  assert.equal(isSelectableDay(parseISODate('2026-08-14'), now, anchor), false)
 })
 
 test('presetRange cho ra đúng khoảng, luôn kết thúc ở hôm qua', () => {

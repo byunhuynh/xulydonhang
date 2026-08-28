@@ -45,11 +45,19 @@ function daysBetween(a: Date, b: Date): number {
  * isSelectableDay: day có được bấm hay không. anchor là ngày đầu người
  * dùng đã chọn (null khi chưa chọn gì). Chặn NGAY TRÊN LỊCH thay vì báo
  * lỗi sau khi bấm — người dùng thấy được giới hạn trước khi va vào nó.
+ *
+ * Khi đã có anchor, cửa sổ chỉ mở VỀ PHÍA TRƯỚC: anchor là NGÀY BẮT ĐẦU
+ * nên ngày kết thúc phải nằm trong [anchor, anchor + MAX_RANGE_DAYS - 1].
+ * Trước đây cửa sổ đối xứng ±6 ngày, nên bấm 15/08 lại mở luôn tới 09/08
+ * — nửa lùi về trước đó vừa thừa vừa làm người dùng hiểu sai phạm vi
+ * thật sự sẽ lấy. Chưa bấm gì thì mọi ngày quá khứ đều chọn được, kể cả
+ * ngày của các tháng trước.
  */
 export function isSelectableDay(day: Date, today: Date, anchor: string | null): boolean {
   if (day.getTime() > maxSelectableDate(today).getTime()) return false
   if (!anchor) return true
-  return Math.abs(daysBetween(parseISODate(anchor), day)) <= MAX_RANGE_DAYS - 1
+  const delta = daysBetween(parseISODate(anchor), day)
+  return delta >= 0 && delta <= MAX_RANGE_DAYS - 1
 }
 
 export function presetRange(preset: 'yesterday' | '3days' | '7days', today: Date): TMDTDateRange {
