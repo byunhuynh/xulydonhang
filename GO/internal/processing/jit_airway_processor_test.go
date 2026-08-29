@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/pdfcpu/pdfcpu/pkg/api"
 	"github.com/xuri/excelize/v2"
@@ -175,6 +176,56 @@ func TestParseJITAirWaybillFilenameAcceptsWindowsCopySuffix(t *testing.T) {
 	warehouse, date, ok := parseJITAirWaybillFilename("air_waybill_WH6_HTLA_24082026 (1).pdf")
 	if !ok || warehouse != "WH6_HTLA" || date != "24/08/2026" {
 		t.Fatalf("got (%q, %q, %v), want copied air-waybill filename to be accepted", warehouse, date, ok)
+	}
+}
+
+func TestParseJITAirWaybillFilenameAcceptsShortName(t *testing.T) {
+	now := time.Date(2026, 8, 29, 10, 0, 0, 0, time.UTC)
+	cases := []struct {
+		name          string
+		wantWarehouse string
+		wantDate      string
+	}{
+		{"WH6_HN_2908.pdf", "WH6_HN", "29/08/2026"},
+		{`C:\orders\WH6_HTLA_0109.pdf`, "WH6_HTLA", "01/09/2026"},
+		{"WH6_HN_2908 (1).pdf", "WH6_HN", "29/08/2026"},
+		{"WH6_HN_29082026.pdf", "WH6_HN", "29/08/2026"},
+		{"air_waybill_WH6_HN_2908.pdf", "WH6_HN", "29/08/2026"},
+	}
+	for _, tc := range cases {
+		warehouse, date, ok := parseJITAirWaybillFilenameAt(tc.name, now)
+		if !ok || warehouse != tc.wantWarehouse || date != tc.wantDate {
+			t.Errorf("%s: got (%q, %q, %v), want (%q, %q, true)", tc.name, warehouse, date, ok, tc.wantWarehouse, tc.wantDate)
+		}
+	}
+}
+
+// Tên rút gọn không mang năm: file "3112" xử lý sang đầu tháng 1 phải rơi vào
+// năm trước, "0101" xử lý cuối tháng 12 phải rơi vào năm sau.
+func TestParseJITAirWaybillFilenameShortNamePicksNearestYear(t *testing.T) {
+	if _, date, ok := parseJITAirWaybillFilenameAt("WH6_HN_3112.pdf", time.Date(2027, 1, 2, 9, 0, 0, 0, time.UTC)); !ok || date != "31/12/2026" {
+		t.Errorf("got (%q, %v), want (%q, true)", date, ok, "31/12/2026")
+	}
+	if _, date, ok := parseJITAirWaybillFilenameAt("WH6_HN_0101.pdf", time.Date(2026, 12, 30, 9, 0, 0, 0, time.UTC)); !ok || date != "01/01/2027" {
+		t.Errorf("got (%q, %v), want (%q, true)", date, ok, "01/01/2027")
+	}
+	// 29/02 chỉ hợp lệ ở năm nhuận: 2028 chứ không phải 2026/2027.
+	if _, date, ok := parseJITAirWaybillFilenameAt("WH6_HN_2902.pdf", time.Date(2027, 6, 1, 9, 0, 0, 0, time.UTC)); !ok || date != "29/02/2028" {
+		t.Errorf("got (%q, %v), want (%q, true)", date, ok, "29/02/2028")
+	}
+}
+
+func TestParseJITAirWaybillFilenameRejectsShortNameLookalikes(t *testing.T) {
+	now := time.Date(2026, 8, 29, 10, 0, 0, 0, time.UTC)
+	for _, name := range []string{
+		"package_list_WH6_HN_2908.pdf",
+		"BAOCAO_KHO_2908.pdf",
+		"don_hang_2026.pdf",
+		"WH6_HN_3213.pdf",
+	} {
+		if _, _, ok := parseJITAirWaybillFilenameAt(name, now); ok {
+			t.Errorf("%s matched air-waybill parser, want no match", name)
+		}
 	}
 }
 

@@ -15,7 +15,12 @@ import (
 )
 
 var (
-	jitAirWaybillNamePattern      = regexp.MustCompile(`(?i)^air_waybill_(.+)_(\d{8})(?: \(\d+\))?\.pdf$`)
+	// Tên file JIT có 2 kiểu: kiểu đầy đủ "air_waybill_WH6_HN_29082026.pdf" và
+	// kiểu rút gọn "WH6_HN_2908.pdf" (không tiền tố, ngày không có năm). Kiểu
+	// rút gọn buộc phải bắt đầu bằng mã kho WHx_ để tên file của vendor khác
+	// không lọt vào nhánh JIT.
+	jitAirWaybillNamePattern      = regexp.MustCompile(`(?i)^air_waybill_(.+)_(\d{8}|\d{4})(?: \(\d+\))?\.pdf$`)
+	jitAirWaybillShortNamePattern = regexp.MustCompile(`(?i)^(WH\d+_[A-Z]+)_(\d{8}|\d{4})(?: \(\d+\))?\.pdf$`)
 	jitAirWaybillTrackingPattern  = regexp.MustCompile(`Mãvậnđơn:([A-Z0-9]+)Mãđơnhàng:`)
 	jitAirWaybillPOPattern        = regexp.MustCompile(`Mãđơnhàng:(\d{6}[A-Z0-9]{8})`)
 	jitAirWaybillItemStartPattern = regexp.MustCompile(`\[TopValue\]`)
@@ -44,15 +49,55 @@ func jitRegionInfo(shipTo string) (region, statCode, warehouse string) {
 }
 
 func parseJITAirWaybillFilename(path string) (warehouse, orderDate string, ok bool) {
-	match := jitAirWaybillNamePattern.FindStringSubmatch(filepath.Base(path))
+	return parseJITAirWaybillFilenameAt(path, time.Now())
+}
+
+func parseJITAirWaybillFilenameAt(path string, now time.Time) (warehouse, orderDate string, ok bool) {
+	base := filepath.Base(path)
+	match := jitAirWaybillNamePattern.FindStringSubmatch(base)
+	if match == nil {
+		match = jitAirWaybillShortNamePattern.FindStringSubmatch(base)
+	}
 	if match == nil {
 		return "", "", false
 	}
-	parsed, err := time.Parse("02012006", match[2])
-	if err != nil {
+	if len(match[2]) == 8 {
+		parsed, err := time.Parse("02012006", match[2])
+		if err != nil {
+			return "", "", false
+		}
+		return match[1], parsed.Format("02/01/2006"), true
+	}
+	parsed, resolved := resolveJITShortDate(match[2], now)
+	if !resolved {
 		return "", "", false
 	}
 	return match[1], parsed.Format("02/01/2006"), true
+}
+
+// Ngày kiểu rút gọn ("2908") không mang năm nên năm được suy ra từ hôm nay:
+// lấy năm cho ra ngày GẦN hôm nay nhất trong {năm trước, năm nay, năm sau}, để
+// file đặt tên cuối tháng 12 xử lý sang đầu tháng 1 (và ngược lại) vẫn đúng năm.
+func resolveJITShortDate(dayMonth string, now time.Time) (time.Time, bool) {
+	var best time.Time
+	found := false
+	for _, year := range []int{now.Year() - 1, now.Year(), now.Year() + 1} {
+		parsed, err := time.Parse("02012006", fmt.Sprintf("%s%04d", dayMonth, year))
+		if err != nil {
+			continue
+		}
+		if !found || absDuration(parsed.Sub(now)) < absDuration(best.Sub(now)) {
+			best, found = parsed, true
+		}
+	}
+	return best, found
+}
+
+func absDuration(d time.Duration) time.Duration {
+	if d < 0 {
+		return -d
+	}
+	return d
 }
 
 func parseJITAirWaybillPage(text string) (string, string, []coop.Product, error) {
