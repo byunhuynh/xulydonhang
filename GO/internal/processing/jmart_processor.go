@@ -11,6 +11,7 @@ import (
 	"order-processor/internal/processing/coop"
 	"order-processor/internal/processing/excelwriter"
 	"order-processor/internal/processing/jmart"
+	"order-processor/internal/processing/warehouse"
 )
 
 // jmartCustomerCode mirrors write_to_dondathang_kingfood's makhachhang
@@ -19,6 +20,22 @@ import (
 // This is the EXACT value kingfoodRegionInfo's own "MN_MT_JM0001"
 // branch (kingfood_processor.go) was written for.
 const jmartCustomerCode = "MN_MT_JM0001"
+
+// jmartRegionInfo cấp mã vùng/thống kê/kho cho JMart.
+//
+// Không nhận customerCode: JMart chỉ có ĐÚNG MỘT mã khách hàng, là hằng
+// số jmartCustomerCode ngay trên đây, nên không có nhánh nào để rẽ — kể
+// cả nhánh miền Bắc mà các vendor khác có.
+//
+// Trước đây JMart gọi thẳng kingfoodRegionInfo (nhánh "MN_MT_JM0001"
+// của hàm đó sinh ra chính là vì JMart). Tách ra vì mã kho giờ nằm
+// trong Cài đặt: gộp chung khiến bảng cài đặt phải ghi "Kingfood +
+// JMart" trên cùng một dòng, trong khi đây là hai hệ thống khác nhau
+// của hai nhà bán khác nhau và người dùng phải chỉnh được riêng. Giá
+// trị trả về không đổi.
+func jmartRegionInfo(wh *warehouse.Resolver) (region, statCode, warehouseCode string) {
+	return "MT_MN", "LA", wh.Get("jmart")
+}
 
 // jmartOrderNumber mirrors write_to_dondathang_kingfood's order-number
 // field (xulydonhang.py:3899) as applied to JMart's call:
@@ -71,7 +88,7 @@ func (p *RealProcessor) processJMartSegment(filePath string, realPageNum int, te
 		return OrderRow{}, fmt.Errorf("không tải được giá/khuyến mãi: %w", err)
 	}
 
-	region, statCode, warehouse := kingfoodRegionInfo(jmartCustomerCode, p.Warehouses)
+	region, statCode, warehouse := jmartRegionInfo(p.Warehouses)
 	orderNum := jmartOrderNumber(poNumber)
 	description := fmt.Sprintf("JMART %s", poNumber)
 

@@ -51,11 +51,13 @@ var Branches = []Branch{
 	{"fujimart/MB", "FujiMart · Miền Bắc", "TP_HN_12"},
 	{"fujimart/khac", "FujiMart · Còn lại", "LA_KHO2026"},
 
-	// JMart dùng chung hàm kingfoodRegionInfo nên dùng chung luôn 3 ô
-	// này — đổi ở đây là đổi cho cả hai.
-	{"kingfood/MB", "Kingfood + JMart · Miền Bắc", "TP_HN_12"},
-	{"kingfood/MN_MT_JM0001", "Kingfood + JMart · MN_MT_JM0001", "LA_TP"},
-	{"kingfood/khac", "Kingfood + JMart · Còn lại", "LA_KHO2026"},
+	{"kingfood/MB", "Kingfood · Miền Bắc", "TP_HN_12"},
+	{"kingfood/khac", "Kingfood · Còn lại", "LA_KHO2026"},
+
+	// JMart chỉ có ĐÚNG MỘT nhánh: mã khách hàng của nó là hằng số
+	// "MN_MT_JM0001" ngay trong code, không bao giờ có ca miền Bắc, nên
+	// không dựng thêm ô nào cho một nhánh không tồn tại.
+	{"jmart", "JMart", "LA_TP"},
 
 	{"jit/MB", "JIT-CHOICE · Miền Bắc", "TP_HN_12"},
 	{"jit/khac", "JIT-CHOICE · Còn lại", "LA_KHOTMDT"},

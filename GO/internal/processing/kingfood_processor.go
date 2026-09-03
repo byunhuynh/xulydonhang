@@ -43,7 +43,14 @@ func kingfoodRegionInfo(customerCode string, wh *warehouse.Resolver) (region, st
 	case strings.HasPrefix(customerCode, "MB"):
 		return "MT_MB", "HN", wh.Get("kingfood/MB")
 	case customerCode == "MN_MT_JM0001":
-		return "MT_MN", "LA", wh.Get("kingfood/MN_MT_JM0001")
+		// Nhánh này có từ bản Python và sinh ra là vì JMart, nhưng JMart
+		// giờ có hàm riêng (jmartRegionInfo) và mã kho riêng trong Cài
+		// đặt. Kingfood không bao giờ tự sinh ra mã này —
+		// kingfoodCustomerCode là hằng số "MN_MT_KFMSL" — nên nhánh này
+		// không còn với tới được bằng dữ liệu thật. Giữ lại cho đúng
+		// parity, và để hằng số chứ không thành một ô cài đặt: một ô
+		// không nhánh nào chạy vào chỉ làm rối bảng.
+		return "MT_MN", "LA", "LA_TP"
 	default:
 		return "MT_MN", "LA", wh.Get("kingfood/khac")
 	}

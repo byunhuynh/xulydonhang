@@ -22,7 +22,8 @@ func TestBranches_CoverEveryVendorSlotExactlyOnce(t *testing.T) {
 		"winmart/MN_MT_WIN1326", "winmart/MB", "winmart/khac",
 		"emart/MB", "emart/khac",
 		"fujimart/MB", "fujimart/khac",
-		"kingfood/MB", "kingfood/MN_MT_JM0001", "kingfood/khac",
+		"kingfood/MB", "kingfood/khac",
+		"jmart",
 		"jit/MB", "jit/khac",
 		"tmdt/HN", "tmdt/khac",
 	}

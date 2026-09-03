@@ -135,17 +135,20 @@ func TestRealProcessor_ProcessesRealSampleJMartFile(t *testing.T) {
 	}
 }
 
-func TestJMartUsesKingfoodRegionInfoDirectly(t *testing.T) {
-	// Confirms processJMartSegment calls the EXISTING, unmodified
-	// kingfoodRegionInfo helper — not a JMart-specific copy — by
-	// checking that kingfoodRegionInfo's own MN_MT_JM0001 branch (which
-	// exists in kingfood_processor.go specifically for JMart's sake,
-	// per that file's own doc comment) produces exactly what JMart's
-	// real hardcoded customer code needs.
-	region, statCode, warehouse := kingfoodRegionInfo(jmartCustomerCode, nil)
+func TestJMartRegionInfoKeepsItsOwnCodes(t *testing.T) {
+	// JMart used to call kingfoodRegionInfo, whose "MN_MT_JM0001" branch
+	// existed for JMart's sake. It has its own jmartRegionInfo now — the
+	// two are different vendors and their warehouse codes are edited
+	// separately in Cài đặt — so this pins that the split changed
+	// nothing about what JMart writes.
+	region, statCode, warehouse := jmartRegionInfo(nil)
 	if region != "MT_MN" || statCode != "LA" || warehouse != "LA_TP" {
-		t.Errorf("kingfoodRegionInfo(%q) = (%q, %q, %q), want (\"MT_MN\", \"LA\", \"LA_TP\")",
-			jmartCustomerCode, region, statCode, warehouse)
+		t.Errorf("jmartRegionInfo() = (%q, %q, %q), want (\"MT_MN\", \"LA\", \"LA_TP\")",
+			region, statCode, warehouse)
+	}
+	// And Kingfood's own always-used code is untouched by the split.
+	if _, _, warehouse := kingfoodRegionInfo(kingfoodCustomerCode, nil); warehouse != "LA_KHO2026" {
+		t.Errorf("kingfoodRegionInfo(%q) warehouse = %q, want %q", kingfoodCustomerCode, warehouse, "LA_KHO2026")
 	}
 }
 
