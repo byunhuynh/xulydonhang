@@ -35,7 +35,7 @@ type TMDTRow struct {
 	SKU          string  // Q — mã thành phẩm
 	ProductName  string  // S
 	IsPromoItem  bool    // U — true khi đơn giá = 0 (hàng tặng)
-	Warehouse    string  // V — "TP_HN_13" | "LA_TP"
+	Warehouse    string  // V — mặc định "TP_HN_13" | "LA_TP", đổi được trong Cài đặt (warehouse.Branches)
 	Qty          float64 // X
 	UnitPrice    float64 // Y
 	RegionCode   string  // AJ — "TMĐT_MB" | "TMĐT_MN"

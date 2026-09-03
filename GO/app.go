@@ -25,6 +25,7 @@ import (
 	"order-processor/internal/processing/excelwriter"
 	"order-processor/internal/processing/pricing"
 	"order-processor/internal/processing/productdata"
+	"order-processor/internal/processing/warehouse"
 	"order-processor/internal/tmdt"
 	"order-processor/internal/zalosend"
 )
@@ -201,7 +202,10 @@ func NewApp() (*App, error) {
 	// phòng, một lần sửa hằng số ở bản sau sẽ lặng lẽ đổi nhánh của mọi
 	// mục người dùng chưa từng chạm vào. Lỗi ghi đĩa KHÔNG chặn khởi
 	// động — app vẫn chạy được đầy đủ, chỉ là lần sau gieo lại.
-	if misapush.ApplySeed(settings.MisaRouting) {
+	// Mã kho từng nhánh vendor được gieo xuống đĩa vì đúng lý do trên:
+	// nếu mã mặc định chỉ sống trong code, một lần sửa hằng số ở bản sau
+	// sẽ lặng lẽ đổi kho của những nhánh người dùng chưa từng chạm.
+	if misapush.ApplySeed(settings.MisaRouting) || warehouse.ApplySeed(settings.Warehouse) {
 		_ = appSettingsStore.Save(settings)
 	}
 
@@ -239,6 +243,7 @@ func NewApp() (*App, error) {
 			Store:       store,
 			Pricing:     pricing.NewHTTPSource(settings.Gid),
 			ExcelPath:   excelPath,
+			Warehouses:  warehouse.NewResolver(settings.Warehouse),
 			DriveClient: driveupload.NewHTTPClient(),
 		}
 		processor.LogFunc = func(msg string) {
@@ -372,6 +377,11 @@ func (a *App) SaveAppSettings(settings appsettings.Settings) error {
 	if !reflect.DeepEqual(prev.Gid, settings.Gid) {
 		if err := a.reloadDataSources(settings.Gid); err != nil && a.emitter != nil {
 			a.emitter.Emit("process:log", fmt.Sprintf("⚠️ Đã lưu cấu hình GID nhưng chưa áp dụng ngay được (%v) — lưu lại hoặc khởi động lại app để áp dụng.", err))
+		}
+	}
+	if !reflect.DeepEqual(prev.Warehouse, settings.Warehouse) {
+		if err := a.applyWarehouseSettings(settings.Warehouse); err != nil && a.emitter != nil {
+			a.emitter.Emit("process:log", fmt.Sprintf("⚠️ Đã lưu mã kho nhưng chưa áp dụng ngay được (%v) — lưu lại hoặc khởi động lại app để áp dụng.", err))
 		}
 	}
 	return nil

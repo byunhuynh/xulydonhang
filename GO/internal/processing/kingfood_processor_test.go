@@ -85,7 +85,7 @@ func TestKingfoodRegionInfo(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			gotRegion, gotStatCode, gotWarehouse := kingfoodRegionInfo(tc.customerCode)
+			gotRegion, gotStatCode, gotWarehouse := kingfoodRegionInfo(tc.customerCode, nil)
 			if gotRegion != tc.wantRegion || gotStatCode != tc.wantStatCode || gotWarehouse != tc.wantWarehouse {
 				t.Errorf("kingfoodRegionInfo(%q) = (%q, %q, %q), want (%q, %q, %q)",
 					tc.customerCode, gotRegion, gotStatCode, gotWarehouse,

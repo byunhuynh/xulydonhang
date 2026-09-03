@@ -71,7 +71,7 @@ func (p *RealProcessor) processJMartSegment(filePath string, realPageNum int, te
 		return OrderRow{}, fmt.Errorf("không tải được giá/khuyến mãi: %w", err)
 	}
 
-	region, statCode, warehouse := kingfoodRegionInfo(jmartCustomerCode)
+	region, statCode, warehouse := kingfoodRegionInfo(jmartCustomerCode, p.Warehouses)
 	orderNum := jmartOrderNumber(poNumber)
 	description := fmt.Sprintf("JMART %s", poNumber)
 

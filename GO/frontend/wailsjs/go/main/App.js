@@ -69,3 +69,7 @@ export function SendZaloMessages(arg1) {
 export function UpdateJITPeriod(arg1, arg2, arg3, arg4) {
   return window['go']['main']['App']['UpdateJITPeriod'](arg1, arg2, arg3, arg4);
 }
+
+export function WarehouseOptions() {
+  return window['go']['main']['App']['WarehouseOptions']();
+}

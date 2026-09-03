@@ -46,7 +46,7 @@ func TestWinmartRegionInfo(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			gotRegion, gotStatCode, gotWarehouse := winmartRegionInfo(tc.customerCode)
+			gotRegion, gotStatCode, gotWarehouse := winmartRegionInfo(tc.customerCode, nil)
 			if gotRegion != tc.wantRegion || gotStatCode != tc.wantStatCode || gotWarehouse != tc.wantWarehouse {
 				t.Errorf("winmartRegionInfo(%q) = (%q, %q, %q), want (%q, %q, %q)",
 					tc.customerCode, gotRegion, gotStatCode, gotWarehouse,

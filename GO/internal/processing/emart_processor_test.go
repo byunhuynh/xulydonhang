@@ -54,8 +54,8 @@ func TestRealProcessor_ProcessesRealSampleEmartFile(t *testing.T) {
 
 func TestEmartRegionInfo(t *testing.T) {
 	cases := []struct {
-		name                                     string
-		customerCode                             string
+		name                                    string
+		customerCode                            string
 		wantRegion, wantStatCode, wantWarehouse string
 	}{
 		{
@@ -75,7 +75,7 @@ func TestEmartRegionInfo(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			gotRegion, gotStatCode, gotWarehouse := emartRegionInfo(tc.customerCode)
+			gotRegion, gotStatCode, gotWarehouse := emartRegionInfo(tc.customerCode, nil)
 			if gotRegion != tc.wantRegion || gotStatCode != tc.wantStatCode || gotWarehouse != tc.wantWarehouse {
 				t.Errorf("emartRegionInfo(%q) = (%q, %q, %q), want (%q, %q, %q)",
 					tc.customerCode, gotRegion, gotStatCode, gotWarehouse,
@@ -87,10 +87,10 @@ func TestEmartRegionInfo(t *testing.T) {
 
 func TestEmartStoreNames(t *testing.T) {
 	cases := []struct {
-		name           string
-		storeName      string
-		wantShortCode  string
-		wantFullName   string
+		name          string
+		storeName     string
+		wantShortCode string
+		wantFullName  string
 	}{
 		{"EMART GO VAP -> PVT", "EMART GO VAP", "PVT", "SIÊU THỊ EMART PHAN VĂN TRỊ"},
 		{"EMART PHI -> PHI", "EMART PHI", "PHI", "SIÊU THỊ EMART PHAN HUY ÍCH"},

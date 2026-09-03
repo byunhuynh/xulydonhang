@@ -11,6 +11,7 @@ import (
 	"order-processor/internal/processing/coop"
 	"order-processor/internal/processing/excelwriter"
 	"order-processor/internal/processing/productdata"
+	"order-processor/internal/processing/warehouse"
 )
 
 // coopDebtDays is songayno_MT in xulydonhang.py — one global constant,
@@ -138,11 +139,11 @@ var xPlus1Pattern = regexp.MustCompile(`(\d+)\s*\+\s*1`)
 // branch (see bigc_processor.go's own bigcRegionInfo, which does NOT
 // call this function — extending this one instead would silently change
 // Satra's already-shipped "MN_MT_*" codes' resolved warehouse).
-func regionInfo(customerCode string) (region, statCode, warehouse string) {
+func regionInfo(customerCode string, wh *warehouse.Resolver) (region, statCode, warehouseCode string) {
 	if strings.HasPrefix(customerCode, "MB") {
-		return "MT_MB", "HN", "TP_HN_12"
+		return "MT_MB", "HN", wh.Get("chung/MB")
 	}
-	return "MT_MN", "LA", "LA_TP"
+	return "MT_MN", "LA", wh.Get("chung/khac")
 }
 
 // closeEnough quyết định một dòng sản phẩm có "đúng giá" hay không:

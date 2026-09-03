@@ -16,6 +16,7 @@ import (
 	"order-processor/internal/processing/pricing"
 	"order-processor/internal/processing/productdata"
 	"order-processor/internal/processing/vendor"
+	"order-processor/internal/processing/warehouse"
 )
 
 // PricingSource abstracts fetching a vendor's price/promotion data for
@@ -33,9 +34,13 @@ type PricingSource interface {
 // OrderRow explaining why, rather than being silently skipped — support
 // for additional vendors is added by extending this same dispatch.
 type RealProcessor struct {
-	Store       *productdata.Store
-	Pricing     PricingSource
-	ExcelPath   string
+	Store     *productdata.Store
+	Pricing   PricingSource
+	ExcelPath string
+	// Warehouses cấp mã kho (cột V) cho từng nhánh vendor, lấy từ Cài
+	// đặt. Nil hợp lệ và có nghĩa "dùng mã xuất xưởng" — xem
+	// warehouse.Resolver.Get.
+	Warehouses  *warehouse.Resolver
 	DriveClient *http.Client // driveupload.NewHTTPClient() in production
 	LogFunc     func(string) // optional (nil-safe) - routes background upload results to "process:log"
 }
@@ -351,7 +356,7 @@ func (p *RealProcessor) processSegment(filePath string, realPageNum int, text, p
 		return OrderRow{}, fmt.Errorf("không tải được giá/khuyến mãi: %w", err)
 	}
 
-	region, statCode, warehouse := regionInfo(customerCode)
+	region, statCode, warehouse := regionInfo(customerCode, p.Warehouses)
 	description := fmt.Sprintf("%s PO%s", system, info.PONumber)
 	if notes != "" {
 		description += " - " + notes

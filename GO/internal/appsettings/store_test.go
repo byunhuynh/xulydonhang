@@ -218,3 +218,37 @@ func TestStore_Load_MigrateTừIniCũVẫnTrảMapMisaKhôngNil(t *testing.T) {
 	// Ghi được vào map mà không panic.
 	settings.MisaRouting["Lotte"] = "htla"
 }
+
+// TestStore_WarehouseGroupRoundTrips covers the settings group holding the
+// per-vendor warehouse codes (cột V của dondathang.xlsx). It is a plain
+// map[string]string like every other group so the Cài đặt popup can reuse
+// the same editor shape.
+func TestStore_WarehouseGroupRoundTrips(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "settings.bhconfig")
+	store := NewStore(path)
+
+	if err := store.Save(Settings{Warehouse: map[string]string{"tmdt/HN": "TP_HN_14"}}); err != nil {
+		t.Fatalf("Save returned error: %v", err)
+	}
+	settings, err := store.Load("")
+	if err != nil {
+		t.Fatalf("Load returned error: %v", err)
+	}
+	if settings.Warehouse["tmdt/HN"] != "TP_HN_14" {
+		t.Errorf("Warehouse[tmdt/HN] = %q, want %q", settings.Warehouse["tmdt/HN"], "TP_HN_14")
+	}
+}
+
+// TestStore_WarehouseIsNeverNil guards the frontend contract the other
+// groups already rely on: a nil map marshals to JSON "null", and the
+// settings popup renders a table from an object.
+func TestStore_WarehouseIsNeverNil(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "settings.bhconfig")
+	settings, err := NewStore(path).Load("")
+	if err != nil {
+		t.Fatalf("Load returned error: %v", err)
+	}
+	if settings.Warehouse == nil {
+		t.Error("Warehouse is nil, want an empty map")
+	}
+}

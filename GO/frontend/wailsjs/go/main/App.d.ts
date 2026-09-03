@@ -36,3 +36,5 @@ export function SelectFiles():Promise<Array<string>>;
 export function SendZaloMessages(arg1:Array<main.ZaloJob>):Promise<void>;
 
 export function UpdateJITPeriod(arg1:Array<number>,arg2:string,arg3:string,arg4:string):Promise<void>;
+
+export function WarehouseOptions():Promise<Array<main.WarehouseInfo>>;

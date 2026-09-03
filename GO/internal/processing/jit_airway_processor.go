@@ -12,6 +12,7 @@ import (
 	"order-processor/internal/processing/coop"
 	"order-processor/internal/processing/excelwriter"
 	"order-processor/internal/processing/productdata"
+	"order-processor/internal/processing/warehouse"
 )
 
 var (
@@ -41,11 +42,11 @@ type jitAirWaybillPageResult struct {
 	productLogs []string
 }
 
-func jitRegionInfo(shipTo string) (region, statCode, warehouse string) {
+func jitRegionInfo(shipTo string, wh *warehouse.Resolver) (region, statCode, warehouseCode string) {
 	if shipTo == "WH6_HN" || shipTo == "WH6_HTLA" {
-		return "TMĐT_MB", "HN", "TP_HN_12"
+		return "TMĐT_MB", "HN", wh.Get("jit/MB")
 	}
-	return "TMĐT_MN", "LA", "LA_KHOTMDT"
+	return "TMĐT_MN", "LA", wh.Get("jit/khac")
 }
 
 func parseJITAirWaybillFilename(path string) (warehouse, orderDate string, ok bool) {
@@ -201,7 +202,7 @@ func (p *RealProcessor) processJITAirWaybillDocument(filePath, warehouseCode, or
 	dateDescription := fmt.Sprintf("%s (%s)", orderDate, period)
 	orderNumber := fmt.Sprintf("ĐĐHJIT-%s-%s", dateDescription, warehouseCode)
 	description := fmt.Sprintf("JIT-CHOICE Ngày đổ %s %s", dateDescription, warehouseCode)
-	region, statCode, warehouse := jitRegionInfo(warehouseCode)
+	region, statCode, warehouse := jitRegionInfo(warehouseCode, p.Warehouses)
 
 	result := make([]OrderRow, len(texts))
 	pending := make([]jitAirWaybillPageResult, 0, len(texts))

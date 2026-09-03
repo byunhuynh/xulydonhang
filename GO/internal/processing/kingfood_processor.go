@@ -12,6 +12,7 @@ import (
 	"order-processor/internal/processing/coop"
 	"order-processor/internal/processing/excelwriter"
 	"order-processor/internal/processing/kingfood"
+	"order-processor/internal/processing/warehouse"
 )
 
 // kingfoodCustomerCode mirrors write_to_dondathang_kingfood's default/
@@ -37,14 +38,14 @@ const kingfoodDeliveryAddress = "Số 324, đường ĐT743A, Phường Đông H
 // "MN_MT_JM0001" — but this is modeled as a full 3-branch function
 // anyway, matching the fujimartRegionInfo/winmartRegionInfo precedent,
 // for architectural consistency.
-func kingfoodRegionInfo(customerCode string) (region, statCode, warehouse string) {
+func kingfoodRegionInfo(customerCode string, wh *warehouse.Resolver) (region, statCode, warehouseCode string) {
 	switch {
 	case strings.HasPrefix(customerCode, "MB"):
-		return "MT_MB", "HN", "TP_HN_12"
+		return "MT_MB", "HN", wh.Get("kingfood/MB")
 	case customerCode == "MN_MT_JM0001":
-		return "MT_MN", "LA", "LA_TP"
+		return "MT_MN", "LA", wh.Get("kingfood/MN_MT_JM0001")
 	default:
-		return "MT_MN", "LA", "LA_KHO2026"
+		return "MT_MN", "LA", wh.Get("kingfood/khac")
 	}
 }
 
@@ -95,7 +96,7 @@ func (p *RealProcessor) processKingfoodSegment(filePath string, realPageNum int,
 		return OrderRow{}, fmt.Errorf("không tải được giá/khuyến mãi: %w", err)
 	}
 
-	region, statCode, warehouse := kingfoodRegionInfo(kingfoodCustomerCode)
+	region, statCode, warehouse := kingfoodRegionInfo(kingfoodCustomerCode, p.Warehouses)
 	orderNum := kingfoodOrderNumber(poNumber)
 	description := fmt.Sprintf("KINGFOOD %s", poNumber)
 

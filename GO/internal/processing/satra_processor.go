@@ -116,7 +116,7 @@ func (p *RealProcessor) processSatraSegment(filePath string, realPageNum int, te
 		return OrderRow{}, fmt.Errorf("không tải được giá/khuyến mãi: %w", err)
 	}
 
-	region, statCode, warehouse := regionInfo(customerCode)
+	region, statCode, warehouse := regionInfo(customerCode, p.Warehouses)
 	// titleText mirrors write_to_dondathang_satra's `S{current_row}`
 	// value on the header/note row (xulydonhang.py:2391):
 	// f"{vendor} {po_number}" — no khonggiaothu7 suffix, ever.

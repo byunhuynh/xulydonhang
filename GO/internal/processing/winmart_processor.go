@@ -10,6 +10,7 @@ import (
 	"order-processor/internal/pdfpage"
 	"order-processor/internal/processing/coop"
 	"order-processor/internal/processing/excelwriter"
+	"order-processor/internal/processing/warehouse"
 	"order-processor/internal/processing/winmart"
 )
 
@@ -28,14 +29,14 @@ import (
 // with "MB", so the MB branch could never have produced this case's
 // result in the first place, and checking the exact match first vs.
 // last cannot change the outcome for any real customer code.
-func winmartRegionInfo(customerCode string) (region, statCode, warehouse string) {
+func winmartRegionInfo(customerCode string, wh *warehouse.Resolver) (region, statCode, warehouseCode string) {
 	switch {
 	case customerCode == "MN_MT_WIN1326":
-		return "MT_MN", "DN", "TP_DN_1"
+		return "MT_MN", "DN", wh.Get("winmart/MN_MT_WIN1326")
 	case strings.HasPrefix(customerCode, "MB"):
-		return "MT_MB", "HN", "TP_HN_12"
+		return "MT_MB", "HN", wh.Get("winmart/MB")
 	default:
-		return "MT_MN", "LA", "LA_KHO2026"
+		return "MT_MN", "LA", wh.Get("winmart/khac")
 	}
 }
 
@@ -136,7 +137,7 @@ func (p *RealProcessor) processWinmartSegment(filePath string, realPageNum int, 
 		return OrderRow{}, fmt.Errorf("không tải được giá/khuyến mãi: %w", err)
 	}
 
-	region, statCode, warehouse := winmartRegionInfo(customerCode)
+	region, statCode, warehouse := winmartRegionInfo(customerCode, p.Warehouses)
 	orderNum := winmartOrderNumber(poNumber)
 
 	// diengiai (xulydonhang.py:4255-4258): built from po_number AFTER the

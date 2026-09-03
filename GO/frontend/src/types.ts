@@ -68,4 +68,5 @@ export interface AppSettings {
   haravan: Record<string, string>
   misa: Record<string, string>
   misa_routing: Record<string, string>
+  warehouse: Record<string, string>
 }

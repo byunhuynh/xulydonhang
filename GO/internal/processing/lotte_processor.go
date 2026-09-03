@@ -87,7 +87,7 @@ func (p *RealProcessor) processLotteSegment(filePath string, realPageNum int, te
 		return OrderRow{}, fmt.Errorf("không tải được giá/khuyến mãi: %w", err)
 	}
 
-	region, statCode, warehouse := regionInfo(customerCode)
+	region, statCode, warehouse := regionInfo(customerCode, p.Warehouses)
 	description := fmt.Sprintf("LOTTE PO%s", info.PONumber)
 
 	var rows []excelwriter.Row

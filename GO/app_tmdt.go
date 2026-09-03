@@ -330,7 +330,7 @@ func (a *App) processTMDTFile(emitter Emitter, path string, rng TMDTDateRange, e
 	}
 
 	namer := a.tmdtProductNamer()
-	res := tmdt.Build(lines, tables, tmdt.Options{ProductName: namer})
+	res := tmdt.Build(lines, tables, tmdt.Options{ProductName: namer, Warehouses: a.warehouseResolver()})
 
 	if len(res.Missing) > 0 {
 		// Dọn phản hồi lạc còn sót lại (file TMĐT trước vừa hết hạn giờ
@@ -372,7 +372,7 @@ func (a *App) processTMDTFile(emitter Emitter, path string, rng TMDTDateRange, e
 				if err != nil {
 					return fail("không nạp lại được bảng tra cứu: %v", err)
 				}
-				res = tmdt.Build(lines, tables, tmdt.Options{ProductName: namer})
+				res = tmdt.Build(lines, tables, tmdt.Options{ProductName: namer, Warehouses: a.warehouseResolver()})
 			}
 		}
 	}

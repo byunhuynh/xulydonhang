@@ -317,7 +317,7 @@ func TestJITRegionInfoRoutesNorthernAndSouthernWarehouses(t *testing.T) {
 		{"WH6_HCM", "TMĐT_MN", "LA", "LA_KHOTMDT"},
 	}
 	for _, tc := range cases {
-		region, stat, warehouse := jitRegionInfo(tc.shipTo)
+		region, stat, warehouse := jitRegionInfo(tc.shipTo, nil)
 		if region != tc.wantRegion || stat != tc.wantStat || warehouse != tc.wantWarehouse {
 			t.Errorf("jitRegionInfo(%q) = (%q,%q,%q), want (%q,%q,%q)", tc.shipTo, region, stat, warehouse, tc.wantRegion, tc.wantStat, tc.wantWarehouse)
 		}

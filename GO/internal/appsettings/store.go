@@ -35,6 +35,12 @@ type Settings struct {
 	// trong code chỉ điền vào chỗ trống, không bao giờ ghi đè, để sửa
 	// hằng số ở bản sau không xê dịch một cài đặt nào đang chạy.
 	MisaRouting map[string]string `json:"misa_routing"`
+	// Warehouse ánh xạ khoá nhánh vendor -> mã kho ghi vào cột V của
+	// dondathang.xlsx, ví dụ "bigc/MN_MT" -> "LA_KHO2026". Khoá do
+	// warehouse.Branches sinh ra. Cũng là NGUỒN CHÂN LÝ như MisaRouting:
+	// bảng gieo trong code chỉ điền chỗ trống, không bao giờ ghi đè, để
+	// sửa hằng số ở bản sau không xê dịch kho của một nhánh nào đang chạy.
+	Warehouse map[string]string `json:"warehouse"`
 }
 
 // Store đọc/ghi Settings từ 1 file JSON đuôi .bhconfig (không phải
@@ -125,5 +131,8 @@ func ensureMaps(s *Settings) {
 	}
 	if s.MisaRouting == nil {
 		s.MisaRouting = map[string]string{}
+	}
+	if s.Warehouse == nil {
+		s.Warehouse = map[string]string{}
 	}
 }

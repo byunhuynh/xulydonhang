@@ -6,9 +6,10 @@ import { useAppStore } from '../store/appStore'
 import type { AppSettings } from '../types'
 import { KeyValueEditor } from './KeyValueEditor'
 import { MisaRoutingEditor } from './MisaRoutingEditor'
+import { WarehouseEditor } from './WarehouseEditor'
 import { useModalEntrance } from '../lib/useModalEntrance'
 
-type SettingsTab = 'gid' | 'zalo' | 'reminder' | 'haravan' | 'misa' | 'misaRouting'
+type SettingsTab = 'gid' | 'zalo' | 'reminder' | 'haravan' | 'misa' | 'misaRouting' | 'warehouse'
 
 interface SettingsModalProps {
   onClose: () => void
@@ -59,6 +60,7 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
     { key: 'haravan', label: 'Haravan (TMĐT)' },
     { key: 'misa', label: 'MISA' },
     { key: 'misaRouting', label: 'MISA – Nhánh' },
+    { key: 'warehouse', label: 'Kho' },
   ]
 
   return (
@@ -150,6 +152,12 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
             <MisaRoutingEditor
               entries={settings.misa_routing}
               onChange={(misa_routing) => setSettings({ ...settings, misa_routing })}
+            />
+          )}
+          {tab === 'warehouse' && (
+            <WarehouseEditor
+              entries={settings.warehouse}
+              onChange={(warehouse) => setSettings({ ...settings, warehouse })}
             />
           )}
         </div>

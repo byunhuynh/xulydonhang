@@ -11,6 +11,7 @@ import (
 	"order-processor/internal/processing/coop"
 	"order-processor/internal/processing/excelwriter"
 	"order-processor/internal/processing/fujimart"
+	"order-processor/internal/processing/warehouse"
 )
 
 // fujimartCustomerCode mirrors write_to_dondathang_fujimart's default/
@@ -29,11 +30,11 @@ const fujimartCustomerCode = "MB_MT_FUJI"
 // regionInfo() (processor_shared.go): that function's non-MB branch
 // returns warehouse "LA_TP", but FujiMart's real non-MB warehouse is
 // "LA_KHO2026" — the same divergence already handled for Winmart/Emart.
-func fujimartRegionInfo(customerCode string) (region, statCode, warehouse string) {
+func fujimartRegionInfo(customerCode string, wh *warehouse.Resolver) (region, statCode, warehouseCode string) {
 	if strings.HasPrefix(customerCode, "MB") {
-		return "MT_MB", "HN", "TP_HN_12"
+		return "MT_MB", "HN", wh.Get("fujimart/MB")
 	}
-	return "MT_MN", "LA", "LA_KHO2026"
+	return "MT_MN", "LA", wh.Get("fujimart/khac")
 }
 
 // fujimartOrderNumber mirrors write_to_dondathang_fujimart's order-
@@ -67,7 +68,7 @@ func (p *RealProcessor) processFujimartSegment(filePath string, realPageNum int,
 		return OrderRow{}, fmt.Errorf("không tải được giá/khuyến mãi: %w", err)
 	}
 
-	region, statCode, warehouse := fujimartRegionInfo(fujimartCustomerCode)
+	region, statCode, warehouse := fujimartRegionInfo(fujimartCustomerCode, p.Warehouses)
 	orderNum := fujimartOrderNumber(poNumber)
 	description := fmt.Sprintf("FUJIMART PO%s", poNumber)
 

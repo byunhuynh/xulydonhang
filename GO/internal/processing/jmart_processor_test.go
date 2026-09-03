@@ -142,7 +142,7 @@ func TestJMartUsesKingfoodRegionInfoDirectly(t *testing.T) {
 	// exists in kingfood_processor.go specifically for JMart's sake,
 	// per that file's own doc comment) produces exactly what JMart's
 	// real hardcoded customer code needs.
-	region, statCode, warehouse := kingfoodRegionInfo(jmartCustomerCode)
+	region, statCode, warehouse := kingfoodRegionInfo(jmartCustomerCode, nil)
 	if region != "MT_MN" || statCode != "LA" || warehouse != "LA_TP" {
 		t.Errorf("kingfoodRegionInfo(%q) = (%q, %q, %q), want (\"MT_MN\", \"LA\", \"LA_TP\")",
 			jmartCustomerCode, region, statCode, warehouse)

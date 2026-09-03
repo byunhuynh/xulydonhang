@@ -7,6 +7,7 @@ export namespace appsettings {
 	    haravan: Record<string, string>;
 	    misa: Record<string, string>;
 	    misa_routing: Record<string, string>;
+	    warehouse: Record<string, string>;
 	
 	    static createFrom(source: any = {}) {
 	        return new Settings(source);
@@ -20,6 +21,7 @@ export namespace appsettings {
 	        this.haravan = source["haravan"];
 	        this.misa = source["misa"];
 	        this.misa_routing = source["misa_routing"];
+	        this.warehouse = source["warehouse"];
 	    }
 	}
 
@@ -97,6 +99,24 @@ export namespace main {
 	        this.combo = source["combo"];
 	        this.tp = source["tp"];
 	        this.sl = source["sl"];
+	    }
+	}
+	export class WarehouseInfo {
+	    key: string;
+	    label: string;
+	    code: string;
+	    default: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new WarehouseInfo(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.key = source["key"];
+	        this.label = source["label"];
+	        this.code = source["code"];
+	        this.default = source["default"];
 	    }
 	}
 	export class ZaloJob {

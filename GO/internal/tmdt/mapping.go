@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"order-processor/internal/processing/excelwriter"
+	"order-processor/internal/processing/warehouse"
 	"order-processor/internal/tmdt/lookup"
 )
 
@@ -96,6 +97,9 @@ type Options struct {
 	// ProductName tra tên hàng theo mã thành phẩm (cột S). Bản thật truyền
 	// productdata.Store.GetProductInfo; nil thì để trống tên hàng.
 	ProductName func(tp string) string
+	// Warehouses cấp mã kho TMĐT (cột V) lấy từ Cài đặt. Nil hợp lệ và
+	// có nghĩa "dùng mã xuất xưởng" — xem warehouse.Resolver.Get.
+	Warehouses *warehouse.Resolver
 }
 
 type Result struct {
@@ -142,12 +146,14 @@ func ChannelLabel(raw string) string {
 //
 // Mã kho đổi ngày 27/08/2026 theo yêu cầu người dùng: TP_HN_12 → TP_HN_13,
 // LA_KHOTMDT → LA_TP. Chỉ nhánh TMĐT đổi; nhánh JIT (jit_airway_processor.go)
-// và các vendor bán lẻ vẫn giữ mã cũ của họ.
-func warehouseOf(khoBan string) (shipTo, maKho, maDonVi string) {
+// và các vendor bán lẻ vẫn giữ mã cũ của họ. Chính lần đó là lý do hai mã
+// này giờ nằm trong Cài đặt (warehouse.Branches "tmdt/HN" và "tmdt/khac")
+// thay vì trong code — wh nil nghĩa là dùng mã xuất xưởng ghi ở đó.
+func warehouseOf(khoBan string, wh *warehouse.Resolver) (shipTo, maKho, maDonVi string) {
 	if strings.EqualFold(strings.TrimSpace(khoBan), "Kho Hà Nội") {
-		return "HN", "TP_HN_13", "TMĐT_MB"
+		return "HN", wh.Get("tmdt/HN"), "TMĐT_MB"
 	}
-	return "LA", "LA_TP", "TMĐT_MN"
+	return "LA", wh.Get("tmdt/khac"), "TMĐT_MN"
 }
 
 func Build(lines []OrderLine, tables *lookup.Tables, opt Options) Result {
@@ -242,7 +248,7 @@ func Build(lines []OrderLine, tables *lookup.Tables, opt Options) Result {
 // nó vào Result.NoComponent để không còn đường bỏ dòng âm thầm nào.
 func orderRowsFor(line OrderLine, sheet SheetRow, opt Options) ([]excelwriter.TMDTRow, string) {
 	channel := ChannelLabel(line.KenhBanHang)
-	shipTo, maKho, maDonVi := warehouseOf(line.KhoBan)
+	shipTo, maKho, maDonVi := warehouseOf(line.KhoBan, opt.Warehouses)
 	date := line.CreatedAt.Format("02/01/2006")
 	desc := fmt.Sprintf("TMĐT-%s - %s - %s - Ngày đổ %s - %s",
 		channel, sheet.Shop, line.OrderCode, date, shipTo)

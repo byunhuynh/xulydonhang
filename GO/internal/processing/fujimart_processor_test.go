@@ -59,8 +59,8 @@ func TestRealProcessor_ProcessesRealSampleFujiMartFile(t *testing.T) {
 
 func TestFujimartRegionInfo(t *testing.T) {
 	cases := []struct {
-		name                                     string
-		customerCode                             string
+		name                                    string
+		customerCode                            string
 		wantRegion, wantStatCode, wantWarehouse string
 	}{
 		{
@@ -80,7 +80,7 @@ func TestFujimartRegionInfo(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			gotRegion, gotStatCode, gotWarehouse := fujimartRegionInfo(tc.customerCode)
+			gotRegion, gotStatCode, gotWarehouse := fujimartRegionInfo(tc.customerCode, nil)
 			if gotRegion != tc.wantRegion || gotStatCode != tc.wantStatCode || gotWarehouse != tc.wantWarehouse {
 				t.Errorf("fujimartRegionInfo(%q) = (%q, %q, %q), want (%q, %q, %q)",
 					tc.customerCode, gotRegion, gotStatCode, gotWarehouse,

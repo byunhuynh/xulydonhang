@@ -11,6 +11,7 @@ import (
 	"github.com/xuri/excelize/v2"
 	"order-processor/internal/processing/pricing"
 	"order-processor/internal/processing/productdata"
+	"order-processor/internal/processing/warehouse"
 )
 
 type failAfterFirstStreamPricingSource struct {
@@ -698,5 +699,61 @@ func TestRealProcessor_CfOnlyInvoicePromotionIsSkippedForCoopmart(t *testing.T) 
 		if colSKU < len(row) && row[colSKU] == "SP0001" {
 			t.Fatal("found the invoice-level SP0001 gift row, want none (that CTKM is Coopfood-only)")
 		}
+	}
+}
+
+// TestRealProcessor_WritesTheConfiguredWarehouseCode proves the setting
+// reaches the workbook, not just the branching function: RealProcessor
+// carries the resolver and every regionInfo call site has to pass it, or
+// the Cài đặt table would look like it worked while column V kept the old
+// code.
+func TestRealProcessor_WritesTheConfiguredWarehouseCode(t *testing.T) {
+	store, err := productdata.Load("productdata/testdata/data.xlsx")
+	if err != nil {
+		t.Fatalf("Load productdata failed: %v", err)
+	}
+	excelPath := copyTestWorkbookForProcessor(t)
+
+	priceCsv := [][]string{
+		{"STT", "Mã hàng", "Tên", "Giá", "1/1-31/12"},
+		{"1", "3564270", "Nước giặt", "33726", ""},
+	}
+	rp := &RealProcessor{
+		Store:      store,
+		Pricing:    &fixturePricingSource{index: pricing.ParseIndex(priceCsv)},
+		ExcelPath:  excelPath,
+		Warehouses: warehouse.NewResolver(map[string]string{"chung/khac": "LA_KHO_MOI"}),
+	}
+	if _, err := rp.Process(context.Background(), "testdata/sample_coop_order.pdf"); err != nil {
+		t.Fatalf("Process returned error: %v", err)
+	}
+
+	f, err := excelize.OpenFile(excelPath)
+	if err != nil {
+		t.Fatalf("failed reopening written workbook: %v", err)
+	}
+	defer f.Close()
+	sheetRows, err := f.GetRows("Don dat hang")
+	if err != nil {
+		t.Fatalf("failed reading Don dat hang rows: %v", err)
+	}
+
+	const colSKU, colWarehouse = 16, 21 // Q and V
+	found := false
+	for _, row := range sheetRows {
+		if colSKU >= len(row) || row[colSKU] != "3564270" {
+			continue
+		}
+		found = true
+		got := ""
+		if colWarehouse < len(row) {
+			got = row[colWarehouse]
+		}
+		if got != "LA_KHO_MOI" {
+			t.Errorf("column V = %q, want the configured %q", got, "LA_KHO_MOI")
+		}
+	}
+	if !found {
+		t.Fatal("no product row written for the order")
 	}
 }

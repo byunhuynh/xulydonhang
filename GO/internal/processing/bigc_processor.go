@@ -12,6 +12,7 @@ import (
 	"order-processor/internal/processing/coop"
 	"order-processor/internal/processing/excelwriter"
 	"order-processor/internal/processing/pricing"
+	"order-processor/internal/processing/warehouse"
 )
 
 // bigcRegionInfo mirrors the kho/khuvuc/mien branching inline in
@@ -33,16 +34,16 @@ import (
 // branch's values defensively rather than panicking, since panicking
 // mid-file would abort every remaining store page's processing for no
 // evidence-backed reason.
-func bigcRegionInfo(customerCode string) (region, statCode, warehouse string) {
+func bigcRegionInfo(customerCode string, wh *warehouse.Resolver) (region, statCode, warehouseCode string) {
 	switch {
 	case strings.HasPrefix(customerCode, "MB"):
-		return "MT_MB", "HN", "TP_HN_12"
+		return "MT_MB", "HN", wh.Get("bigc/MB")
 	case strings.HasPrefix(customerCode, "MN_MT"):
-		return "MT_MN", "LA", "LA_KHO2026"
+		return "MT_MN", "LA", wh.Get("bigc/MN_MT")
 	case strings.HasPrefix(customerCode, "MN_GC"):
-		return "MT_MN", "LA", "LA_TP"
+		return "MT_MN", "LA", wh.Get("bigc/MN_GC")
 	default:
-		return "MT_MN", "LA", "LA_TP"
+		return "MT_MN", "LA", wh.Get("bigc/MN_GC")
 	}
 }
 
@@ -99,7 +100,7 @@ func (p *RealProcessor) processBigcDocument(filePath string, pageTexts []string,
 	}
 	priceList := bigc.ExtractPriceList(pageTexts[0])
 	customerCode, deliveryWarehouse := bigc.ResolveCustomerCode(pageTexts[0])
-	region, statCode, warehouse := bigcRegionInfo(customerCode)
+	region, statCode, warehouse := bigcRegionInfo(customerCode, p.Warehouses)
 	orderNum := bigcOrderNumber(poNumber)
 	description := fmt.Sprintf("BIGC PO%s", poNumber)
 

@@ -132,7 +132,7 @@ func (p *RealProcessor) processManualEntryOrder(filePath, po string, lines []man
 		return OrderRow{}, fmt.Errorf("không tải được giá/khuyến mãi cho hệ thống %q: %w", system, err)
 	}
 
-	region, statCode, warehouse := regionInfo(customerCode)
+	region, statCode, warehouse := regionInfo(customerCode, p.Warehouses)
 	orderNumber := manualEntryOrderNumber(vendorKey, po)
 	// KHÔNG đánh dấu "(nhập tay)" ở đây - theo yêu cầu thực tế, dòng tiêu
 	// đề (S) và Description (L) trong dondathang.xlsx phải trông y hệt

@@ -12,6 +12,7 @@ import (
 	"order-processor/internal/processing/coop"
 	"order-processor/internal/processing/emart"
 	"order-processor/internal/processing/excelwriter"
+	"order-processor/internal/processing/warehouse"
 )
 
 // emartCustomerCode mirrors write_to_dondathang_emart's default/only
@@ -49,11 +50,11 @@ var emartStoreFullName = map[string]string{
 // (processor_shared.go): that function's non-MB branch returns warehouse
 // "LA_TP", but Emart's real non-MB warehouse is "LA_KHO2026" — the same
 // divergence already handled for Winmart/BigC.
-func emartRegionInfo(customerCode string) (region, statCode, warehouse string) {
+func emartRegionInfo(customerCode string, wh *warehouse.Resolver) (region, statCode, warehouseCode string) {
 	if strings.HasPrefix(customerCode, "MB") {
-		return "MT_MB", "HN", "TP_HN_12"
+		return "MT_MB", "HN", wh.Get("emart/MB")
 	}
-	return "MT_MN", "LA", "LA_KHO2026"
+	return "MT_MN", "LA", wh.Get("emart/khac")
 }
 
 // emartOrderNumber mirrors write_to_dondathang_emart's order-number field
@@ -108,7 +109,7 @@ func (p *RealProcessor) processEmartSegment(filePath string, realPageNum int, te
 		return OrderRow{}, fmt.Errorf("không tải được giá/khuyến mãi: %w", err)
 	}
 
-	region, statCode, warehouse := emartRegionInfo(emartCustomerCode)
+	region, statCode, warehouse := emartRegionInfo(emartCustomerCode, p.Warehouses)
 	orderNum := emartOrderNumber(poNumber)
 	description := fmt.Sprintf("EMART PO%s", poNumber)
 	shortCode, fullStoreName := emartStoreNames(storeName)
