@@ -81,6 +81,13 @@ func Load(path string) ([]Line, error) {
 		return nil, fmt.Errorf("manualentry: đọc sheet %q: %w", SheetName, err)
 	}
 
+	// Rất hiếm, nhưng workbook có thể dùng hệ ngày 1904 (mặc định cũ của
+	// Excel bản Mac) - lệch 4 năm nếu quy đổi số sê-ri bằng hệ 1900.
+	date1904 := false
+	if props, propsErr := f.GetWorkbookProps(); propsErr == nil && props.Date1904 != nil {
+		date1904 = *props.Date1904
+	}
+
 	cell := func(row []string, idx int) string {
 		if idx < len(row) {
 			return strings.TrimSpace(row[idx])
@@ -103,8 +110,8 @@ func Load(path string) ([]Line, error) {
 		}
 		lines = append(lines, Line{
 			PO:           po,
-			EntryDate:    cell(row, 1),
-			CancelDate:   cell(row, 2),
+			EntryDate:    dateCell(cell(row, 1), date1904),
+			CancelDate:   dateCell(cell(row, 2), date1904),
 			System:       cell(row, 3),
 			CustomerCode: cell(row, 4),
 			ShipTo:       cell(row, 5),
@@ -114,4 +121,34 @@ func Load(path string) ([]Line, error) {
 		})
 	}
 	return lines, nil
+}
+
+// maxExcelSerial là 31/12/9999 trong hệ ngày 1900 - số sê-ri lớn nhất
+// chính Excel còn chấp nhận là một ngày.
+const maxExcelSerial = 2958465
+
+// dateCell đổi ô ngày về đúng chuỗi "DD/MM/YYYY" mà cả pipeline dùng.
+//
+// Load đọc với RawCellValue (bắt buộc, xem ghi chú ở trên: nếu không Số
+// lượng/Đơn giá sẽ bị làm tròn theo định dạng hiển thị) - và chính vì
+// thế, ô nào người dùng để Excel tự nhận là NGÀY sẽ trả về số sê-ri thô
+// ("46235") chứ không phải "01/08/2026". Một giá trị đó làm hỏng hai
+// chỗ cùng lúc: nó được ghi thẳng vào cột Ngày đặt/Hạn giao của
+// dondathang.xlsx, và nó chính là timeToCheck mà
+// pricing.isWithinDateRange đem so với tên cột CTKM - số sê-ri không
+// khớp cột "D/M-D/M" nào cả, nên đơn IM LẶNG không được áp CTKM nào.
+//
+// Ô người dùng gõ tay dạng chữ ("01/08/2026") vốn đã đúng nên trả
+// nguyên, ô rỗng cũng vậy: chỉ số nằm trong khoảng sê-ri hợp lệ mới quy
+// đổi, nên một số gõ nhầm kiểu "1082026" không bị biến thành ngày.
+func dateCell(raw string, date1904 bool) string {
+	serial, err := strconv.ParseFloat(raw, 64)
+	if err != nil || serial < 1 || serial > maxExcelSerial {
+		return raw
+	}
+	t, err := excelize.ExcelDateToTime(serial, date1904)
+	if err != nil {
+		return raw
+	}
+	return t.Format("02/01/2006")
 }
