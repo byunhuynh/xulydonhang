@@ -2,6 +2,7 @@ package processing
 
 import (
 	"fmt"
+	"math"
 	"sort"
 	"strings"
 	"unicode/utf8"
@@ -183,9 +184,42 @@ func extractPageTextRaw(page pdf.Page) (string, error) {
 	// page that decodes cleanly today, so no already-working vendor's
 	// output can move: a self-contradictory CMap alone is not enough,
 	// something must actually have failed to decode as well.
+	var correctedRunTables map[string]map[byte]rune
 	if isGarbledText(text) || (strings.ContainsRune(text, utf8.RuneError) && pageHasSelfContradictoryCmap(page)) {
 		if corrected, ok := extractPageTextViaCorrectedCmap(page); ok {
-			return corrected, nil
+			// Every other vendor needing this fallback (FujiMart, Maxidi)
+			// is done here, byte for byte as before. Coop's own generator
+			// is not: it positions each visual row with Td/Tm inside ONE
+			// BT block, and this fallback breaks lines only on BT/T* —
+			// so a page like 103823984-00 comes back with correct
+			// characters but all six of its product rows on a single
+			// line, which coop.ExtractProducts (it anchors on lines
+			// carrying a SKU) then reads as ONE product, pairing the
+			// first SKU with the last row's cost. Let such a page fall
+			// through to the same line-count divergence check the
+			// non-garbled path already runs, carrying the tables so the
+			// reconstruction can decode the positioned runs correctly.
+			if !isCoopGeneratedPage(corrected) {
+				return corrected, nil
+			}
+			// Only the "rows glued together" shape is worth distrusting,
+			// i.e. materially FEWER lines than the page really has. The
+			// opposite divergence — corrected text carrying spurious
+			// EXTRA breaks — parses fine and must be left alone: real
+			// archived 103346096-00 comes back from this fallback with
+			// 210 newlines against 32 true rows and every one of its
+			// golden-fixture cells correct, while reconstructing it
+			// instead loses word spacing ("Co.opMartBaoLoc") and
+			// scrambles its quantities. So this is deliberately NOT the
+			// symmetric |diff| > tolerance test used further down.
+			trueLines := trueVisualLineCount(page)
+			if trueLines == 0 || strings.Count(corrected, "\n") >= trueLines-lineCountDivergenceTolerance {
+				return corrected, nil
+			}
+			text = corrected
+			if byResource, ok := correctedFontTables(page); ok {
+				correctedRunTables = correctedTablesByRunFont(page, byResource)
+			}
 		}
 	}
 	nl := strings.Count(text, "\n")
@@ -234,7 +268,11 @@ func extractPageTextRaw(page pdf.Page) (string, error) {
 		// absolute terms). Fall through to the same reconstruction attempt
 		// and safety net used below.
 	}
-	reconstructed, ok := reconstructLinesFromContent(page)
+	runs := page.Content().Text
+	if correctedRunTables != nil {
+		runs = redecodeRuns(runs, correctedRunTables)
+	}
+	reconstructed, ok := reconstructLinesFromRuns(page, runs)
 	if !ok {
 		return text, nil
 	}
@@ -444,9 +482,8 @@ func clusterRowsByYIndexed(texts []pdf.Text) [][]indexedText {
 // times that median across every page sampled, so an 10x-median floor
 // leaves enormous margin in both directions without needing to know a
 // page's own absolute font size in advance.
-func reconstructRotatedPage(page pdf.Page, rotation int) string {
-	content := page.Content()
-	rotated := rotateForReading(content.Text, rotation)
+func reconstructRotatedPage(texts []pdf.Text, rotation int) string {
+	rotated := rotateForReading(texts, rotation)
 	rows := clusterRowsByYIndexed(rotated)
 	for _, items := range rows {
 		sort.SliceStable(items, func(i, j int) bool { return items[i].idx < items[j].idx })
@@ -548,15 +585,75 @@ func rotatedPageGapThreshold(rows [][]indexedText) float64 {
 // negative/zero gap between two runs already means they're touching,
 // e.g. mid-word kerning splits).
 func reconstructLinesFromContent(page pdf.Page) (string, bool) {
-	content := page.Content()
-	if len(content.Text) == 0 {
+	return reconstructLinesFromRuns(page, page.Content().Text)
+}
+
+// reconstructLinesFromRuns is reconstructLinesFromContent over runs the
+// caller supplies rather than page.Content()'s own. Split out for pages
+// whose CMap is broken: their runs carry the right coordinates but the
+// wrong characters, so extractPageText re-decodes them through
+// correctedFontTables first and passes the result here. The geometry —
+// rotation, row clustering, gap-to-space — is identical either way.
+func reconstructLinesFromRuns(page pdf.Page, texts []pdf.Text) (string, bool) {
+	if len(texts) == 0 {
 		return "", false
 	}
 
 	if rotation := pageRotation(page); rotation != 0 {
-		return reconstructRotatedPage(page, rotation), true
+		return reconstructRotatedPage(texts, rotation), true
 	}
-	return buildTextFromRows(clusterRowsByY(content.Text)), true
+	return buildTextFromRows(clusterRowsByY(texts)), true
+}
+
+// redecodeRuns replaces every run's text with the same bytes decoded
+// through the corrected per-font table (see correctedFontTables), leaving
+// its position untouched. A run whose font has no table, or whose text is
+// not raw single-byte codes, is passed through unchanged rather than
+// mangled.
+func redecodeRuns(texts []pdf.Text, byFont map[string]map[byte]rune) []pdf.Text {
+	out := make([]pdf.Text, len(texts))
+	copy(out, texts)
+	step := medianAdjacentStep(texts)
+	for i := range out {
+		// Runs the broken CMap decoded to U+000A need care. On
+		// 103823984-00 that code is the LETTER 'e', so re-decoding all of
+		// them restores "Vendor" and "Software" — but the page also
+		// carries 77 copies of the same code as layout artifacts (a
+		// second glyph drawn on a slot already taken) and one at the end
+		// of each visual row, and re-decoding those sprinkles a stray
+		// letter through the text ("Currency- VeND Viet Nam Dong"). The
+		// two are told apart by geometry, not by code: a real letter is
+		// followed by the next glyph exactly one step along, while an
+		// artifact's successor sits on the same spot and a row-ending
+		// marker's is a whole row away. Measured on this page, that rule
+		// selects exactly 47 runs — precisely the number of 'e'
+		// characters in the page's true text.
+		//
+		// An artifact keeps its U+000A so the row builders' existing skip
+		// still drops it, rather than teaching them a second rule for the
+		// same thing.
+		if out[i].S == "\n" && !advancesOneStep(texts, i, step) {
+			continue
+		}
+		table, ok := byFont[out[i].Font]
+		if !ok {
+			continue
+		}
+		var b strings.Builder
+		for _, r := range out[i].S {
+			if r > 0xFF {
+				b.WriteRune(r)
+				continue
+			}
+			if ch, ok := table[byte(r)]; ok {
+				b.WriteRune(ch)
+			} else {
+				b.WriteRune(utf8.RuneError)
+			}
+		}
+		out[i].S = b.String()
+	}
+	return out
 }
 
 // gapThreshold: points; separates real word gaps from touching/kerned
@@ -614,4 +711,41 @@ func buildTextFromRows(rows [][]pdf.Text) string {
 		b.WriteString("\n")
 	}
 	return b.String()
+}
+
+// medianAdjacentStep estimates one normal glyph step on a page: the
+// median distance between stream-adjacent text runs. A report page is
+// overwhelmingly ordinary character-after-character advances, so the
+// median lands on that step and ignores the artifacts and row jumps
+// mixed in. Same idea as rotatedPageGapThreshold's own median, kept
+// separate because that one measures gaps WITHIN an already-built row.
+func medianAdjacentStep(texts []pdf.Text) float64 {
+	if len(texts) < 2 {
+		return 0
+	}
+	steps := make([]float64, 0, len(texts)-1)
+	for i := 0; i+1 < len(texts); i++ {
+		steps = append(steps, math.Hypot(texts[i+1].X-texts[i].X, texts[i+1].Y-texts[i].Y))
+	}
+	sort.Float64s(steps)
+	return steps[len(steps)/2]
+}
+
+// stepTolerance: fraction of one normal step a real advance may differ
+// by. The measured spread on 103823984-00 is under 0.01% (every ordinary
+// step is 3.3612 to four decimals), so 10% is loose enough to survive a
+// page whose steps are less uniform while still nowhere near either
+// thing it must exclude: an artifact advances ~0, a row jump many steps.
+const stepTolerance = 0.1
+
+// advancesOneStep reports whether the run at i is followed by a glyph
+// exactly one normal step along — i.e. whether it occupies a slot of its
+// own in the text rather than being an artifact drawn on top of its
+// neighbour or a marker at the end of a row.
+func advancesOneStep(texts []pdf.Text, i int, step float64) bool {
+	if step <= 0 || i+1 >= len(texts) {
+		return false
+	}
+	d := math.Hypot(texts[i+1].X-texts[i].X, texts[i+1].Y-texts[i].Y)
+	return math.Abs(d-step) <= step*stepTolerance
 }

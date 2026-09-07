@@ -351,18 +351,9 @@ func extractPageTextViaCorrectedCmap(page pdf.Page) (result string, ok bool) {
 	if page.V.IsNull() || page.V.Key("Contents").Kind() == pdf.Null {
 		return "", false
 	}
-	fontNames := page.Fonts()
-	if len(fontNames) == 0 {
+	tables, ok := correctedFontTables(page)
+	if !ok {
 		return "", false
-	}
-	tables := make(map[string]map[byte]rune, len(fontNames))
-	for _, name := range fontNames {
-		font := page.Font(name)
-		table, ok := decodeSimpleFontCmap(font)
-		if !ok {
-			return "", false
-		}
-		tables[name] = table
 	}
 
 	var textBuilder strings.Builder
@@ -562,4 +553,48 @@ func pageHasSelfContradictoryCmap(page pdf.Page) (contradictory bool) {
 		}
 	}
 	return false
+}
+
+// correctedFontTables rebuilds every font-on-this-page's code->rune table
+// from its own bfrange/bfchar entries, keyed by RESOURCE name (the name a
+// Tf operator names). Returns ok=false if any font on the page is not one
+// decodeSimpleFontCmap can confidently rebuild — the same all-or-nothing
+// rule extractPageTextViaCorrectedCmap has always applied, since a page
+// half-decoded through two different rulesets is worse than one left
+// alone.
+//
+// Split out so extractPageText can re-decode the page's positioned text
+// runs with the SAME tables: those runs carry the coordinates needed to
+// rebuild real line breaks, but pdf.Page.Content decodes them through the
+// very CMap this file exists to work around.
+func correctedFontTables(page pdf.Page) (map[string]map[byte]rune, bool) {
+	fontNames := page.Fonts()
+	if len(fontNames) == 0 {
+		return nil, false
+	}
+	tables := make(map[string]map[byte]rune, len(fontNames))
+	for _, name := range fontNames {
+		table, ok := decodeSimpleFontCmap(page.Font(name))
+		if !ok {
+			return nil, false
+		}
+		tables[name] = table
+	}
+	return tables, true
+}
+
+// correctedTablesByRunFont re-keys correctedFontTables' result by the name
+// pdf.Text.Font reports, which is the font's BaseFont with its six-letter
+// subset prefix already stripped ("UNZOVZ+Consolas" -> "Consolas") — not
+// the resource name ("R7") the tables come in under.
+func correctedTablesByRunFont(page pdf.Page, byResource map[string]map[byte]rune) map[string]map[byte]rune {
+	out := make(map[string]map[byte]rune, len(byResource))
+	for name, table := range byResource {
+		base := page.Font(name).BaseFont()
+		if i := strings.IndexByte(base, '+'); i >= 0 {
+			base = base[i+1:]
+		}
+		out[base] = table
+	}
+	return out
 }
