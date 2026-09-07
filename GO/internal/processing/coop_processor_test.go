@@ -757,3 +757,71 @@ func TestRealProcessor_WritesTheConfiguredWarehouseCode(t *testing.T) {
 		t.Fatal("no product row written for the order")
 	}
 }
+
+// TestRealProcessor_TakesItsOwnHalfWhateverOrderTheCellIsWrittenIn drives
+// the reported cell shape — the Coopfood half written FIRST — through a
+// real Coopmart order. The old positional rule handed Coopmart nothing at
+// all for such a cell, so the order silently lost its gift and its
+// discount; here the Coopmart half must be applied and the Coopfood one
+// left behind.
+func TestRealProcessor_TakesItsOwnHalfWhateverOrderTheCellIsWrittenIn(t *testing.T) {
+	store, err := productdata.Load("productdata/testdata/data.xlsx")
+	if err != nil {
+		t.Fatalf("Load productdata failed: %v", err)
+	}
+	excelPath := copyTestWorkbookForProcessor(t)
+
+	// 33726 is this barcode's real extracted invoice price, so the line
+	// reconciles cleanly and only the promo half is under test.
+	const cell = "CF Tang SP0001 {Bó Kèm - Che Barcode} | CM Tang SP0002 {Combo 2}"
+	priceCsv := [][]string{
+		{"STT", "Mã hàng", "Tên", "Giá", "1/1-31/12"},
+		{"1", "3564270", "Nước giặt", "33726", cell},
+	}
+	rp := &RealProcessor{
+		Store:     store,
+		Pricing:   &fixturePricingSource{index: pricing.ParseIndex(priceCsv)},
+		ExcelPath: excelPath,
+	}
+	rows, err := rp.Process(context.Background(), "testdata/sample_coop_order.pdf")
+	if err != nil {
+		t.Fatalf("Process returned error: %v", err)
+	}
+	if len(rows) == 0 {
+		t.Fatal("Process returned no rows")
+	}
+
+	f, err := excelize.OpenFile(excelPath)
+	if err != nil {
+		t.Fatalf("failed reopening written workbook: %v", err)
+	}
+	defer f.Close()
+	sheetRows, err := f.GetRows("Don dat hang")
+	if err != nil {
+		t.Fatalf("failed reading Don dat hang rows: %v", err)
+	}
+
+	const colSKU, colPromoContent = 16, 42
+	cellAt := func(row []string, idx int) string {
+		if idx < len(row) {
+			return row[idx]
+		}
+		return ""
+	}
+	sawGift := false
+	for _, row := range sheetRows {
+		switch cellAt(row, colSKU) {
+		case "SP0001":
+			t.Error("found the SP0001 gift row, want none — that half of the cell is Coopfood's")
+		case "SP0002":
+			sawGift = true
+		case "3564270":
+			if got := cellAt(row, colPromoContent); got != "CM Tang SP0002 {Combo 2}" {
+				t.Errorf("main row PromoContent = %q, want the Coopmart half %q", got, "CM Tang SP0002 {Combo 2}")
+			}
+		}
+	}
+	if !sawGift {
+		t.Error("missing the SP0002 gift row — the Coopmart half of the cell was not applied")
+	}
+}

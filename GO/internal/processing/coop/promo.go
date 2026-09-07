@@ -28,71 +28,135 @@ var (
 )
 
 // SplitPromoText returns the part of a promo cell that applies to
-// `system`. A cell can bundle a Coopmart ("cm...") and a Coopfood
-// ("cf...") variant in one string, and the Coop sheet also uses a
-// single-system cell (only "cf...", or only "cm...") to mean the CTKM
-// belongs to that system ALONE.
+// `system`. Coop is two systems sharing one sheet, and one cell can
+// carry promotions for either or both.
 //
-// The rule, confirmed with the sheet's owner (2026-08-28):
+// A cell is a list of promotions separated by "|", and each one may name
+// its system with a leading "CF"/"CM" marker. The rule, confirmed with
+// the sheet's owner:
 //
-//   - no cf/cm marker at all            -> whole text applies to BOTH systems
-//   - a marker for this system          -> that system's part
-//   - a marker, but not for this system -> "" (CTKM does not apply here)
+//   - a segment marked for this system      -> kept
+//   - a segment marked for the other system -> dropped
+//   - a segment with no marker at all       -> kept (applies to both)
+//   - no marker anywhere in the cell        -> the whole cell, untouched
+//   - markers exist but none for us         -> "" (does not apply here)
 //
-// The last case deliberately DIVERGES from Python's tachkhuyenmai_coop
+// Reading the cell segment by segment replaces an earlier positional
+// rule that searched for CF and then looked for CM only in the text
+// BEFORE it — silently assuming the author always writes CM first. A
+// real cell reading "CF 40% | CM 35%" gave Coopmart nothing at all and
+// handed Coopfood the Coopmart half as well. Which order the two halves
+// are written in is the author's business, not a rule.
+//
+// Segments that survive are rejoined from their ORIGINAL text, separator
+// included, so a cell nothing was dropped from comes back byte for byte:
+// this string is what the AQ column shows and what the bonus-row builder
+// splits on "|" again, and neither wants it quietly reformatted.
+//
+// Deliberately DIVERGES from Python's tachkhuyenmai_coop
 // (xulydonhang.py:747-781), which ends both branches with `return ... if
-// ... else text` — falling back to the WHOLE cell. That fallback is a
-// real bug: a cell reading "CF 1+1 | CF 2+1 tặng NLS 1L TP30565"
-// (verbatim from the sheet) was handed back intact for a Coopmart order,
-// so Coopfood-only promotions were applied to Coopmart, and vice versa.
+// ... else text` — falling back to the WHOLE cell when the requested
+// system has no part of its own, so Coopfood-only promotions were
+// applied to Coopmart and vice versa.
 //
 // Column-level scoping is a separate rule handled by ColumnSystem;
 // PromoForSystem combines the two.
 func SplitPromoText(text, system string) string {
 	text = strings.TrimSpace(text)
-	system = strings.TrimSpace(system)
+	switch strings.ToUpper(strings.TrimSpace(system)) {
+	case "COOPMART", "COOPFOOD":
+	default:
+		return text
+	}
 
-	// CF first, preferring a parenthesised variant, mirroring
-	// tachkhuyenmai_coop's ordering.
+	var kept []string
+	sawMarker := false
+	for _, segment := range strings.Split(text, "|") {
+		part, marked := segmentForSystem(segment, system)
+		if marked {
+			sawMarker = true
+		}
+		if part != "" {
+			kept = append(kept, part)
+		}
+	}
+	if !sawMarker {
+		return text
+	}
+	return strings.TrimSpace(strings.Join(kept, "|"))
+}
+
+// segmentForSystem decides one "|"-separated promotion's fate. It
+// returns the text to keep ("" to drop it) and whether the segment named
+// a system at all — the caller needs that second answer to tell an
+// unmarked CELL (applies to both, returned whole) from a cell whose
+// every marked segment belongs to the other system (applies to neither).
+//
+// A kept segment is returned RAW so rejoining reproduces the original
+// cell exactly; only a segment carrying BOTH markers is rewritten, since
+// there is no way to hand back part of it untouched.
+func segmentForSystem(segment, system string) (string, bool) {
+	hasCF := findMarker(segment, cfMarkerPattern) >= 0
+	hasCM := findMarker(segment, cmMarkerPattern) >= 0
+
+	switch {
+	case !hasCF && !hasCM:
+		// No marker: belongs to whoever is running.
+		return segment, false
+	case hasCF && hasCM:
+		// Both in one segment — the parenthesised "cm ... (cf ...)"
+		// form, which carries no "|" of its own.
+		return splitMixedSegment(segment, system), true
+	case hasCF:
+		if strings.EqualFold(strings.TrimSpace(system), "COOPFOOD") {
+			return segment, true
+		}
+		return "", true
+	default:
+		if strings.EqualFold(strings.TrimSpace(system), "COOPMART") {
+			return segment, true
+		}
+		return "", true
+	}
+}
+
+// splitMixedSegment handles one segment naming BOTH systems at once —
+// in practice "cm Mua 2 tặng 1 (cf Mua 3 tặng 1)", where the Coopfood
+// variant sits in parentheses inside the Coopmart one. Positional by
+// necessity: there is no separator to cut on, so CF is located first
+// (parenthesised form preferred, mirroring tachkhuyenmai_coop's own
+// ordering) and CM is whatever precedes it.
+func splitMixedSegment(segment, system string) string {
+	segment = strings.TrimSpace(segment)
+
 	cfResult := ""
 	cfMatchStart := -1
-	if start, inner := findParenWithMarker(text, cfMarkerPattern); start >= 0 {
+	if start, inner := findParenWithMarker(segment, cfMarkerPattern); start >= 0 {
 		cfResult = strings.TrimSpace(inner)
 		cfMatchStart = start // start of the full "(...)" match, not just the inner group
-	} else if i := findMarker(text, cfMarkerPattern); i >= 0 {
-		cfResult = strings.TrimSpace(lineFrom(text, i))
+	} else if i := findMarker(segment, cfMarkerPattern); i >= 0 {
+		cfResult = strings.TrimSpace(lineFrom(segment, i))
 		cfMatchStart = i
 	}
 
 	cmResult := ""
-	if cfResult != "" {
-		// CM runs from its own marker up to where CF starts (Python's
-		// `(?is)cm.*` over text[:cf_start] — newlines included).
-		cmCandidate := text[:cfMatchStart]
-		if i := findMarker(cmCandidate, cmMarkerPattern); i >= 0 {
-			cmResult = strings.TrimSpace(cmCandidate[i:])
+	if cfMatchStart >= 0 {
+		if i := findMarker(segment[:cfMatchStart], cmMarkerPattern); i >= 0 {
+			cmResult = strings.TrimSpace(segment[i:cfMatchStart])
 		}
-	} else if i := findMarker(text, cmMarkerPattern); i >= 0 {
-		cmResult = strings.TrimSpace(lineFrom(text, i))
+	}
+	// CM written AFTER CF inside one segment: everything from its marker
+	// on is its own, since no "|" separated them.
+	if cmResult == "" {
+		if i := findMarker(segment, cmMarkerPattern); i > cfMatchStart {
+			cmResult = strings.TrimSpace(lineFrom(segment, i))
+		}
 	}
 
-	switch strings.ToUpper(system) {
-	case "COOPMART":
-		if cmResult != "" {
-			return cmResult
-		}
-		if cfResult != "" {
-			return ""
-		}
-	case "COOPFOOD":
-		if cfResult != "" {
-			return cfResult
-		}
-		if cmResult != "" {
-			return ""
-		}
+	if strings.EqualFold(strings.TrimSpace(system), "COOPMART") {
+		return cmResult
 	}
-	return text
+	return cfResult
 }
 
 // ColumnSystem reports which Coop system a whole promo COLUMN belongs

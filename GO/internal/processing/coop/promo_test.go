@@ -185,8 +185,11 @@ func TestPromoForSystem_UnmarkedColumnDefersToCellText(t *testing.T) {
 	if !ok || value != "CF giảm 30% Tặng NRC 2,1L TP30473" {
 		t.Errorf("PromoForSystem(COOPFOOD) = (%q, %v), want the CF half", value, ok)
 	}
+	// No trailing "|". The old positional rule cut the Coopmart half at
+	// the CF marker and kept the separator with it, so the bonus-row
+	// builder's own Split on "|" got a phantom empty promotion.
 	value, ok = PromoForSystem("CNMS 14+15 10/03-08/04", cell, "COOPMART")
-	if !ok || value != "CM Giảm 40% |" {
+	if !ok || value != "CM Giảm 40%" {
 		t.Errorf("PromoForSystem(COOPMART) = (%q, %v), want the CM half", value, ok)
 	}
 }
@@ -199,5 +202,64 @@ func TestPromoForSystem_CellMarkerExcludesTheOtherSystem(t *testing.T) {
 	value, ok := PromoForSystem("CNMS 33+34 21/07-19/08", cell, "COOPFOOD")
 	if !ok || value != cell {
 		t.Errorf("PromoForSystem(CF-only cell, COOPFOOD) = (%q, %v), want the whole cell", value, ok)
+	}
+}
+
+// TestSplitPromoText_MarkerOrderDoesNotMatter pins the bug this cell
+// exposed: "CF 40% | CM 35%" gave Coopmart nothing at all and handed
+// Coopfood the Coopmart half as well.
+//
+// The old rule read the cell positionally — find CF, then look for CM
+// only in the text BEFORE it — so it silently assumed the author always
+// writes CM first. Segments are separated by "|" and each carries its
+// own marker; their order is the author's business, not a rule.
+func TestSplitPromoText_MarkerOrderDoesNotMatter(t *testing.T) {
+	for _, text := range []string{"CF 40% | CM 35%", "CM 35% | CF 40%"} {
+		if got := SplitPromoText(text, "COOPMART"); got != "CM 35%" {
+			t.Errorf("SplitPromoText(%q, COOPMART) = %q, want %q", text, got, "CM 35%")
+		}
+		if got := SplitPromoText(text, "COOPFOOD"); got != "CF 40%" {
+			t.Errorf("SplitPromoText(%q, COOPFOOD) = %q, want %q", text, got, "CF 40%")
+		}
+	}
+}
+
+// TestSplitPromoText_KeepsEverySegmentOfTheSameSystem guards the other
+// real shape in the sheet, where "|" separates two promotions that both
+// belong to Coopfood rather than separating the two systems. Both must
+// survive, and unchanged: the downstream bonus-row builder splits this
+// string on "|" again, so dropping one loses a gift.
+func TestSplitPromoText_KeepsEverySegmentOfTheSameSystem(t *testing.T) {
+	text := "CF 1+1 | CF 2+1 tặng NLS 1L TP30565  {KM Giao Rời - Che Barcode}"
+	if got := SplitPromoText(text, "COOPFOOD"); got != text {
+		t.Errorf("SplitPromoText(COOPFOOD) = %q, want the cell unchanged %q", got, text)
+	}
+	if got := SplitPromoText(text, "COOPMART"); got != "" {
+		t.Errorf("SplitPromoText(COOPMART) = %q, want empty", got)
+	}
+}
+
+// TestSplitPromoText_UnmarkedSegmentAppliesToBothSystems extends the
+// cell-level rule ("no marker means both") down to a single segment: a
+// mixed cell where one promotion names a system and another does not
+// gives the unmarked one to whoever is running.
+func TestSplitPromoText_UnmarkedSegmentAppliesToBothSystems(t *testing.T) {
+	text := "CF 40% | Tặng SP0002 {Combo 2}"
+	if got := SplitPromoText(text, "COOPMART"); got != "Tặng SP0002 {Combo 2}" {
+		t.Errorf("SplitPromoText(COOPMART) = %q, want the unmarked segment only", got)
+	}
+	if got := SplitPromoText(text, "COOPFOOD"); got != text {
+		t.Errorf("SplitPromoText(COOPFOOD) = %q, want both segments %q", got, text)
+	}
+}
+
+// TestSplitPromoText_KeptSegmentsKeepTheirOriginalText makes sure the
+// filtering never reformats a cell it did not have to touch. AQ shows
+// this string to the user and the bonus-row builder parses it, so a
+// segment that survives must survive byte for byte, separator included.
+func TestSplitPromoText_KeptSegmentsKeepTheirOriginalText(t *testing.T) {
+	text := "cm Tang SP0001 {Bó Kèm - Che Barcode}|Tang SP0002 {Combo 2}"
+	if got := SplitPromoText(text, "COOPMART"); got != text {
+		t.Errorf("SplitPromoText(COOPMART) = %q, want unchanged %q", got, text)
 	}
 }
