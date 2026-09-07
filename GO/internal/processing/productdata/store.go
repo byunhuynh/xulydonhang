@@ -344,9 +344,25 @@ func (s *Store) GetCoopfoodAddress(customerCode string) string {
 // `congtrinh.replace(" ", "")`, which removes spaces anywhere in the
 // string, not just leading/trailing).
 func (s *Store) GetSiteValue(code string) string {
+	value, _ := s.LookupSiteValue(code)
+	return value
+}
+
+// LookupSiteValue is GetSiteValue plus the one thing GetSiteValue's
+// signature cannot express: whether a MaKH row actually backed the
+// returned value, or whether it is the space-stripped fallback.
+//
+// The fallback is a plausible-looking string, not an empty or sentinel
+// value, so a store missing from MaKH used to reach column AN completely
+// silently — the page still reported "Hoàn Thành" and the wrong site
+// value was only ever noticed downstream, in Excel or during the MISA
+// push (reported live for "GO! LAI VUNG", a store newly added to BigC's
+// order but not yet to MaKH). Callers that write AN use this second
+// return value to warn instead.
+func (s *Store) LookupSiteValue(code string) (string, bool) {
 	for _, row := range s.customerRows {
 		if row[1] == code {
-			return row[2]
+			return row[2], true
 		}
 	}
 
@@ -363,10 +379,10 @@ func (s *Store) GetSiteValue(code string) string {
 		}
 	}
 	if bestLen >= 0 {
-		return bestValue
+		return bestValue, true
 	}
 
-	return strings.ReplaceAll(code, " ", "")
+	return strings.ReplaceAll(code, " ", ""), false
 }
 
 // GetProductInfo merges timten_sanpham/timtrongluong_sanpham/

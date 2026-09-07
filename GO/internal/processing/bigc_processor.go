@@ -69,7 +69,14 @@ type storePageResult struct {
 	skuLog          []string
 	mismatchDetails []PriceMismatchDetail
 	promoItems      []PromoItemSummary
-	err             error
+	// unmappedStore names the page's store when MaKH has no row for it,
+	// and is empty otherwise. Only set for pages that actually write
+	// item rows: GetSiteValue's no-match fallback is what lands in
+	// column AN, so a page with no rows to write has nothing to get
+	// wrong (BigC's PURCHASE NOTE overflow page, whose store-name slot
+	// holds the ordering company rather than a store, is exactly that).
+	unmappedStore string
+	err           error
 }
 
 type pendingBigcStore struct {
@@ -152,9 +159,21 @@ func (p *RealProcessor) processBigcDocument(filePath string, pageTexts []string,
 
 		statusKind := StatusKindDone
 		statusText := StatusDone
+		// Warnings accumulate: a page can both be missing from MaKH and
+		// carry price mismatches, and hiding either behind the other
+		// would put the user right back where this started. The
+		// mismatch wording is kept byte-identical to what it has always
+		// been so a page with only mismatches reads exactly as before.
+		var warnings []string
+		if result.unmappedStore != "" {
+			warnings = append(warnings, fmt.Sprintf("store %q chưa có trong MaKH", result.unmappedStore))
+		}
 		if result.saigia > 0 {
+			warnings = append(warnings, fmt.Sprintf("Có %d mã sai giá", result.saigia))
+		}
+		if len(warnings) > 0 {
 			statusKind = StatusKindWarning
-			statusText = fmt.Sprintf("%s - Có %d mã sai giá", StatusWarning, result.saigia)
+			statusText = fmt.Sprintf("%s - %s", StatusWarning, strings.Join(warnings, "; "))
 		}
 		finalRow := OrderRow{
 			FileName: filepath.Base(filePath), Page: pageLabel, System: "BigC", MaKhachHang: customerCode,
@@ -237,6 +256,23 @@ func (p *RealProcessor) processBigcDocument(filePath string, pageTexts []string,
 	return orderRows, nil
 }
 
+// bigcStoreLabelMaxRunes caps how much of a store name the unmapped-store
+// warning shows. Comfortably longer than any real BigC store name (the
+// longest live one, "GO! NGUYEN THI THAP", is 19 characters), so the cut
+// only ever eats the address this port's PDF extraction glues onto the
+// name — never the part the user needs in order to add the row to MaKH.
+const bigcStoreLabelMaxRunes = 40
+
+// shortenStoreLabel trims a glued "<store name><address>" string down to
+// something that fits a status cell, keeping the leading store name.
+func shortenStoreLabel(name string) string {
+	runes := []rune(name)
+	if len(runes) <= bigcStoreLabelMaxRunes {
+		return name
+	}
+	return strings.TrimRight(string(runes[:bigcStoreLabelMaxRunes]), " ") + "…"
+}
+
 // processBigcStorePage handles ONE store page: extracts its name and
 // item list, joins prices from the page-0 master list, price/promo
 // matches every item, and builds this store's rows. isFirstSuccessful
@@ -260,7 +296,7 @@ func (p *RealProcessor) processBigcStorePage(storePageText string, priceList []b
 	if !ok {
 		return storePageResult{err: fmt.Errorf("không tách được tên store")}
 	}
-	siteCode := p.Store.GetSiteValue(storeName)
+	siteCode, storeMapped := p.Store.LookupSiteValue(storeName)
 	// A page with ZERO extracted item lines is a legitimate, successful
 	// "store" page in Python, not an error: write_to_dondathang_bigc
 	// (xulydonhang.py:4605) just does `for item in items:` over
@@ -289,6 +325,15 @@ func (p *RealProcessor) processBigcStorePage(storePageText string, priceList []b
 	// against frozen Python output — not just status/error presence.
 	rawItems := bigc.ExtractStoreItems(storePageText)
 	items := bigc.JoinItemsWithPrices(rawItems, priceList)
+
+	// An unmapped store is NOT a failure: Python has no such check at
+	// all, and the page's rows are otherwise perfectly good. It is
+	// reported as a warning purely so the wrong column-AN value stops
+	// being invisible — see LookupSiteValue's own note.
+	unmappedStore := ""
+	if !storeMapped && len(rawItems) > 0 {
+		unmappedStore = shortenStoreLabel(storeName)
+	}
 
 	var rows []excelwriter.Row
 	if isFirstSuccessful {
@@ -565,7 +610,7 @@ func (p *RealProcessor) processBigcStorePage(storePageText string, priceList []b
 		}
 	}
 
-	return storePageResult{rows: rows, weightKg: weightKg, saigia: saigia, tongtien: tongtien, skuLog: skuLog, mismatchDetails: mismatchDetails, promoItems: finalizePromoItems(promoTotals)}
+	return storePageResult{rows: rows, weightKg: weightKg, saigia: saigia, tongtien: tongtien, skuLog: skuLog, mismatchDetails: mismatchDetails, promoItems: finalizePromoItems(promoTotals), unmappedStore: unmappedStore}
 }
 
 // parseNumericField mirrors the repeated "strip commas, coerce to

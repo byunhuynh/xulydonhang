@@ -270,3 +270,32 @@ func TestGetCustomerCodeForSystem_ReportsAMissingSystemRatherThanReturningBlank(
 		t.Errorf("GetCustomerCodeForSystem(Maxidi) = (%q, true), want ok=false (the row's code cell is blank)", got)
 	}
 }
+
+// TestLookupSiteValue_ReportsWhetherTheStoreWasFoundInMaKH covers the
+// signal GetSiteValue cannot give: its no-match fallback (the store name
+// with spaces stripped) is indistinguishable from a real site value, so
+// BigC silently wrote garbage into column AN for any store missing from
+// MaKH. LookupSiteValue returns the same string plus whether a MaKH row
+// actually backed it, so the caller can warn instead of staying silent.
+func TestLookupSiteValue_ReportsWhetherTheStoreWasFoundInMaKH(t *testing.T) {
+	store := newStore([][]string{
+		{"header row, skipped"},
+		{"BIGC", "GO! AN LAC", "BIGCANLAC", ""},
+	}, nil)
+
+	if got, ok := store.LookupSiteValue("GO! AN LAC"); got != "BIGCANLAC" || !ok {
+		t.Fatalf("LookupSiteValue(exact match) = (%q, %v), want (BIGCANLAC, true)", got, ok)
+	}
+
+	if got, ok := store.LookupSiteValue("GO! AN LACSO 1231 KP 5, DUONG QUOC LO 1A"); got != "BIGCANLAC" || !ok {
+		t.Fatalf("LookupSiteValue(glued name + address) = (%q, %v), want (BIGCANLAC, true)", got, ok)
+	}
+
+	// The real, reported case: "GO! LAI VUNG" was absent from MaKH, so
+	// the fallback produced a site value that looked plausible but was
+	// the store's own glued name/address with spaces removed.
+	wantFallback := "GO!LAIVUNGTDSO185,XAHOALONG"
+	if got, ok := store.LookupSiteValue("GO! LAI VUNGTD SO185, XA HOA LONG"); got != wantFallback || ok {
+		t.Fatalf("LookupSiteValue(store missing from MaKH) = (%q, %v), want (%q, false)", got, ok, wantFallback)
+	}
+}

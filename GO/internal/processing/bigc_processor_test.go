@@ -951,3 +951,144 @@ func TestRealProcessor_BigcUnmatchedPriceFallsBackToLeftmostPromoColumn(t *testi
 		t.Errorf("gift row SKU (Q) = %q, want TP30343 (the LEFTMOST column's gift, not TP30442)", giftRow.SKU)
 	}
 }
+
+// TestRealProcessor_ProcessesBigcDocument_WarnsWhenAStoreIsMissingFromMaKH
+// covers the silent failure reported live for "GO! LAI VUNG": a store BigC
+// newly added to its order but nobody had added to MaKH yet. GetSiteValue's
+// no-match fallback (the store name with spaces stripped) is a
+// plausible-looking string, so the page kept reporting a clean "Hoàn Thành"
+// while column AN quietly received garbage — only ever noticed downstream in
+// Excel or during the MISA push. A page whose store IS mapped must stay
+// exactly as it was (no warning, no status text change).
+func TestRealProcessor_ProcessesBigcDocument_WarnsWhenAStoreIsMissingFromMaKH(t *testing.T) {
+	store, err := productdata.Load("productdata/testdata/data.xlsx")
+	if err != nil {
+		t.Fatalf("Load productdata failed: %v", err)
+	}
+	rp := &RealProcessor{
+		Store:     store,
+		Pricing:   &fixturePricingSource{index: pricing.ParseIndex(nil)},
+		ExcelPath: copyTestWorkbookForProcessor(t),
+	}
+
+	page0 := "2631099999999 15/08/26\n" +
+		"Total Net Purchase Price\n" +
+		"20/08/26\n" +
+		"Article\n" +
+		"8934563119999 Product One Master Pack 1 6 1 1 15000 PCS 15000\n"
+	storePage := func(name string) string {
+		return "FM LOGISTIC VSIP 2 (806)\n" +
+			"Some Address Line\n" +
+			"Vietnam\n" +
+			name + "\n" +
+			"8934563119999\n" +
+			"Product One Description\n" +
+			"Pack\n" +
+			"1\n" +
+			"6\n" +
+			"1\n"
+	}
+
+	// "GO! AN LAC" is in the MaKH fixture; "GO! LAI VUNG" deliberately is
+	// not. Both names carry their own address glued straight on, the real
+	// shape this port's PDF extraction produces.
+	mapped := storePage("GO! AN LACSO 1231 KP 5, DUONG QUOC LO 1A")
+	unmapped := storePage("GO! LAI VUNGTD SO185, TBD SO37, XA HOA LONG")
+
+	rows, err := rp.processBigcDocument("synthetic_bigc_unmapped_store.pdf", []string{page0, mapped, unmapped}, nil)
+	if err != nil {
+		t.Fatalf("processBigcDocument returned error: %v", err)
+	}
+	if len(rows) != 2 {
+		t.Fatalf("returned %d rows, want one per store page: %+v", len(rows), rows)
+	}
+
+	if rows[0].StatusKind != StatusKindDone || rows[0].Status != StatusDone {
+		t.Errorf("mapped store row = kind %q status %q, want an unchanged clean %q", rows[0].StatusKind, rows[0].Status, StatusDone)
+	}
+
+	if rows[1].StatusKind != StatusKindWarning {
+		t.Errorf("unmapped store row kind = %q, want %q", rows[1].StatusKind, StatusKindWarning)
+	}
+	if !strings.Contains(rows[1].Status, "chưa có trong MaKH") {
+		t.Errorf("unmapped store row status = %q, want it to say the store is missing from MaKH", rows[1].Status)
+	}
+	// The warning has to name the store, otherwise it does not tell the
+	// user what to add to MaKH.
+	if !strings.Contains(rows[1].Status, "GO! LAI VUNG") {
+		t.Errorf("unmapped store row status = %q, want it to name the unmapped store", rows[1].Status)
+	}
+}
+
+// TestRealProcessor_ProcessesBigcDocument_DoesNotWarnOnAnItemlessPage guards
+// the one page every real BigC PDF has that must stay quiet: the PURCHASE
+// NOTE's overflow page (PDF page index 1), which repeats the header block —
+// naming the ordering company, not a store — and carries no item table at
+// all. It writes nothing to column AN, so it needs no MaKH entry and must
+// not nag the user to add one.
+func TestRealProcessor_ProcessesBigcDocument_DoesNotWarnOnAnItemlessPage(t *testing.T) {
+	store, err := productdata.Load("productdata/testdata/data.xlsx")
+	if err != nil {
+		t.Fatalf("Load productdata failed: %v", err)
+	}
+	rp := &RealProcessor{
+		Store:     store,
+		Pricing:   &fixturePricingSource{index: pricing.ParseIndex(nil)},
+		ExcelPath: copyTestWorkbookForProcessor(t),
+	}
+
+	page0 := "2631099999999 15/08/26\n" +
+		"Total Net Purchase Price\n" +
+		"20/08/26\n" +
+		"Article\n" +
+		"8934563119999 Product One Master Pack 1 6 1 1 15000 PCS 15000\n"
+	// Real captured shape of 806_SOUTHDC_Q06_3005382_2636058585984.pdf's
+	// page 2: a store-name slot holding the ordering company and no item
+	// rows whatsoever.
+	itemless := "FM LOGISTIC VSIP 2 (806)\n" +
+		"Some Address Line\n" +
+		"Vietnam\n" +
+		"CTY TNHH DV EBSO 163, DUONG PHAN DANG LUU\n"
+
+	rows, err := rp.processBigcDocument("synthetic_bigc_itemless_page.pdf", []string{page0, itemless}, nil)
+	if err != nil {
+		t.Fatalf("processBigcDocument returned error: %v", err)
+	}
+	if len(rows) != 1 {
+		t.Fatalf("returned %d rows, want 1: %+v", len(rows), rows)
+	}
+	if rows[0].StatusKind != StatusKindDone || rows[0].Status != StatusDone {
+		t.Errorf("itemless page row = kind %q status %q, want an unchanged clean %q", rows[0].StatusKind, rows[0].Status, StatusDone)
+	}
+}
+
+// TestShortenStoreLabel keeps the unmapped-store warning readable in the
+// results table. BigC store names reach this code with their own address
+// line glued straight on ("GO! LAI VUNGTD SO185, TBD SO37, ..."), so the
+// raw string is far too long for a status cell — but the part the user
+// needs, the store name itself, is always at the front.
+func TestShortenStoreLabel(t *testing.T) {
+	short := "GO! AN LAC"
+	if got := shortenStoreLabel(short); got != short {
+		t.Errorf("shortenStoreLabel(%q) = %q, want it left alone", short, got)
+	}
+
+	glued := "GO! LAI VUNGTD SO185, TBD SO37, XA HOA LONG,TINH DONG THAPVietnam"
+	got := shortenStoreLabel(glued)
+	if !strings.HasPrefix(got, "GO! LAI VUNG") {
+		t.Errorf("shortenStoreLabel(%q) = %q, want the store name kept at the front", glued, got)
+	}
+	if !strings.HasSuffix(got, "…") {
+		t.Errorf("shortenStoreLabel(%q) = %q, want a trailing ellipsis marking the cut", glued, got)
+	}
+	if n := len([]rune(got)); n > bigcStoreLabelMaxRunes+1 {
+		t.Errorf("shortenStoreLabel(%q) = %q (%d runes), want at most %d plus the ellipsis", glued, got, n, bigcStoreLabelMaxRunes)
+	}
+
+	// Counted in runes, not bytes: a name carrying Vietnamese diacritics
+	// must not be cut short just because its characters are multi-byte.
+	accented := strings.Repeat("Đ", bigcStoreLabelMaxRunes)
+	if got := shortenStoreLabel(accented); got != accented {
+		t.Errorf("shortenStoreLabel(%d accented runes) = %q, want it left alone at exactly the limit", bigcStoreLabelMaxRunes, got)
+	}
+}
