@@ -37,13 +37,23 @@ func maxidiOrderNumber(poNumber string) string {
 	return fmt.Sprintf("ĐĐHMAXIDI-%s", poNumber)
 }
 
+// maxidiOrderTitle is the bare order reference — system plus PO number,
+// nothing else. It is what the note row's "Tên hàng" (column S) carries,
+// matching every other vendor, whose column S never holds anything but a
+// product name or that same reference.
+func maxidiOrderTitle(poNumber string) string {
+	return fmt.Sprintf("MAXIDI %s", poNumber)
+}
+
 // maxidiDescription builds the "Diễn giải" (column L) text. The PO's own
 // remarks — in practice a delivery-window instruction such as "THỜI GIAN
 // GIAO HÀNG BUỔI SÁNG + CHIỀU" — are appended here at the project
 // owner's request, so whoever picks the order reads them off the same
-// column as the order reference.
+// column as the order reference. Column L is the ONLY place they belong:
+// the remarks are an instruction to the picker, not part of any item's
+// name.
 func maxidiDescription(poNumber, remarks string) string {
-	description := fmt.Sprintf("MAXIDI %s", poNumber)
+	description := maxidiOrderTitle(poNumber)
 	if remarks = strings.TrimSpace(remarks); remarks != "" {
 		description += " - " + remarks
 	}
@@ -139,7 +149,7 @@ func (p *RealProcessor) processMaxidiSegment(filePath string, realPageNum int, t
 
 	noteRow := baseRow
 	noteRow.IsNoteRow = true
-	noteRow.ProductName = description
+	noteRow.ProductName = maxidiOrderTitle(info.PONumber)
 	rows := []excelwriter.Row{noteRow}
 
 	totalWeight := 0.0

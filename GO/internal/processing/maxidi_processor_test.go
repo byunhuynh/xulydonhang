@@ -103,6 +103,9 @@ func TestRealProcessor_ProcessesRealMaxidiBinhDuongDeliveryNote(t *testing.T) {
 		{"AJ9", "OEM"},
 		{"AM9", "LA"},
 		{"AV9", "60"},
+		// The note row names the order, nothing more: the PO's remarks
+		// are a picking instruction and belong only in column L.
+		{"S9", "MAXIDI HO-PO00085936"},
 		{"Q10", "GC02344"},
 		{"S10", "Nước tẩy Javel Cleanwise 550G"},
 		{"X10", "10800"},
