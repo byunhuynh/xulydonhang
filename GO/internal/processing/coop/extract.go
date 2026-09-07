@@ -38,6 +38,9 @@ const (
 // this task's design note for the one behavioral difference (errors
 // instead of silently producing a product with a missing qty/cost).
 func ExtractProducts(text string) ([]Product, error) {
+	// Kept before the Sub Total cut below, since that is exactly the part
+	// checkAgainstSubTotal needs to read.
+	originalText := text
 	if loc := subTotalSplitPattern.FindStringIndex(text); loc != nil {
 		text = text[:loc[0]]
 	}
@@ -112,6 +115,13 @@ func ExtractProducts(text string) ([]Product, error) {
 		}
 
 		products = append(products, Product{Barcode: barcode, Qty: qty, Cost: cost})
+	}
+
+	// The page states what its rows add up to; check it before handing
+	// them back. See checkAgainstSubTotal for why this is worth a hard
+	// error rather than a flag on the row.
+	if err := checkAgainstSubTotal(products, originalText); err != nil {
+		return nil, err
 	}
 
 	return products, nil
