@@ -98,3 +98,6 @@ GO/frontend/package.json.md5
 # ===== Worktrees (scratch, never committed) =====
 .claude/worktrees/
 .worktrees/
+
+# ===== Mockup giao diện dựng tay (xem bằng trình duyệt, không phải nguồn) =====
+/demo/

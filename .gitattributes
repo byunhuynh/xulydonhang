@@ -1,0 +1,18 @@
+# Kho này đang là 100% LF trong index (git ls-files --eol: 694 lf, 0 crlf),
+# nhưng máy dev đặt core.autocrlf=true nên lần checkout sau Git sẽ đổi hết
+# sang CRLF và làm cả cây nguồn "bẩn" giả. Ghim eol=lf để hành vi không phụ
+# thuộc vào cấu hình từng máy — thêm file này không tạo thay đổi nào vì
+# worktree hiện tại vốn đã là LF.
+* text=auto eol=lf
+
+# Nhị phân: đừng dò, đừng đổi dòng, đừng cố diff.
+*.xlsx  binary
+*.xls   binary
+*.pdf   binary
+*.png   binary
+*.jpg   binary
+*.ico   binary
+*.exe   binary
+*.ttf   binary
+*.woff  binary
+*.woff2 binary
