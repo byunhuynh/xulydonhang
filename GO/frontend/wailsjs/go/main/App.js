@@ -34,6 +34,10 @@ export function MisaRouteOptions() {
   return window['go']['main']['App']['MisaRouteOptions']();
 }
 
+export function PreviewZaloTargets(arg1) {
+  return window['go']['main']['App']['PreviewZaloTargets'](arg1);
+}
+
 export function ProcessFiles(arg1, arg2) {
   return window['go']['main']['App']['ProcessFiles'](arg1, arg2);
 }

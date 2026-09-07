@@ -22,7 +22,9 @@ function App() {
   const isProcessing = useAppStore((s) => s.isProcessing)
   const batchProgress = useAppStore((s) => s.batchProgress)
   const lockStatus = useAppStore((s) => s.lockStatus)
-  const [isSettingsOpen, setIsSettingsOpen] = useState(false)
+  const settingsTab = useAppStore((s) => s.settingsTab)
+  const openSettings = useAppStore((s) => s.openSettings)
+  const closeSettings = useAppStore((s) => s.closeSettings)
   // Chuỗi rỗng khi lô chưa công bố kích thước - thanh trạng thái khi đó
   // vẫn chỉ nói "Đang xử lý" như trước chứ không hiện "0/0 file".
   const progressLabel = formatBatchProgress(batchProgress)
@@ -69,7 +71,7 @@ function App() {
         </TabButton>
         <button
           type="button"
-          onClick={() => setIsSettingsOpen(true)}
+          onClick={() => openSettings('gid')}
           className="ml-2 rounded-lg border border-border p-2 text-muted transition-colors hover:border-accent hover:text-accent"
           title="Cấu hình"
         >
@@ -98,7 +100,7 @@ function App() {
       <footer className="border-t border-border px-4 py-2 text-center text-xs text-muted">
         © 2026 HUỲNH ĐẠT THÀNH. All rights reserved
       </footer>
-      {isSettingsOpen && <SettingsModal onClose={() => setIsSettingsOpen(false)} />}
+      {settingsTab && <SettingsModal initialTab={settingsTab} onClose={closeSettings} />}
       {lockStatus !== 'unlocked' && <LockOverlay status={lockStatus} />}
       <ZaloQRModal />
       {/* Cạnh ZaloQRModal chứ không nằm trong ControlPanel: modal này do sự

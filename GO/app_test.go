@@ -998,3 +998,92 @@ func TestApp_RunBatchReportsProgressEvenWhenAFileFails(t *testing.T) {
 		t.Fatalf("progress cuối = %+v, want mọi file đều được tính kể cả file lỗi", last)
 	}
 }
+
+// ---- PreviewZaloTargets: nhóm nhận hiện trên bản xem trước tin nhắn ----
+
+func TestPreviewZaloTargets_ReportsGroupNameAndKeyPerOrder(t *testing.T) {
+	a := newTestAppForZalo(t, &fakeZaloSender{}, map[string]string{
+		"MNBIGC":   "Đơn hàng Big-C MN",
+		"MBGCBIGC": "BigC Gia Công MB",
+	})
+
+	got, err := a.PreviewZaloTargets([]ZaloTargetQuery{
+		{PO: "PO1", System: "BigC", CustomerCode: "MN_MT_bgc06"},
+		{PO: "PO2", System: "BigC", CustomerCode: "MB_GC_bgc06"},
+	})
+	if err != nil {
+		t.Fatalf("PreviewZaloTargets: %v", err)
+	}
+	if len(got) != 2 {
+		t.Fatalf("len = %d, want 2 — mỗi đơn một kết quả, đúng thứ tự truyền vào", len(got))
+	}
+
+	if got[0].PO != "PO1" || got[0].Key != "MNBIGC" || got[0].GroupName != "Đơn hàng Big-C MN" {
+		t.Errorf("got[0] = %+v, want the plain region key's group", got[0])
+	}
+	if !got[0].Configured {
+		t.Error("got[0].Configured = false, want true")
+	}
+	// Key phân khúc thắng key chung — y hệt lúc gửi thật.
+	if got[1].Key != "MBGCBIGC" || got[1].GroupName != "BigC Gia Công MB" {
+		t.Errorf("got[1] = %+v, want the segment key's group", got[1])
+	}
+}
+
+// Trường hợp quan trọng nhất: chưa gán nhóm thì bản xem trước phải nói
+// được key nào cần thêm vào Cài đặt > Zalo.
+func TestPreviewZaloTargets_UnconfiguredOrderCarriesTheKeyToAssign(t *testing.T) {
+	a := newTestAppForZalo(t, &fakeZaloSender{}, map[string]string{})
+
+	got, err := a.PreviewZaloTargets([]ZaloTargetQuery{
+		{PO: "HO-PO00083571", System: "Maxidi", CustomerCode: "MN_GC_00002"},
+	})
+	if err != nil {
+		t.Fatalf("PreviewZaloTargets: %v", err)
+	}
+	if got[0].Configured || got[0].GroupName != "" {
+		t.Fatalf("got[0] = %+v, want an unconfigured target", got[0])
+	}
+	if got[0].SuggestedKey != "MNMAXIDI" {
+		t.Errorf("SuggestedKey = %q, want the plain region key %q", got[0].SuggestedKey, "MNMAXIDI")
+	}
+	want := []string{"MNGCMAXIDI", "MNMAXIDI"}
+	if len(got[0].CandidateKeys) != 2 || got[0].CandidateKeys[0] != want[0] || got[0].CandidateKeys[1] != want[1] {
+		t.Errorf("CandidateKeys = %v, want %v", got[0].CandidateKeys, want)
+	}
+}
+
+// Nhóm hiện trên bản xem trước PHẢI là nhóm thật sự nhận tin. Test này
+// khoá hai đường lại với nhau: cùng một input, PreviewZaloTargets nói
+// nhóm nào thì runZaloBatch phải gửi tới đúng nhóm đó.
+func TestPreviewZaloTargets_AgreesWithWhatTheBatchActuallySends(t *testing.T) {
+	sender := &fakeZaloSender{}
+	a := newTestAppForZalo(t, sender, map[string]string{"MNCOOPMART": "Coopmart MN"})
+	emitter := &fakeEmitter{}
+
+	preview, err := a.PreviewZaloTargets([]ZaloTargetQuery{{PO: "PO9", System: "Coop", CustomerCode: "MN_MT_cop120"}})
+	if err != nil {
+		t.Fatalf("PreviewZaloTargets: %v", err)
+	}
+
+	a.runZaloBatch(emitter, []ZaloJob{{PO: "PO9", System: "Coop", CustomerCode: "MN_MT_cop120", Message: "xin chào"}})
+
+	if len(sender.sentTo) != 1 {
+		t.Fatalf("len(sender.sentTo) = %d, want 1", len(sender.sentTo))
+	}
+	if sender.sentTo[0] != preview[0].GroupName {
+		t.Errorf("đã gửi tới %q nhưng bản xem trước hiện %q — hai đường phải luôn khớp",
+			sender.sentTo[0], preview[0].GroupName)
+	}
+}
+
+func TestPreviewZaloTargets_EmptyQueryListReturnsNothing(t *testing.T) {
+	a := newTestAppForZalo(t, &fakeZaloSender{}, map[string]string{"MNBIGC": "x"})
+	got, err := a.PreviewZaloTargets(nil)
+	if err != nil {
+		t.Fatalf("PreviewZaloTargets: %v", err)
+	}
+	if len(got) != 0 {
+		t.Errorf("len = %d, want 0", len(got))
+	}
+}

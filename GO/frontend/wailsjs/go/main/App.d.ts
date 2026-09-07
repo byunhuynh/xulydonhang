@@ -19,6 +19,8 @@ export function MisaResolveRoutes(arg1:Array<main.MisaRouteInput>):Promise<Array
 
 export function MisaRouteOptions():Promise<Array<main.MisaRouteInfo>>;
 
+export function PreviewZaloTargets(arg1:Array<main.ZaloTargetQuery>):Promise<Array<main.ZaloTargetPreview>>;
+
 export function ProcessFiles(arg1:Array<string>,arg2:Record<string, main.TMDTDateRange>):Promise<void>;
 
 export function PushMisa(arg1:Array<main.MisaPushJob>,arg2:boolean):Promise<void>;

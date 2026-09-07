@@ -86,6 +86,57 @@ var systemKeyOverrides = map[string]string{
 // xác định" khi không tra được mã khách hàng thật) khi tra cứu thất bại
 // phía trên, cắt theo byte có thể cắt giữa 1 ký tự UTF-8 nhiều byte.
 func ResolveContact(system, customerCode string, zaloMap map[string]string) (string, error) {
+	target := ResolveTarget(system, customerCode, zaloMap)
+	if !target.Configured() {
+		return "", fmt.Errorf("%w: %s", ErrNoContact, strings.Join(target.CandidateKeys, " hoặc "))
+	}
+	return target.GroupName, nil
+}
+
+// Target là kết quả tra nhóm Zalo ở dạng ĐẦY ĐỦ: không chỉ tên nhóm sẽ
+// gửi tới, mà cả key đã khớp và những key đã thử. ResolveContact (đường
+// gửi thật) chỉ cần tên nhóm nên vứt phần còn lại đi; bản xem trước tin
+// nhắn cần cả ba, vì khi CHƯA gán nhóm thì thứ duy nhất giúp người dùng
+// sửa được là biết chính xác key nào phải thêm vào Cài đặt > Zalo.
+//
+// Cả hai đi qua cùng ResolveTarget một cách CÓ CHỦ Ý: nhóm hiện trên bản
+// xem trước mà khác nhóm thật sự nhận tin là kiểu sai tệ nhất ở đây —
+// người dùng duyệt một đằng, khách nhận một nẻo.
+type Target struct {
+	// Key là key ĐÚNG NHƯ ĐƯỢC GHI trong Cài đặt > Zalo, không phải bản
+	// viết hoa app tự dựng: tra key bỏ qua hoa/thường (xem lookupContact),
+	// nên "MBGCBigC" trong cài đặt vẫn khớp key dựng ra "MBGCBIGC", và
+	// người dùng đi tìm dòng để sửa cần thấy đúng chữ họ đã gõ. Rỗng khi
+	// không key nào khớp.
+	Key string
+	// GroupName là tên hội thoại/nhóm Zalo sẽ nhận tin. Rỗng khi chưa gán.
+	GroupName string
+	// CandidateKeys là mọi key đã thử, theo đúng thứ tự ưu tiên (key phân
+	// khúc trước, key chung sau). Luôn có ít nhất 1 phần tử.
+	CandidateKeys []string
+}
+
+// Configured cho biết đơn này có nhóm nhận hay không. Job không có nhóm
+// bị SKIP lúc gửi (xem ErrNoContact), nên đây cũng chính là câu "tin này
+// có gửi đi được không".
+func (t Target) Configured() bool { return t.GroupName != "" }
+
+// SuggestedKey là key nên thêm vào Cài đặt > Zalo khi chưa gán nhóm: key
+// CHUNG (miền + hệ thống), tức phần tử CUỐI của CandidateKeys. Key phân
+// khúc đứng trước nó là thứ người dùng chủ động thêm để tách đích đến
+// theo phân khúc, không phải mặc định (xem doc của ResolveContact) — gợi
+// ý nó sẽ khiến đơn phân khúc khác của cùng hệ thống vẫn không có nhóm.
+func (t Target) SuggestedKey() string {
+	if len(t.CandidateKeys) == 0 {
+		return ""
+	}
+	return t.CandidateKeys[len(t.CandidateKeys)-1]
+}
+
+// ResolveTarget dựng các key ứng viên rồi trả về nhóm khớp đầu tiên. Đây
+// là toàn bộ logic chọn nhóm Zalo của app; ResolveContact là lớp mỏng
+// bọc ngoài nó.
+func ResolveTarget(system, customerCode string, zaloMap map[string]string) Target {
 	region, segment := splitCustomerCode(customerCode)
 
 	systemKey := strings.ToUpper(system)
@@ -100,11 +151,11 @@ func ResolveContact(system, customerCode string, zaloMap map[string]string) (str
 	keys = append(keys, region+systemKey)
 
 	for _, key := range keys {
-		if contact := lookupContact(zaloMap, key); contact != "" {
-			return contact, nil
+		if matchedKey, contact := lookupContact(zaloMap, key); contact != "" {
+			return Target{Key: matchedKey, GroupName: contact, CandidateKeys: keys}
 		}
 	}
-	return "", fmt.Errorf("%w: %s", ErrNoContact, strings.Join(keys, " hoặc "))
+	return Target{CandidateKeys: keys}
 }
 
 // splitCustomerCode tách mã khách hàng thành miền và PHÂN KHÚC. Mã có
@@ -131,14 +182,17 @@ func splitCustomerCode(customerCode string) (region, segment string) {
 // không đồng nhất là chuyện thường (config thật có cả "MBBIGC" lẫn
 // "MBGCBigC"); ưu tiên khớp đúng để hai key chỉ khác nhau hoa/thường
 // không tráo chỗ cho nhau. Giá trị rỗng vẫn bị coi như CHƯA cấu hình.
-func lookupContact(zaloMap map[string]string, key string) string {
+// Trả về CẢ key thật trong map lẫn tên nhóm: key khớp có thể khác key
+// truyền vào ở hoa/thường, và bản xem trước hiện lại đúng chữ người dùng
+// đã gõ trong Cài đặt.
+func lookupContact(zaloMap map[string]string, key string) (matchedKey, contact string) {
 	if contact := zaloMap[key]; contact != "" {
-		return contact
+		return key, contact
 	}
 	for mapKey, contact := range zaloMap {
 		if contact != "" && strings.EqualFold(mapKey, key) {
-			return contact
+			return mapKey, contact
 		}
 	}
-	return ""
+	return "", ""
 }

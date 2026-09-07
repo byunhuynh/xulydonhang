@@ -1,7 +1,10 @@
-import { useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { FaXmark, FaCopy, FaCheck, FaPaperPlane } from 'react-icons/fa6'
+import { FaXmark, FaCopy, FaCheck, FaPaperPlane, FaUsers, FaTriangleExclamation, FaGear } from 'react-icons/fa6'
 import type { OrderRow } from '../types'
+import { PreviewZaloTargets } from '../../wailsjs/go/main/App'
+import { zaloTargetQueriesFor, targetByPO, type ZaloTargetPreview } from '../lib/zaloTargets'
+import { useAppStore } from '../store/appStore'
 import {
   buildZaloMessageForPO,
   buildZaloMessageForJITFile,
@@ -28,6 +31,47 @@ export interface POContentGroup {
   period?: string
 }
 
+// Dải "nhóm nào sẽ nhận tin này", ngay trên bong bóng tin. Hai trạng
+// thái, cố ý trông rất khác nhau:
+//
+//   - Đã gán: tên nhóm + key mờ bên cạnh. Key vẫn hiện dù đã có tên vì
+//     nó là thứ người dùng dùng để tìm đúng dòng trong Cài đặt khi muốn
+//     đổi nhóm.
+//   - Chưa gán: cảnh báo đỏ + key cần thêm + nút mở thẳng Cài đặt > Zalo.
+//     Job không có nhóm sẽ bị SKIP lúc gửi (xem zalosend.ErrNoContact),
+//     nên đây là cảnh báo THẬT chứ không phải trang trí: không sửa thì
+//     tin này không đi đâu cả.
+function ZaloTargetBanner({ target, onOpenSettings }: { target: ZaloTargetPreview; onOpenSettings: () => void }) {
+  if (target.configured) {
+    return (
+      <div className="mb-1.5 flex flex-wrap items-center justify-end gap-x-2 gap-y-1 text-[11px]">
+        <span className="text-muted">Sẽ gửi tới</span>
+        <span className="inline-flex items-center gap-1.5 rounded-full border border-accent/40 bg-accent/10 px-2.5 py-0.5 font-semibold text-accent">
+          <FaUsers size={9} />
+          {target.groupName}
+        </span>
+        <span className="font-mono text-[10px] text-muted">key: {target.key}</span>
+      </div>
+    )
+  }
+  return (
+    <div className="mb-1.5 flex flex-wrap items-center justify-end gap-x-2 gap-y-1 text-[11px]">
+      <span className="inline-flex items-center gap-1.5 rounded-full border border-danger/40 bg-danger/10 px-2.5 py-0.5 font-semibold text-danger">
+        <FaTriangleExclamation size={9} />
+        Chưa gán nhóm — tin này sẽ không gửi được
+      </span>
+      {target.suggestedKey && <span className="font-mono text-[10px] text-muted">key: {target.suggestedKey}</span>}
+      <button
+        onClick={onOpenSettings}
+        className="inline-flex items-center gap-1.5 rounded-lg border border-border px-2 py-0.5 font-semibold text-muted transition-colors hover:border-accent hover:text-accent"
+      >
+        <FaGear size={9} />
+        Mở Cài đặt &gt; Zalo
+      </button>
+    </div>
+  )
+}
+
 export function OrderContentModal({
   groups,
   processedAt,
@@ -40,9 +84,44 @@ export function OrderContentModal({
   onClose: () => void
 }) {
   const [copiedPO, setCopiedPO] = useState<string | null>(null)
+  // Nhóm Zalo dự kiến nhận từng tin, tra ở backend (xem lib/zaloTargets.ts
+  // để biết vì sao KHÔNG tự tra ở đây). null = chưa có câu trả lời: dải
+  // nhóm khi đó không hiện gì cả, thay vì nhấp nháy "chưa gán nhóm" rồi
+  // đổi ý - báo động giả ở đây tệ hơn là chờ thêm một nhịp.
+  const [targets, setTargets] = useState<Record<string, ZaloTargetPreview | undefined> | null>(null)
+  const openSettings = useAppStore((s) => s.openSettings)
+  const settingsTab = useAppStore((s) => s.settingsTab)
   const backdropRef = useRef<HTMLDivElement>(null)
   const cardRef = useRef<HTMLDivElement>(null)
   useModalEntrance(backdropRef, cardRef)
+
+  // Hỏi nhóm nhận MỘT LẦN cho cả danh sách lúc mở modal. `groups` là
+  // mảng dựng mới mỗi lần render nên không thể làm dependency trực tiếp -
+  // dùng chuỗi khoá gộp nhóm, thứ thật sự quyết định câu hỏi. Cờ
+  // `cancelled` chặn setState sau khi modal đã đóng giữa chừng.
+  //
+  // settingsTab cũng là dependency: đóng popup Cài đặt xong phải hỏi lại,
+  // vì người dùng vừa vào đó để GÁN NHÓM còn thiếu - không hỏi lại thì
+  // dải nhóm vẫn đỏ dù đã sửa xong, và người dùng không có cách nào biết
+  // là đã sửa đúng ngoài việc đóng mở lại cả modal này.
+  const groupSignature = groups.map((g) => `${g.po}\u0000${g.rows[0]?.system ?? ''}\u0000${g.rows[0]?.maKhachHang ?? ''}`).join('\u0001')
+  useEffect(() => {
+    let cancelled = false
+    PreviewZaloTargets(zaloTargetQueriesFor(groups))
+      .then((previews) => {
+        if (!cancelled) setTargets(targetByPO(previews ?? []))
+      })
+      // Không đọc được cấu hình thì im lặng bỏ qua dải nhóm: nội dung tin
+      // - thứ người dùng mở modal này để xem - vẫn phải hiện bình thường.
+      .catch(() => {
+        if (!cancelled) setTargets({})
+      })
+    return () => {
+      cancelled = true
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [groupSignature, settingsTab])
+
   const messages = groups.map((g) => ({
     po: g.po,
     // Ba nhánh phải khớp ĐÚNG ba nhánh của ControlPanel.handleSendZalo:
@@ -152,6 +231,11 @@ export function OrderContentModal({
                     <span className="text-[10px] text-muted">gộp {groups[idx].rows.length} dòng → 1 tin nhắn</span>
                   )}
                 </div>
+              )}
+              {/* Hiện ở CẢ chế độ 1 đơn lẫn nhiều đơn: câu hỏi "ai nhận
+                  tin này" quan trọng như nhau ở cả hai. */}
+              {targets?.[m.po] && (
+                <ZaloTargetBanner target={targets[m.po]!} onOpenSettings={() => openSettings('zalo')} />
               )}
               <div className="flex justify-end">
                 <div

@@ -161,3 +161,103 @@ func TestResolveContact_JITChoiceUsesItsOwnKeyVerbatim(t *testing.T) {
 		t.Fatal("key cũ MNJIT không được khớp nữa - phải báo lỗi để người dùng biết mà đổi tên")
 	}
 }
+
+// ---- ResolveTarget: cái mà bản xem trước tin nhắn hiển thị ----
+//
+// ResolveTarget trả về ĐÚNG nhóm mà ResolveContact sẽ gửi tới, kèm key
+// đã khớp — bản xem trước và bản gửi thật buộc phải cùng một nguồn, nên
+// mỗi test ở đây còn khẳng định lại kết quả khớp với ResolveContact.
+
+func TestResolveTarget_ReturnsMatchedKeyAndGroupName(t *testing.T) {
+	zaloMap := map[string]string{"MNBIGC": "Đơn hàng Siêu thị Big-C MN"}
+	got := ResolveTarget("BigC", "MN00123", zaloMap)
+
+	if got.Key != "MNBIGC" {
+		t.Errorf("Key = %q, want %q", got.Key, "MNBIGC")
+	}
+	if got.GroupName != "Đơn hàng Siêu thị Big-C MN" {
+		t.Errorf("GroupName = %q, want the configured group", got.GroupName)
+	}
+	if !got.Configured() {
+		t.Error("Configured() = false, want true")
+	}
+
+	contact, err := ResolveContact("BigC", "MN00123", zaloMap)
+	if err != nil || contact != got.GroupName {
+		t.Errorf("ResolveContact = (%q, %v), want it to agree with ResolveTarget's %q", contact, err, got.GroupName)
+	}
+}
+
+// Chưa gán nhóm là trường hợp bản xem trước phải nói được NHIỀU nhất:
+// người dùng cần biết chính xác key nào để thêm vào Cài đặt > Zalo.
+func TestResolveTarget_UnconfiguredReportsEveryCandidateKey(t *testing.T) {
+	got := ResolveTarget("BigC", "MB_GC_bgc06", map[string]string{})
+
+	if got.Configured() {
+		t.Fatal("Configured() = true, want false for an empty settings map")
+	}
+	if got.Key != "" {
+		t.Errorf("Key = %q, want empty when nothing matched", got.Key)
+	}
+	want := []string{"MBGCBIGC", "MBBIGC"}
+	if len(got.CandidateKeys) != len(want) {
+		t.Fatalf("CandidateKeys = %v, want %v", got.CandidateKeys, want)
+	}
+	for i, key := range want {
+		if got.CandidateKeys[i] != key {
+			t.Errorf("CandidateKeys[%d] = %q, want %q", i, got.CandidateKeys[i], key)
+		}
+	}
+	// Key gán mặc định là key CHUNG (không phân khúc) — key phân khúc chỉ
+	// dùng khi người dùng chủ động muốn tách đích đến.
+	if got.SuggestedKey() != "MBBIGC" {
+		t.Errorf("SuggestedKey() = %q, want the plain region key %q", got.SuggestedKey(), "MBBIGC")
+	}
+}
+
+func TestResolveTarget_SegmentKeyBeatsPlainRegionKey(t *testing.T) {
+	zaloMap := map[string]string{
+		"MBGCBIGC": "BigC Gia Công MB",
+		"MBBIGC":   "BigC chung MB",
+	}
+	got := ResolveTarget("BigC", "MB_GC_bgc06", zaloMap)
+
+	if got.Key != "MBGCBIGC" || got.GroupName != "BigC Gia Công MB" {
+		t.Errorf("ResolveTarget = {%q, %q}, want the segment key to win", got.Key, got.GroupName)
+	}
+	contact, _ := ResolveContact("BigC", "MB_GC_bgc06", zaloMap)
+	if contact != got.GroupName {
+		t.Errorf("ResolveContact = %q, want it to agree with ResolveTarget", contact)
+	}
+}
+
+// Key trong Cài đặt do người dùng gõ tay nên hoa/thường không đồng nhất.
+// Bản xem trước phải hiện key ĐÚNG NHƯ TRONG CÀI ĐẶT, không phải bản
+// viết hoa app tự dựng — người dùng đi tìm dòng đó để sửa.
+func TestResolveTarget_KeyIsTheOneSpelledInSettings(t *testing.T) {
+	got := ResolveTarget("BigC", "MB_GC_bgc06", map[string]string{"MBGCBigC": "BigC Gia Công MB"})
+
+	if got.Key != "MBGCBigC" {
+		t.Errorf("Key = %q, want the settings' own spelling %q", got.Key, "MBGCBigC")
+	}
+	if got.GroupName != "BigC Gia Công MB" {
+		t.Errorf("GroupName = %q, want the configured group", got.GroupName)
+	}
+}
+
+func TestResolveTarget_CoopUsesCoopmartKey(t *testing.T) {
+	got := ResolveTarget("Coop", "MN_MT_cop120", map[string]string{"MNCOOPMART": "Coopmart MN"})
+	if got.Key != "MNCOOPMART" || got.GroupName != "Coopmart MN" {
+		t.Errorf("ResolveTarget = {%q, %q}, want the COOPMART override", got.Key, got.GroupName)
+	}
+}
+
+func TestResolveTarget_EmptyValueIsNotConfigured(t *testing.T) {
+	got := ResolveTarget("Satra", "MN00123", map[string]string{"MNSATRA": ""})
+	if got.Configured() {
+		t.Errorf("ResolveTarget = %+v, want an empty value to count as unconfigured", got)
+	}
+	if got.SuggestedKey() != "MNSATRA" {
+		t.Errorf("SuggestedKey() = %q, want %q", got.SuggestedKey(), "MNSATRA")
+	}
+}

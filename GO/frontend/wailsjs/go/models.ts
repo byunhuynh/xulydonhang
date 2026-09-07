@@ -139,6 +139,44 @@ export namespace main {
 	        this.displayLabel = source["displayLabel"];
 	    }
 	}
+	export class ZaloTargetPreview {
+	    po: string;
+	    configured: boolean;
+	    groupName: string;
+	    key: string;
+	    suggestedKey: string;
+	    candidateKeys: string[];
+	
+	    static createFrom(source: any = {}) {
+	        return new ZaloTargetPreview(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.po = source["po"];
+	        this.configured = source["configured"];
+	        this.groupName = source["groupName"];
+	        this.key = source["key"];
+	        this.suggestedKey = source["suggestedKey"];
+	        this.candidateKeys = source["candidateKeys"];
+	    }
+	}
+	export class ZaloTargetQuery {
+	    po: string;
+	    system: string;
+	    customerCode: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new ZaloTargetQuery(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.po = source["po"];
+	        this.system = source["system"];
+	        this.customerCode = source["customerCode"];
+	    }
+	}
 
 }
 

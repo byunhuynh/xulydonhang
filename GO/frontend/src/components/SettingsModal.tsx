@@ -8,15 +8,18 @@ import { KeyValueEditor } from './KeyValueEditor'
 import { MisaRoutingEditor } from './MisaRoutingEditor'
 import { WarehouseEditor } from './WarehouseEditor'
 import { useModalEntrance } from '../lib/useModalEntrance'
-
-type SettingsTab = 'gid' | 'zalo' | 'reminder' | 'haravan' | 'misa' | 'misaRouting' | 'warehouse'
+import type { SettingsTab } from '../lib/settingsTabs'
 
 interface SettingsModalProps {
   onClose: () => void
+  // Tab mở sẵn khi popup bật lên. Nút bánh răng vẫn mở tab 'gid' như
+  // trước; bản xem trước tin Zalo mở thẳng tab 'zalo' để người dùng gán
+  // nhóm còn thiếu ngay tại chỗ thay vì phải tự đi tìm.
+  initialTab: SettingsTab
 }
 
-export function SettingsModal({ onClose }: SettingsModalProps) {
-  const [tab, setTab] = useState<SettingsTab>('gid')
+export function SettingsModal({ onClose, initialTab }: SettingsModalProps) {
+  const [tab, setTab] = useState<SettingsTab>(initialTab)
   const [settings, setSettings] = useState<AppSettings | null>(null)
   const [saved, setSaved] = useState(false)
   const [dupState, setDupState] = useState({ gid: false, zalo: false, reminder: false, haravan: false, misa: false })
@@ -33,7 +36,7 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
 
   if (!settings) {
     return (
-      <div ref={backdropRef} className="fixed inset-0 z-50 flex items-center justify-center bg-black/60" onClick={onClose}>
+      <div ref={backdropRef} className="fixed inset-0 z-[70] flex items-center justify-center bg-black/60" onClick={onClose}>
         <div ref={cardRef} className="rounded-xl border border-border bg-panel p-6 text-sm text-muted">
           Đang tải...
         </div>
@@ -64,7 +67,7 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
   ]
 
   return (
-    <div ref={backdropRef} className="fixed inset-0 z-50 flex items-center justify-center bg-black/60" onClick={onClose}>
+    <div ref={backdropRef} className="fixed inset-0 z-[70] flex items-center justify-center bg-black/60" onClick={onClose}>
       <div
         ref={cardRef}
         className="flex max-h-[80vh] w-[560px] flex-col rounded-xl border border-border bg-panel p-4"

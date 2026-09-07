@@ -709,6 +709,71 @@ type ZaloJob struct {
 	DisplayLabel string `json:"displayLabel"`
 }
 
+// ZaloTargetQuery hỏi "đơn này sẽ đi về nhóm Zalo nào?". Ba trường khớp
+// đúng ba trường ZaloJob dùng để resolve — frontend dựng chúng từ CÙNG
+// một dòng đầu nhóm ở cả bản xem trước lẫn lúc bấm gửi.
+type ZaloTargetQuery struct {
+	PO           string `json:"po"`
+	System       string `json:"system"`
+	CustomerCode string `json:"customerCode"`
+}
+
+// ZaloTargetPreview là câu trả lời cho một ZaloTargetQuery, dựng để hiện
+// thẳng lên bản xem trước tin nhắn.
+type ZaloTargetPreview struct {
+	// PO dội lại nguyên văn PO của query — frontend gộp nhóm theo sourceId
+	// cho JIT/TMĐT nên đây có thể là hash, không phải po thật; nó chỉ dùng
+	// để ghép kết quả về đúng bong bóng tin.
+	PO string `json:"po"`
+	// Configured = false nghĩa là job này sẽ bị SKIP lúc gửi (xem
+	// zalosend.ErrNoContact) — bản xem trước cảnh báo đỏ thay vì để người
+	// dùng bấm gửi rồi mới phát hiện qua log.
+	Configured bool `json:"configured"`
+	// GroupName là tên nhóm Zalo sẽ nhận tin; rỗng khi chưa gán.
+	GroupName string `json:"groupName"`
+	// Key là key trong Cài đặt > Zalo đã khớp, ghi đúng như người dùng đã
+	// gõ; rỗng khi chưa gán.
+	Key string `json:"key"`
+	// SuggestedKey là key nên thêm vào Cài đặt khi chưa gán nhóm. Đây là
+	// điểm mấu chốt của cả tính năng: chưa có TÊN nhóm thì key chính là
+	// thứ duy nhất giúp người dùng gán được nhóm.
+	SuggestedKey string `json:"suggestedKey"`
+	// CandidateKeys là mọi key đã thử theo thứ tự ưu tiên — hiện ra khi
+	// muốn giải thích vì sao key phân khúc không khớp.
+	CandidateKeys []string `json:"candidateKeys"`
+}
+
+// PreviewZaloTargets tra nhóm Zalo cho một loạt đơn, để modal xem trước
+// tin nhắn hiện được ai sẽ nhận TRƯỚC khi bấm gửi.
+//
+// Cố ý đọc settings từ đĩa MỘT LẦN cho cả loạt (không phải mỗi đơn một
+// lần) và đi qua đúng zalosend.ResolveTarget mà runZaloBatch dùng: nhóm
+// hiện trên bản xem trước phải là nhóm thật sự nhận tin, không phải một
+// bản dựng lại song song có thể trôi lệch theo thời gian.
+func (a *App) PreviewZaloTargets(queries []ZaloTargetQuery) ([]ZaloTargetPreview, error) {
+	if len(queries) == 0 {
+		return nil, nil
+	}
+	settings, err := a.appSettingsStore.Load(resolveRepoFile("settings.ini"))
+	if err != nil {
+		return nil, fmt.Errorf("không đọc được cấu hình liên hệ Zalo: %w", err)
+	}
+
+	previews := make([]ZaloTargetPreview, len(queries))
+	for i, q := range queries {
+		target := zalosend.ResolveTarget(q.System, q.CustomerCode, settings.Zalo)
+		previews[i] = ZaloTargetPreview{
+			PO:            q.PO,
+			Configured:    target.Configured(),
+			GroupName:     target.GroupName,
+			Key:           target.Key,
+			SuggestedKey:  target.SuggestedKey(),
+			CandidateKeys: target.CandidateKeys,
+		}
+	}
+	return previews, nil
+}
+
 // SendZaloMessages gửi tuần tự từng job trong 1 goroutine nền, phát sự
 // kiện zalo:log/zalo:sent/zalo:done — cùng pattern ProcessFiles/runBatch.
 // Từ chối nếu đang có 1 lượt gửi khác chạy (atomic.Bool, giống
