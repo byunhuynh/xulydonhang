@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"reflect"
 	"sort"
+	"strings"
 	"testing"
 	"time"
 
@@ -1085,5 +1086,81 @@ func TestPreviewZaloTargets_EmptyQueryListReturnsNothing(t *testing.T) {
 	}
 	if len(got) != 0 {
 		t.Errorf("len = %d, want 0", len(got))
+	}
+}
+
+// hookedStubProcessor records the moment each file is processed against a
+// shared trace, so a test can assert what ran BEFORE processing started.
+type hookedStubProcessor struct {
+	trace *[]string
+}
+
+func (h *hookedStubProcessor) Process(ctx context.Context, filePath string) ([]processing.OrderRow, error) {
+	*h.trace = append(*h.trace, "process:"+filePath)
+	return []processing.OrderRow{{FileName: filePath, PO: "PO1", Status: processing.StatusDone}}, nil
+}
+
+// TestRunBatch_RefreshesCustomerDataOnceBeforeProcessing pins the fix for
+// the reported "I added the store to the mapping and nothing happened":
+// MaKH/SanPham were fetched from Google Sheets exactly once, at app
+// startup, so a row added to the sheet mid-session stayed invisible until
+// the app was restarted. Refreshing at the top of every batch is what makes
+// a sheet edit take effect on the very next click.
+func TestRunBatch_RefreshesCustomerDataOnceBeforeProcessing(t *testing.T) {
+	var trace []string
+	a := &App{
+		processor:  &hookedStubProcessor{trace: &trace},
+		excelPath:  freshOrderWorkbook(t),
+		dataLoader: func() (processing.Processor, error) { return nil, nil },
+	}
+	a.storeRefresher = func() error {
+		trace = append(trace, "refresh")
+		return nil
+	}
+
+	a.runBatch(&fakeEmitter{}, []string{"a.pdf", "b.pdf"}, nil)
+
+	want := []string{"refresh", "process:a.pdf", "process:b.pdf"}
+	if len(trace) != len(want) {
+		t.Fatalf("trace = %v, want %v (one refresh, before every file)", trace, want)
+	}
+	for i := range want {
+		if trace[i] != want[i] {
+			t.Fatalf("trace = %v, want %v", trace, want)
+		}
+	}
+}
+
+// TestRunBatch_ContinuesWithAWarningWhenTheCustomerDataRefreshFails keeps a
+// dropped network connection from blocking work outright: the data loaded
+// at startup is stale, not useless, so the batch runs on it and the user is
+// told why.
+func TestRunBatch_ContinuesWithAWarningWhenTheCustomerDataRefreshFails(t *testing.T) {
+	var trace []string
+	a := &App{
+		processor: &hookedStubProcessor{trace: &trace},
+		excelPath: freshOrderWorkbook(t),
+	}
+	a.storeRefresher = func() error { return errors.New("network timeout") }
+
+	emitter := &fakeEmitter{}
+	a.runBatch(emitter, []string{"a.pdf"}, nil)
+
+	if len(trace) != 1 || trace[0] != "process:a.pdf" {
+		t.Fatalf("trace = %v, want the file processed anyway on stale data", trace)
+	}
+
+	warned := false
+	for _, event := range emitter.events {
+		if event.name != "process:log" || len(event.data) == 0 {
+			continue
+		}
+		msg, _ := event.data[0].(string)
+		if strings.Contains(msg, "network timeout") && strings.Contains(msg, "MaKH") {
+			warned = true
+		}
+	}
+	if !warned {
+		t.Fatalf("no log explained the failed refresh: %+v", emitter.events)
 	}
 }

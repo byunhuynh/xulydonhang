@@ -88,7 +88,18 @@ type App struct {
 	zaloLoginCancel     context.CancelFunc
 	initMu              sync.Mutex
 	dataLoader          func() (processing.Processor, error)
-	updateJITPeriodFn   func(string, []int, string, string, string) error
+	// storeRefresher nạp lại bảng MaKH/SanPham từ Google Sheets vào
+	// Store của processor hiện tại. Gán trong NewApp; nil trong test
+	// dùng processor giả (không có gì để nạp).
+	//
+	// Trước đây hai bảng này chỉ được tải ĐÚNG MỘT LẦN lúc app khởi
+	// động, nên thêm một store mới vào sheet giữa phiên làm việc là vô
+	// hình cho tới khi tắt/mở lại app — đúng triệu chứng "bổ sung vào
+	// mapping mà không ăn" đã gặp với "GO! LAI VUNG". runReservedBatch
+	// gọi nó ở đầu mỗi lượt xử lý để một lần sửa sheet có hiệu lực ngay
+	// ở cú bấm kế tiếp.
+	storeRefresher    func() error
+	updateJITPeriodFn func(string, []int, string, string, string) error
 	// tmdtResolve nhận phản hồi của modal sửa mã thiếu. Đệm 1 để
 	// ResolveTMDTMissing/CancelTMDTMissing không bị chặn nếu nhánh TMĐT
 	// vừa hết giờ chờ đúng lúc người dùng bấm.
@@ -232,6 +243,25 @@ func NewApp() (*App, error) {
 		tmdtResolve:     make(chan tmdtResolution, 1),
 		misaPusher:      &misapush.HTTPPusher{},
 		misaSessionPath: filepath.Join(resolveRepoDir("settings.ini"), "misa-session.json"),
+	}
+
+	app.storeRefresher = func() error {
+		rp, ok := app.processor.(*processing.RealProcessor)
+		if !ok || rp == nil {
+			return nil
+		}
+		// Đọc lại gid từ đĩa thay vì dùng bản chụp lúc NewApp: người
+		// dùng có thể đã đổi gid trong phiên này.
+		current, err := app.appSettingsStore.Load(resolveRepoFile("settings.ini"))
+		if err != nil {
+			return err
+		}
+		store, err := productdata.LoadFromSheets(current.Gid, productdata.NewHTTPClient())
+		if err != nil {
+			return err
+		}
+		rp.Store = store
+		return nil
 	}
 
 	app.dataLoader = func() (processing.Processor, error) {
@@ -576,6 +606,18 @@ func (a *App) runReservedBatch(emitter Emitter, files []string, ranges map[strin
 	if err := excelwriter.ClearOrderRows(a.excelPath); err != nil {
 		emitter.Emit("process:log", fmt.Sprintf("❌ Không xóa được dữ liệu cũ trong dondathang.xlsx (có thể file đang mở trong Excel, hãy đóng lại rồi thử lại): %v", err))
 		return
+	}
+
+	// Nạp lại MaKH/SanPham NGAY TRƯỚC khi xử lý, sau ClearOrderRows để
+	// một workbook đang mở trong Excel vẫn báo lỗi ngay mà không phải
+	// chờ một lượt gọi mạng. Lỗi ở đây không chặn lô: dữ liệu nạp lúc
+	// khởi động chỉ là cũ chứ không phải vô dụng.
+	if a.storeRefresher != nil {
+		if err := a.storeRefresher(); err != nil {
+			emitter.Emit("process:log", fmt.Sprintf("⚠️ Không tải lại được MaKH/SanPham (%v) — vẫn xử lý bằng dữ liệu đã nạp lúc khởi động.", err))
+		} else {
+			emitter.Emit("process:log", "🔄 Đã tải lại MaKH/SanPham từ Google Sheets.")
+		}
 	}
 
 	emitter.Emit("process:progress", BatchProgress{Done: 0, Total: len(files)})
