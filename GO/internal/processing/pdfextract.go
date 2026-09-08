@@ -478,10 +478,9 @@ func clusterRowsByYIndexed(texts []pdf.Text) [][]indexedText {
 // per-run gap dumps: the same 3-4 decimal-place value repeats for
 // hundreds of consecutive runs on a given page), which is exactly what
 // makes a per-page MEDIAN gap a reliable proxy for "one normal character
-// step" on THAT page — real word/field gaps measured 74-thousands of
-// times that median across every page sampled, so an 10x-median floor
-// leaves enormous margin in both directions without needing to know a
-// page's own absolute font size in advance.
+// step" on THAT page — see gapThresholdMultiplier for how far above that
+// step the threshold sits, and why the answer is "half a step", not the
+// order of magnitude an earlier, narrower sample suggested.
 func reconstructRotatedPage(texts []pdf.Text, rotation int) string {
 	rotated := rotateForReading(texts, rotation)
 	rows := clusterRowsByYIndexed(rotated)
@@ -516,10 +515,27 @@ func reconstructRotatedPage(texts []pdf.Text, rotation int) string {
 
 // gapThresholdMultiplier scales a page's own median stream-adjacent gap
 // (rotatedPageGapThreshold's "one normal character step" estimate) up
-// to a word-gap threshold. See reconstructRotatedPage's own doc comment
-// for the real measured ratios (smallest confirmed real word/field gap
-// was ~74x its page's own median step) that this margin sits well under.
-const gapThresholdMultiplier = 10.0
+// to a word-gap threshold.
+//
+// 1.5 means "more than one and a half character steps of empty space",
+// i.e. room for at least one character that was not drawn — which on
+// this generator is exactly what a space IS. Some of its pages draw no
+// space glyph at all and simply advance past the slot, so every gap on
+// such a page is a whole number of steps: one step inside a word, two or
+// more wherever the text really has a space. 1.5 is the midpoint between
+// those two, and nothing on such a page ever lands in between.
+//
+// This was 10.0, chosen when the only rotated pages sampled were ones
+// whose median stream-adjacent gap is a near-zero TOUCHING distance
+// (0.05pt on 103145712-00) rather than a character step, making their
+// real word gaps ~74x the median and any multiplier in between look
+// equally safe. It is not: on 103909234-00 the median gap is one full
+// 3.602pt advance and the real column gaps are only 4-10x it, so 10x
+// swallowed them and ran four numeric columns into one token. Pages of
+// the touching-distance kind are unaffected either way — 1.5 x 0.05 is
+// far below the fixed gapThreshold floor rotatedPageGapThreshold applies
+// underneath, so they keep the same 2.0pt threshold they always had.
+const gapThresholdMultiplier = 1.5
 
 // rotatedPageGapThreshold estimates a word-gap distance threshold
 // specific to THIS page, rather than trusting one fixed value (see

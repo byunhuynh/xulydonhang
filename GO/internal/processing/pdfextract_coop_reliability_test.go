@@ -3,6 +3,9 @@ package processing
 import (
 	"testing"
 
+	"github.com/ledongthuc/pdf"
+
+	"order-processor/internal/processing/coop"
 	"order-processor/internal/processing/vendor"
 )
 
@@ -379,5 +382,88 @@ func TestExtractPageText_RotatedCoopPage_AdaptiveThresholdHandlesWideFont(t *tes
 	}
 	if got := vendor.Identify(text); got != "Coop" {
 		t.Errorf("vendor.Identify(extractPageText result) = %q, want %q", got, "Coop")
+	}
+}
+
+// TestExtractPageText_RotatedCoopPage_KeepsNumericColumnsApart is the
+// regression test for a fourth real /Rotate 90 shape: 103909234-00.pdf
+// draws NO space glyphs at all, so every gap on the page is a whole
+// number of its uniform 3.602pt character advance (measured: 742 gaps of
+// one step, 94 of two, 11 of three). Its median stream-adjacent gap is
+// therefore one CHARACTER STEP, not the near-zero touching distance the
+// original 10x multiplier was calibrated against — real column gaps here
+// run only 4-10x that median, so a 10x threshold swallowed every one of
+// them and ran the four numeric columns together as
+// "341640.00341640.007.0028.00.00".
+//
+// coop.ExtractProducts then read "007.0028" as the quantity, because
+// 2,391,480 / 7.0028 = 341,502 passes its unit-price sanity check just
+// as convincingly as the true 2,391,480 / 28 = 85,410 does. Reported
+// live as "quantity is 28, why does it come out 7.0028".
+func TestExtractPageText_RotatedCoopPage_KeepsNumericColumnsApart(t *testing.T) {
+	file, r, err := pdfOpen("coop/testdata/realpdfs/103909234-00.pdf")
+	if err != nil {
+		t.Skipf("fixture not available: %v", err)
+	}
+	defer file.Close()
+	page := r.Page(1)
+	if rot := pageRotation(page); rot != 90 {
+		t.Fatalf("fixture's own rotation = %d, want 90 (fixture assumption changed?)", rot)
+	}
+	text, err := extractPageText(page)
+	if err != nil {
+		t.Fatalf("extractPageText returned error: %v", err)
+	}
+
+	if containsSubstring(text, "341640.00341640.00") {
+		t.Error("the two unit-cost columns are still run together with no separator")
+	}
+	if !containsSubstring(text, "7.00 28.00") {
+		t.Errorf("the Qty Ord/CS and Qty Ord/Pcs columns are not separated — got: %.800s", text)
+	}
+
+	products, err := coop.ExtractProducts(text)
+	if err != nil {
+		t.Fatalf("coop.ExtractProducts returned error: %v", err)
+	}
+	if len(products) != 1 {
+		t.Fatalf("got %d products, want 1: %+v", len(products), products)
+	}
+	if products[0].Qty != 28 {
+		t.Errorf("Qty = %v, want 28 (the Qty Ord/Pcs column)", products[0].Qty)
+	}
+	if products[0].Cost != 2391480 {
+		t.Errorf("Cost = %v, want 2391480", products[0].Cost)
+	}
+}
+
+// TestRotatedPageGapThreshold_SeparatesOneStepFromTwoStepGaps states the
+// rule the multiplier has to satisfy on a page that draws no space
+// glyphs, where every gap is a whole number of character steps: one step
+// is inside a word, two steps means a character's worth of empty space,
+// i.e. a real space. The threshold must therefore land strictly between
+// them - the property the original 10x multiplier, calibrated on pages
+// whose median gap is a near-zero touching distance instead of a
+// character step, does not have.
+func TestRotatedPageGapThreshold_SeparatesOneStepFromTwoStepGaps(t *testing.T) {
+	const step = 3.602
+	// One row of runs whose gaps are mostly one step, with a couple of
+	// two-step (word) and eight-step (column) gaps - the measured shape
+	// of 103909234-00's own page.
+	gapsInSteps := []float64{1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 2, 1, 1, 1, 2, 8, 1, 1}
+	var row []indexedText
+	x := 0.0
+	row = append(row, indexedText{Text: pdf.Text{S: "a", X: x, Y: 100}, idx: 0})
+	for i, g := range gapsInSteps {
+		x += g * step
+		row = append(row, indexedText{Text: pdf.Text{S: "a", X: x, Y: 100}, idx: i + 1})
+	}
+
+	got := rotatedPageGapThreshold([][]indexedText{row})
+	if got <= step {
+		t.Errorf("threshold = %v, want above one character step (%v) so same-word runs do not get a synthesized space", got, step)
+	}
+	if got >= 2*step {
+		t.Errorf("threshold = %v, want below two character steps (%v) so a real space still gets one", got, 2*step)
 	}
 }
