@@ -2,6 +2,7 @@ package coop
 
 import (
 	"fmt"
+	"math"
 	"regexp"
 	"sort"
 	"strconv"
@@ -117,6 +118,15 @@ func ExtractProducts(text string) ([]Product, error) {
 		products = append(products, Product{Barcode: barcode, Qty: qty, Cost: cost})
 	}
 
+	// Quantities first, Sub Total second. A page can pass the Sub Total
+	// check and still have a broken quantity — the money column and the
+	// quantity columns are read independently — and when the quantity is
+	// the thing that went wrong, saying so beats reporting a total that
+	// does add up. See checkWholeNumberQuantities.
+	if err := checkWholeNumberQuantities(products); err != nil {
+		return nil, err
+	}
+
 	// The page states what its rows add up to; check it before handing
 	// them back. See checkAgainstSubTotal for why this is worth a hard
 	// error rather than a flag on the row.
@@ -125,6 +135,42 @@ func ExtractProducts(text string) ([]Product, error) {
 	}
 
 	return products, nil
+}
+
+// checkWholeNumberQuantities refuses a page carrying a quantity Coop
+// cannot have ordered. Every one of the 378 product lines across the 153
+// real archived PDFs in coop/testdata/realpdfs has a whole-number
+// quantity, and the smallest is 3 — this vendor orders pieces, never
+// fractions and never none.
+//
+// It exists because ExtractProducts guesses which numbers on a line are
+// the quantity and the cost, and that guess has no way to notice when
+// two of the PO's numeric columns reach it run together as one token.
+// 103909234-00 is the confirmed case: "341640.00 341640.00 7.00 28.00
+// .00" arrived as "341640.00341640.007.0028.00.00", the quantity came
+// back as 7.0028 instead of 28, and every existing guard waved it
+// through — the Sub Total matched to the dong (only the quantity was
+// wrong, the money was right) and the implied unit price 2,391,480 /
+// 7.0028 = 341,502 sits inside the same sane band the true 85,410 does.
+// The page reported a clean "Hoàn Thành" and wrote a wrong quantity,
+// case count and weight into the workbook.
+//
+// A fractional or zero quantity is not a number to correct, it is
+// evidence the read itself went wrong, so this returns an error (page
+// refused, nothing written) rather than flagging the row — the same call
+// this file already makes for a page that does not add up.
+func checkWholeNumberQuantities(products []Product) error {
+	for _, p := range products {
+		if p.Qty != math.Trunc(p.Qty) {
+			return fmt.Errorf("số lượng đọc được cho mã hàng %s là %s, không phải số nguyên — nhiều khả năng các cột số trên PO bị dính vào nhau khi đọc PDF",
+				p.Barcode, strconv.FormatFloat(p.Qty, 'f', -1, 64))
+		}
+		if p.Qty <= 0 {
+			return fmt.Errorf("số lượng đọc được cho mã hàng %s là %s — không phải số lượng đặt hàng hợp lệ, nhiều khả năng đọc nhầm cột trên PO",
+				p.Barcode, strconv.FormatFloat(p.Qty, 'f', -1, 64))
+		}
+	}
+	return nil
 }
 
 // findDecimalNumbers mirrors the regex
