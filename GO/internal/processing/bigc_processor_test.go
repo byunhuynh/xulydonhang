@@ -100,7 +100,11 @@ func TestBigCStreamingEmitsProvisionalStoresBeforeCombinedWriteAndFinalizesSameK
 	failedKey := orderResultKey(sourceID, "page:3", "")
 	lastKey := orderResultKey(sourceID, "page:4", po)
 	wantKeys := []string{firstKey, failedKey, lastKey, firstKey, lastKey}
-	wantKinds := []string{StatusKindProcessing, StatusKindFailed, StatusKindProcessing, StatusKindDone, StatusKindDone}
+	// The final store events are warnings, not done: the product fixture
+	// knows none of this real PDF's barcodes, so both store pages wrote no
+	// product row and are flagged as incomplete. This test is about the
+	// lifecycle keys, not about that.
+	wantKinds := []string{StatusKindProcessing, StatusKindFailed, StatusKindProcessing, StatusKindWarning, StatusKindWarning}
 	for i := range events {
 		if events[i].ResultKey != wantKeys[i] || events[i].StatusKind != wantKinds[i] {
 			t.Errorf("event %d = key %q status %q, want key %q status %q", i, events[i].ResultKey, events[i].StatusKind, wantKeys[i], wantKinds[i])
@@ -115,14 +119,14 @@ func TestBigCStreamingEmitsProvisionalStoresBeforeCombinedWriteAndFinalizesSameK
 		}
 	}
 
-	if rows[0].ResultKey != firstKey || rows[0].StatusKind != StatusKindDone {
-		t.Errorf("first returned store = key %q status %q, want %q done", rows[0].ResultKey, rows[0].StatusKind, firstKey)
+	if rows[0].ResultKey != firstKey || rows[0].StatusKind != StatusKindWarning {
+		t.Errorf("first returned store = key %q status %q, want %q warning", rows[0].ResultKey, rows[0].StatusKind, firstKey)
 	}
 	if rows[1].ResultKey != failedKey || rows[1].StatusKind != StatusKindFailed {
 		t.Errorf("parse-failed returned page = key %q status %q, want %q failed", rows[1].ResultKey, rows[1].StatusKind, failedKey)
 	}
-	if rows[2].ResultKey != lastKey || rows[2].StatusKind != StatusKindDone {
-		t.Errorf("last returned store = key %q status %q, want %q done", rows[2].ResultKey, rows[2].StatusKind, lastKey)
+	if rows[2].ResultKey != lastKey || rows[2].StatusKind != StatusKindWarning {
+		t.Errorf("last returned store = key %q status %q, want %q warning", rows[2].ResultKey, rows[2].StatusKind, lastKey)
 	}
 	if len(rows[0].ExcelRows) != 1 || rows[0].ExcelRows[0] != initialRows+1 {
 		t.Errorf("first store ExcelRows = %v, want [%d] (absolute combined-write header row)", rows[0].ExcelRows, initialRows+1)
@@ -262,12 +266,13 @@ func TestRealProcessor_ProcessesRealSampleBigcFile(t *testing.T) {
 	// SP0001/SP0002/BigC-test entries) — with the xulydonhang.py:4606-4607
 	// "skip item if product name not found" guard (bigc_processor.go),
 	// every real item on every page is therefore filtered out before it
-	// can ever reach price matching, leaving each page with zero saigia
-	// and Done status rather than Warning. Real-data correctness
-	// (including genuine price mismatches) is covered exhaustively by
-	// TestRealProcessor_MatchesGoldenFixtures_BigC, which loads the real
-	// production data.xlsx; this test only exercises PDF text extraction
-	// end-to-end.
+	// can ever reach price matching. That used to leave each page a clean
+	// Done; it now makes this the end-to-end case of an order whose
+	// products the sheet does not know: every page with items warns and
+	// names them, and the PO's printed totals flag it as incomplete.
+	// Real-data correctness (including genuine price mismatches) is
+	// covered exhaustively by TestRealProcessor_MatchesGoldenFixtures_BigC,
+	// which loads the real production data.xlsx.
 	pricingSource := &fixturePricingSource{index: pricing.ParseIndex(nil)}
 
 	rp := &RealProcessor{Store: store, Pricing: pricingSource, ExcelPath: excelPath}
@@ -290,9 +295,36 @@ func TestRealProcessor_ProcessesRealSampleBigcFile(t *testing.T) {
 		if row.PO != "2631057733376" {
 			t.Fatalf("rows[%d].PO = %q, want %q", i, row.PO, "2631057733376")
 		}
-		if row.StatusKind != StatusKindDone {
-			t.Fatalf("rows[%d].StatusKind = %v, want %v (test fixture's product database has none of this file's real barcodes -> every item skipped by the not-found guard -> no mismatches possible)", i, row.StatusKind, StatusKindDone)
+		// A page with item lines warns and lists them; the PURCHASE NOTE's
+		// itemless overflow page has nothing missing and stays done.
+		if (row.StatusKind == StatusKindWarning) != (len(row.MissingItems) > 0) {
+			t.Fatalf("rows[%d] = kind %v with %d missing items, want a warning exactly when lines were skipped: %q", i, row.StatusKind, len(row.MissingItems), row.Status)
 		}
+		if row.PriceMismatchCount != 0 {
+			t.Fatalf("rows[%d].PriceMismatchCount = %d, want 0 (skipped lines never reach price matching)", i, row.PriceMismatchCount)
+		}
+	}
+
+	// Nothing was known, so nothing was written - and every line page 0
+	// prints must be accounted for as missing, not quietly dropped.
+	var missingQty float64
+	for _, row := range rows {
+		for _, item := range row.MissingItems {
+			if item.Description == "" {
+				t.Errorf("missing item %s has no description to tell the user what it is", item.Barcode)
+			}
+			missingQty += item.Qty
+		}
+	}
+	check := rows[len(rows)-1].POTotals
+	if check == nil {
+		t.Fatal("POTotals = nil, want the PO flagged incomplete")
+	}
+	if check.WrittenQty != 0 || check.WrittenAmount != 0 || check.PrintedQty == 0 {
+		t.Errorf("POTotals = %+v, want printed totals against nothing written", *check)
+	}
+	if missingQty != check.PrintedQty {
+		t.Errorf("missing lines add up to %v, want all %v of the PO's printed Total Qty", missingQty, check.PrintedQty)
 	}
 }
 
@@ -975,13 +1007,16 @@ func TestRealProcessor_ProcessesBigcDocument_WarnsWhenAStoreIsMissingFromMaKH(t 
 		"Total Net Purchase Price\n" +
 		"20/08/26\n" +
 		"Article\n" +
-		"8934563119999 Product One Master Pack 1 6 1 1 15000 PCS 15000\n"
+		"8934563112223 Product One Master Pack 1 6 1 1 0 PCS 0\n"
+	// 8934563112223 is a product the fixture's SanPham knows, and its 0đ PO
+	// price agrees with the empty price sheet, so the only thing that can
+	// make a page warn here is the store's MaKH entry.
 	storePage := func(name string) string {
 		return "FM LOGISTIC VSIP 2 (806)\n" +
 			"Some Address Line\n" +
 			"Vietnam\n" +
 			name + "\n" +
-			"8934563119999\n" +
+			"8934563112223\n" +
 			"Product One Description\n" +
 			"Pack\n" +
 			"1\n" +
@@ -1059,6 +1094,179 @@ func TestRealProcessor_ProcessesBigcDocument_DoesNotWarnOnAnItemlessPage(t *test
 	}
 	if rows[0].StatusKind != StatusKindDone || rows[0].Status != StatusDone {
 		t.Errorf("itemless page row = kind %q status %q, want an unchanged clean %q", rows[0].StatusKind, rows[0].Status, StatusDone)
+	}
+}
+
+// bigcTotalsDocument builds a one-store BigC PO in the real extracted
+// shape (802_NORTHDC_QP0_3006900_2636058652325.pdf): priceLines under
+// page 0's "Article" header, the PURCHASE NOTE foot carrying footQty and
+// footAmount, and a GO! AN LAC store page listing storeItems above its own
+// "Total Quantity". 8934563112223 is in the fixture's SanPham;
+// 8936240510219 is the real new product that was not.
+func bigcTotalsDocument(priceLines, footQty, footAmount, storeItems, storeTotal string) []string {
+	page0 := "PURCHASE NOTE\n2631099999999\n15/08/26 15:14\n3006900\n" +
+		"FM LOGISTIC VSIP 2 (806)SO 16,DUONG 31,KCN VSIP 2AP.VINH TANHO CHI MINHVietnam\n" +
+		"Article\nArticle Description\nOU Type\n" + priceLines +
+		"HOUSEHOLD (450)\n" + footQty + "\n\n" + footAmount + "\n\n" +
+		"Deliver To Warehouse Before\n\nTotal Qty\n\nTotal Net Purchase Price\n20/08/26\n\n" + footQty + "\n\n" + footAmount + "\n"
+	store := "DETAIL DELIVERY BY STORE\n" +
+		"FM LOGISTIC VSIP 2 (806)SO 16,DUONG 31,KCN VSIP 2AP.VINH TANHO CHI MINHVietnam\n" +
+		"GO! AN LACSO 1231 KP 5, DUONG QUOC LO 1APHUONG AN LACHO CHI MINHVietnam\n" +
+		"Article\nArticle desc.\nOU Type\nLV\nSKU/OU\nOU Qty\n" + storeItems +
+		"HOUSEHOLD (450)\n\n" + storeTotal + "\nChu thich:\nTotal Quantity\n" + storeTotal
+	return []string{page0, store}
+}
+
+const (
+	bigcKnownPriceLine   = "8934563112223\nBigC Test Product A\nPack\n1\n2\n3\n0\n10,000\nCai\n60,000\n\n"
+	bigcUnknownPriceLine = "8936240510219\nTH2 NRC H. TU NHIEN SAVE 10KG\nPack\n1\n2\n1\n0\n111,647\nCai\n223,294\n\n"
+	bigcKnownStoreItem   = "8934563112223\nBigC Test Product A\nPack\n1\n2\n3\n"
+	bigcUnknownStoreItem = "8936240510219\nTH2 NRC H. TU NHIEN SAVE 10KG\nPack\n1\n2\n1\n"
+)
+
+func newBigcTotalsProcessor(t *testing.T, logs *[]string) *RealProcessor {
+	t.Helper()
+	store, err := productdata.Load("productdata/testdata/data.xlsx")
+	if err != nil {
+		t.Fatalf("Load productdata failed: %v", err)
+	}
+	return &RealProcessor{
+		Store:     store,
+		Pricing:   &fixturePricingSource{index: pricing.ParseIndex(nil)},
+		ExcelPath: copyTestWorkbookForProcessor(t),
+		LogFunc:   func(msg string) { *logs = append(*logs, msg) },
+	}
+}
+
+// TestRealProcessor_ProcessesBigcDocument_WarnsOnAProductMissingFromSanPham
+// covers the live report on 802_NORTHDC/806_SOUTHDC_QP0_3006900: BigC added
+// two new products nobody had put in SanPham yet. The not-found guard
+// skipped their lines, and pages holding only those lines still said
+// "Hoàn Thành" at 0đ - the order went out 7.145.408đ short on one PO with
+// nothing on screen to say so.
+func TestRealProcessor_ProcessesBigcDocument_WarnsOnAProductMissingFromSanPham(t *testing.T) {
+	var logs []string
+	rp := newBigcTotalsProcessor(t, &logs)
+	pages := bigcTotalsDocument(bigcKnownPriceLine+bigcUnknownPriceLine, "4", "283,294", bigcKnownStoreItem+bigcUnknownStoreItem, "4")
+
+	rows, err := rp.processBigcDocument("synthetic_bigc_missing_product.pdf", pages, nil)
+	if err != nil {
+		t.Fatalf("processBigcDocument returned error: %v", err)
+	}
+	if len(rows) != 1 {
+		t.Fatalf("returned %d rows, want 1: %+v", len(rows), rows)
+	}
+	row := rows[0]
+
+	if row.StatusKind != StatusKindWarning || !strings.Contains(row.Status, "1 mã chưa có trong SanPham (8936240510219)") {
+		t.Errorf("status = kind %q %q, want a warning naming the missing barcode", row.StatusKind, row.Status)
+	}
+	wantMissing := []MissingItemDetail{{Barcode: "8936240510219", Description: "TH2 NRC H. TU NHIEN SAVE 10KG", Qty: 1, Amount: 223294}}
+	if len(row.MissingItems) != 1 || row.MissingItems[0] != wantMissing[0] {
+		t.Errorf("MissingItems = %+v, want %+v", row.MissingItems, wantMissing)
+	}
+	// Written side is priced at the PO's own 10,000 unit price, not the
+	// (here empty) system price, so the gap is exactly the missing line.
+	wantTotals := POTotalsCheck{PrintedQty: 4, PrintedAmount: 283294, WrittenQty: 3, WrittenAmount: 60000}
+	if row.POTotals == nil || *row.POTotals != wantTotals {
+		t.Errorf("POTotals = %+v, want %+v", row.POTotals, wantTotals)
+	}
+	// The known line is still written exactly as before: header + product.
+	if len(row.ExcelRows) != 2 {
+		t.Errorf("ExcelRows = %v, want the header row and the one known product", row.ExcelRows)
+	}
+
+	joined := strings.Join(logs, "\n")
+	for _, want := range []string{"BigC PO 2631099999999 chưa đủ", "4 SL / 283.294đ", "3 SL / 60.000đ", "8936240510219 TH2 NRC H. TU NHIEN SAVE 10KG — 1 SL (223.294đ)"} {
+		if !strings.Contains(joined, want) {
+			t.Errorf("process log missing %q; got:\n%s", want, joined)
+		}
+	}
+}
+
+// A complete PO must stay exactly as quiet as before: no totals check, no
+// missing items, no log line. (The page still warns about its price - the
+// fixture has no price sheet - which is not what this test is about.)
+func TestRealProcessor_ProcessesBigcDocument_CompleteOrderRaisesNoTotalsWarning(t *testing.T) {
+	var logs []string
+	rp := newBigcTotalsProcessor(t, &logs)
+	pages := bigcTotalsDocument(bigcKnownPriceLine, "3", "60,000", bigcKnownStoreItem, "3")
+
+	rows, err := rp.processBigcDocument("synthetic_bigc_complete.pdf", pages, nil)
+	if err != nil {
+		t.Fatalf("processBigcDocument returned error: %v", err)
+	}
+	if len(rows) != 1 {
+		t.Fatalf("returned %d rows, want 1: %+v", len(rows), rows)
+	}
+	if rows[0].POTotals != nil || len(rows[0].MissingItems) != 0 {
+		t.Errorf("complete PO got POTotals %+v, MissingItems %+v, want neither", rows[0].POTotals, rows[0].MissingItems)
+	}
+	if strings.Contains(rows[0].Status, "SanPham") || strings.Contains(rows[0].Status, "Total Quantity") {
+		t.Errorf("complete PO status = %q, want no completeness warning", rows[0].Status)
+	}
+	for _, line := range logs {
+		if strings.Contains(line, "chưa đủ") {
+			t.Errorf("complete PO logged a shortfall: %q", line)
+		}
+	}
+}
+
+// A store page whose own "Total Quantity" is more than the lines read from
+// it has lost a line to extraction - the regression the removed hard-fail
+// used to catch. It must say so on that page, not only in the PO totals.
+func TestRealProcessor_ProcessesBigcDocument_WarnsWhenAPagePrintsMoreThanWasRead(t *testing.T) {
+	var logs []string
+	rp := newBigcTotalsProcessor(t, &logs)
+	pages := bigcTotalsDocument(bigcKnownPriceLine+bigcUnknownPriceLine, "4", "283,294", bigcKnownStoreItem, "4")
+
+	rows, err := rp.processBigcDocument("synthetic_bigc_unread_line.pdf", pages, nil)
+	if err != nil {
+		t.Fatalf("processBigcDocument returned error: %v", err)
+	}
+	if !strings.Contains(rows[0].Status, "trang in Total Quantity 4 nhưng chỉ đọc được 3") {
+		t.Errorf("status = %q, want the page's printed-vs-read gap spelled out", rows[0].Status)
+	}
+	if rows[0].POTotals == nil {
+		t.Error("POTotals = nil, want the PO flagged incomplete too")
+	}
+}
+
+// Quantity alone cannot see a line written on the wrong price basis. Here
+// page 0's price list lost the line (its unit price joins as 0đ) while the
+// store page still lists it: quantities agree, money does not.
+func TestRealProcessor_ProcessesBigcDocument_WarnsWhenOnlyTheAmountFallsShort(t *testing.T) {
+	var logs []string
+	rp := newBigcTotalsProcessor(t, &logs)
+	pages := bigcTotalsDocument("", "3", "60,000", bigcKnownStoreItem, "3")
+
+	rows, err := rp.processBigcDocument("synthetic_bigc_amount_short.pdf", pages, nil)
+	if err != nil {
+		t.Fatalf("processBigcDocument returned error: %v", err)
+	}
+	want := POTotalsCheck{PrintedQty: 3, PrintedAmount: 60000, WrittenQty: 3, WrittenAmount: 0}
+	if rows[0].POTotals == nil || *rows[0].POTotals != want {
+		t.Errorf("POTotals = %+v, want %+v", rows[0].POTotals, want)
+	}
+}
+
+// Drift within rounding is not a shortfall: 923đ is the largest measured on
+// the archive (2631057774579.pdf), and it passes on far fewer pieces than
+// that order had.
+func TestBigcAmountTolerance(t *testing.T) {
+	if got := bigcAmountTolerance(0, 0); got != 1 {
+		t.Errorf("bigcAmountTolerance(0, 0) = %v, want 1", got)
+	}
+	if got := bigcAmountTolerance(2000, 18); got < 923 {
+		t.Errorf("bigcAmountTolerance(2000 pieces, 18 lines) = %v, want at least the 923đ drift measured on the archive", got)
+	}
+}
+
+func TestFormatDong(t *testing.T) {
+	for in, want := range map[float64]string{0: "0", 999: "999", 1000: "1.000", 10335408: "10.335.408", 223293.6: "223.294", -60000: "-60.000"} {
+		if got := formatDong(in); got != want {
+			t.Errorf("formatDong(%v) = %q, want %q", in, got, want)
+		}
 	}
 }
 

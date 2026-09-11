@@ -14,6 +14,53 @@ import {
 } from '../lib/zaloMessage'
 import { markupToHtml } from '../lib/richtext'
 import { useModalEntrance } from '../lib/useModalEntrance'
+import { poCompleteness, type POCompleteness } from '../lib/poCompleteness'
+
+// Dải cảnh báo "đơn chưa đủ", ngay trên bong bóng tin. Tin nhắn cộng tiền
+// từ những dòng ĐÃ GHI, nên một dòng PO không ghi được (mã chưa có trong
+// SanPham) làm tổng tiền trong tin thấp hơn PO mà nhìn tin không thể biết -
+// dải này là chỗ duy nhất trước lúc gửi nói ra điều đó.
+function IncompletePOBanner({ info }: { info: POCompleteness }) {
+  const { totals, missing } = info
+  return (
+    <div className="mb-2 rounded-lg border border-warning/40 bg-warning/10 px-3 py-2 text-[11px] leading-relaxed">
+      <div className="flex items-center gap-1.5 font-semibold text-warning">
+        <FaTriangleExclamation size={10} />
+        Đơn chưa đủ — số liệu trong tin chưa gồm phần thiếu
+      </div>
+      {totals && (
+        <div className="mt-0.5 text-muted">
+          PO in{' '}
+          <span className="font-mono font-semibold text-ink">
+            {formatQty(totals.printedQty)} SL · {formatDong(totals.printedAmount)}đ
+          </span>
+          , mới ghi{' '}
+          <span className="font-mono font-semibold text-ink">
+            {formatQty(totals.writtenQty)} SL · {formatDong(totals.writtenAmount)}đ
+          </span>
+        </div>
+      )}
+      {missing.length > 0 && (
+        <ul className="mt-1 space-y-0.5 text-muted">
+          {missing.map((item) => (
+            <li key={item.barcode}>
+              <span className="font-mono text-ink">{item.barcode}</span> {item.description} — {formatQty(item.qty)} SL:
+              chưa có trong SanPham
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  )
+}
+
+function formatQty(n: number): string {
+  return n.toLocaleString('vi-VN')
+}
+
+function formatDong(n: number): string {
+  return Math.round(n).toLocaleString('vi-VN')
+}
 
 // A PO group is every OrderRow sharing one PO number - always length 1
 // for every vendor except BigC, where one PDF can produce several rows
@@ -124,7 +171,7 @@ export function OrderContentModal({
 
   const messages = groups.map((g) => ({
     po: g.po,
-    // Ba nhánh phải khớp ĐÚNG ba nhánh của ControlPanel.handleSendZalo:
+    // Ba nhánh phải khớp ĐÚNG ba nhánh của ZaloSendButton.handleSendZalo:
     // bản xem trước và bản gửi đi lệch nhau là lỗi tệ nhất ở chỗ này.
     text: tmdtShopFromGroupKey(g.rows[0]?.sourceId ?? '')
       ? buildZaloMessageForTMDTShop(g.rows, processedAt)
@@ -237,6 +284,10 @@ export function OrderContentModal({
               {targets?.[m.po] && (
                 <ZaloTargetBanner target={targets[m.po]!} onOpenSettings={() => openSettings('zalo')} />
               )}
+              {(() => {
+                const completeness = poCompleteness(groups[idx].rows)
+                return completeness && <IncompletePOBanner info={completeness} />
+              })()}
               <div className="flex justify-end">
                 <div
                   className="selectable max-w-[88%] break-words rounded-2xl rounded-br-sm px-3.5 py-3 text-[13px] leading-relaxed text-white shadow-md [&_ol]:list-decimal [&_ol]:pl-5 [&_ul]:list-disc [&_ul]:pl-5 [&_li]:mb-1"

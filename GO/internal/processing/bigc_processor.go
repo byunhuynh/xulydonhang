@@ -76,6 +76,23 @@ type storePageResult struct {
 	// wrong (BigC's PURCHASE NOTE overflow page, whose store-name slot
 	// holds the ordering company rather than a store, is exactly that).
 	unmappedStore string
+	// missingItems are the page's lines whose barcode the product sheet
+	// does not know. They are still skipped - there is no product name,
+	// weight or MISA SKU to write - but no longer silently.
+	missingItems []MissingItemDetail
+	// printedQty is the page's own "Total Quantity" (printedQtyOK=false
+	// when it prints none) and readQty the OU Qty of every line extracted
+	// from it, known or not: a gap between the two is a line extraction
+	// lost.
+	printedQty   float64
+	printedQtyOK bool
+	readQty      float64
+	// written* cover only the lines that became product rows, in the PO's
+	// own units and unit price: this page's share of POTotalsCheck.
+	writtenQty    float64
+	writtenAmount float64
+	writtenPieces float64
+	writtenLines  int
 	err           error
 }
 
@@ -124,6 +141,12 @@ func (p *RealProcessor) processBigcDocument(filePath string, pageTexts []string,
 	var orderRows []OrderRow
 	var pending []pendingBigcStore
 	headerWritten := false
+	var writtenQty, writtenAmount, writtenPieces float64
+	writtenLines := 0
+	// Every missing line across the whole PO, merged by barcode, for the
+	// one log summary below.
+	var missingAll []MissingItemDetail
+	missingIndex := map[string]int{}
 
 	for pageIdx := 1; pageIdx < len(pageTexts); pageIdx++ {
 		pageLabel := fmt.Sprintf("%d/%d", pageIdx+1, len(pageTexts))
@@ -156,6 +179,19 @@ func (p *RealProcessor) processBigcDocument(filePath string, pageTexts []string,
 		excelStart := len(allRows)
 		allRows = append(allRows, result.rows...)
 		totalWeight += result.weightKg
+		writtenQty += result.writtenQty
+		writtenAmount += result.writtenAmount
+		writtenPieces += result.writtenPieces
+		writtenLines += result.writtenLines
+		for _, item := range result.missingItems {
+			if i, seen := missingIndex[item.Barcode]; seen {
+				missingAll[i].Qty += item.Qty
+				missingAll[i].Amount += item.Amount
+				continue
+			}
+			missingIndex[item.Barcode] = len(missingAll)
+			missingAll = append(missingAll, item)
+		}
 
 		statusKind := StatusKindDone
 		statusText := StatusDone
@@ -164,7 +200,15 @@ func (p *RealProcessor) processBigcDocument(filePath string, pageTexts []string,
 		// would put the user right back where this started. The
 		// mismatch wording is kept byte-identical to what it has always
 		// been so a page with only mismatches reads exactly as before.
+		// Lines that wrote nothing lead: the status cell truncates, and
+		// an incomplete order is the one thing that must not be missed.
 		var warnings []string
+		if len(result.missingItems) > 0 {
+			warnings = append(warnings, fmt.Sprintf("%d mã chưa có trong SanPham (%s)", len(result.missingItems), joinMissingBarcodes(result.missingItems)))
+		}
+		if result.printedQtyOK && result.readQty != result.printedQty {
+			warnings = append(warnings, fmt.Sprintf("trang in Total Quantity %s nhưng chỉ đọc được %s", formatQty(result.printedQty), formatQty(result.readQty)))
+		}
 		if result.unmappedStore != "" {
 			warnings = append(warnings, fmt.Sprintf("store %q chưa có trong MaKH", result.unmappedStore))
 		}
@@ -187,6 +231,7 @@ func (p *RealProcessor) processBigcDocument(filePath string, pageTexts []string,
 			TotalWeightKg: coop.FormatWeightKg(result.weightKg),
 			PromoItems:    result.promoItems,
 			SkuLog:        result.skuLog, PriceMismatchCount: result.saigia, PriceMismatchDetails: result.mismatchDetails,
+			MissingItems: result.missingItems,
 		}
 		provisional := finalRow
 		provisional.Status = StatusProcessing
@@ -200,6 +245,21 @@ func (p *RealProcessor) processBigcDocument(filePath string, pageTexts []string,
 			excelStart:  excelStart,
 			excelCount:  len(result.rows),
 		})
+	}
+
+	// Page 0 states the PO's own totals. Setting what was written against
+	// them means a line that produced no row - an unknown barcode, a failed
+	// store page, a line extraction lost - cannot pass as a complete order.
+	// Quantity is exact (it agreed on all 27 archived BigC PDFs); money
+	// only up to rounding, see bigcAmountTolerance.
+	if printedQty, printedAmount, ok := bigc.ParsePurchaseNoteTotals(pageTexts[0]); ok {
+		if writtenQty != printedQty || math.Abs(printedAmount-writtenAmount) > bigcAmountTolerance(writtenPieces, writtenLines) {
+			check := &POTotalsCheck{PrintedQty: printedQty, PrintedAmount: printedAmount, WrittenQty: writtenQty, WrittenAmount: writtenAmount}
+			for _, store := range pending {
+				orderRows[store.resultIndex].POTotals = check
+			}
+			p.logBigcShortfall(poNumber, check, missingAll)
+		}
 	}
 
 	if len(allRows) > 0 {
@@ -254,6 +314,63 @@ func (p *RealProcessor) processBigcDocument(filePath string, pageTexts []string,
 	}
 
 	return orderRows, nil
+}
+
+// bigcAmountTolerance is how far the written amount may sit from the PO's
+// printed "Total Net Purchase Price" and still be the same order. The PO
+// prints each unit price rounded to the đồng yet totals its lines from the
+// unrounded price, so each piece can drift by up to 0.5đ and each line
+// total by another 0.5đ - measured drift on the archive reaches 923đ. A
+// missing line is caught by quantity whatever its value; the amount only
+// has to catch lines written on a wrong price basis, such as a unit price
+// that failed to join and came through as 0đ.
+func bigcAmountTolerance(pieces float64, lines int) float64 {
+	return 0.5*pieces + 0.5*float64(lines) + 1
+}
+
+// logBigcShortfall puts an incomplete PO in the process log once, with
+// every missing line spelled out - the status cells only have room for
+// barcodes, and this is what the user needs to fix the product sheet.
+func (p *RealProcessor) logBigcShortfall(poNumber string, check *POTotalsCheck, missing []MissingItemDetail) {
+	if p.LogFunc == nil {
+		return
+	}
+	p.LogFunc(fmt.Sprintf("⚠️ BigC PO %s chưa đủ: PO in %s SL / %sđ nhưng mới ghi %s SL / %sđ vào dondathang.xlsx",
+		poNumber, formatQty(check.PrintedQty), formatDong(check.PrintedAmount), formatQty(check.WrittenQty), formatDong(check.WrittenAmount)))
+	for _, item := range missing {
+		p.LogFunc(fmt.Sprintf("   • %s %s — %s SL (%sđ): mã chưa có trong SanPham", item.Barcode, item.Description, formatQty(item.Qty), formatDong(item.Amount)))
+	}
+}
+
+func joinMissingBarcodes(items []MissingItemDetail) string {
+	barcodes := make([]string, len(items))
+	for i, item := range items {
+		barcodes[i] = item.Barcode
+	}
+	return strings.Join(barcodes, ", ")
+}
+
+func formatQty(v float64) string {
+	return strconv.FormatFloat(v, 'f', -1, 64)
+}
+
+// formatDong writes a whole-đồng amount with "." thousands separators,
+// the way the results table and the Zalo message show money.
+func formatDong(v float64) string {
+	n := int64(math.Round(v))
+	sign := ""
+	if n < 0 {
+		sign, n = "-", -n
+	}
+	digits := strconv.FormatInt(n, 10)
+	var b strings.Builder
+	for i, d := range digits {
+		if i > 0 && (len(digits)-i)%3 == 0 {
+			b.WriteByte('.')
+		}
+		b.WriteRune(d)
+	}
+	return sign + b.String()
 }
 
 // bigcStoreLabelMaxRunes caps how much of a store name the unmapped-store
@@ -315,16 +432,15 @@ func (p *RealProcessor) processBigcStorePage(storePageText string, priceList []b
 	// error (an earlier version of this port did) produces a spurious
 	// Failed OrderRow Python never reports for these files.
 	//
-	// Note this removes a safety net: with the hard-fail gone, a future
-	// regression in bigc.ExtractStoreItems's regexes (one that starts
-	// wrongly matching zero lines on a page that legitimately has items)
-	// would now silently produce a "Hoàn Thành" success status with
-	// missing rows, instead of a loud Failed row. The golden fixture
-	// test (bigc_golden_test.go) is the only thing that would catch
-	// such a regression, since it diffs actual row content/counts
-	// against frozen Python output — not just status/error presence.
+	// Removing the hard-fail removed a safety net: a regression in
+	// bigc.ExtractStoreItems's regexes (one that starts wrongly matching
+	// fewer lines than a page has) would silently produce a "Hoàn Thành"
+	// status with missing rows. The page's own printed "Total Quantity",
+	// compared against readQty in processBigcDocument, puts that net back
+	// without failing the legitimately itemless page, which prints none.
 	rawItems := bigc.ExtractStoreItems(storePageText)
 	items := bigc.JoinItemsWithPrices(rawItems, priceList)
+	printedQty, printedQtyOK := bigc.ParseStoreTotalQuantity(storePageText)
 
 	// An unmapped store is NOT a failure: Python has no such check at
 	// all, and the page's rows are otherwise perfectly good. It is
@@ -355,6 +471,9 @@ func (p *RealProcessor) processBigcStorePage(storePageText string, priceList []b
 	promoTotals := map[string]*PromoItemSummary{}
 	var skuLog []string
 	var mismatchDetails []PriceMismatchDetail
+	var missingItems []MissingItemDetail
+	var readQty, writtenQty, writtenAmount, writtenPieces float64
+	writtenLines := 0
 
 	for _, item := range items {
 		barcode := p.Store.ResolveSku(item.Barcode)
@@ -368,14 +487,25 @@ func (p *RealProcessor) processBigcStorePage(storePageText string, priceList []b
 		// against the raw item.Barcode. This exact "not found -> continue"
 		// check exists at only one other place in the whole Python file —
 		// genuinely BigC-specific, no Coop/Lotte/Satra counterpart.
-		productInfo, found := p.Store.GetProductInfo(barcode)
-		if !found {
-			continue
-		}
-
+		// Python's skip was silent; here the line is recorded in
+		// missingItems so a new product the sheet has not caught up with
+		// yet cannot quietly shrink the order.
 		skuOU := parseNumericField(item.SKUOrUnit)
 		ouQty := parseNumericField(item.OrderedUnitQty)
 		qtyOrdPcs := ouQty * skuOU // xulydonhang.py:4642 — item["OU Qty"] * item["SKU/OU"], NOT "OU Qty" alone
+		readQty += ouQty
+
+		productInfo, found := p.Store.GetProductInfo(barcode)
+		if !found {
+			missingItems = append(missingItems, MissingItemDetail{
+				Barcode: item.Barcode, Description: item.Description, Qty: ouQty, Amount: item.UnitPrice * qtyOrdPcs,
+			})
+			continue
+		}
+		writtenQty += ouQty
+		writtenAmount += item.UnitPrice * qtyOrdPcs
+		writtenPieces += qtyOrdPcs
+		writtenLines++
 
 		lineWeight := productInfo.WeightKg * qtyOrdPcs
 		weightKg += lineWeight
@@ -610,7 +740,12 @@ func (p *RealProcessor) processBigcStorePage(storePageText string, priceList []b
 		}
 	}
 
-	return storePageResult{rows: rows, weightKg: weightKg, saigia: saigia, tongtien: tongtien, skuLog: skuLog, mismatchDetails: mismatchDetails, promoItems: finalizePromoItems(promoTotals), unmappedStore: unmappedStore}
+	return storePageResult{
+		rows: rows, weightKg: weightKg, saigia: saigia, tongtien: tongtien, skuLog: skuLog, mismatchDetails: mismatchDetails,
+		promoItems: finalizePromoItems(promoTotals), unmappedStore: unmappedStore,
+		missingItems: missingItems, printedQty: printedQty, printedQtyOK: printedQtyOK, readQty: readQty,
+		writtenQty: writtenQty, writtenAmount: writtenAmount, writtenPieces: writtenPieces, writtenLines: writtenLines,
+	}
 }
 
 // parseNumericField mirrors the repeated "strip commas, coerce to

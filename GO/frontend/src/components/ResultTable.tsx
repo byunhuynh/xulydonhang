@@ -16,6 +16,7 @@ import type { OrderRow, PriceMismatchDetail } from '../types'
 import { SectionHeader } from './SectionHeader'
 import { ConfirmPrice, UpdateJITPeriod } from '../../wailsjs/go/main/App'
 import { OrderContentModal, type POContentGroup } from './OrderContentModal'
+import { ZaloSendButton } from './ZaloSendButton'
 import {
   resolveEffectivePrice,
   buildPriceBasisForRow,
@@ -43,7 +44,16 @@ type PendingPOPriceAction =
 const columns: {
   key: Exclude<
     keyof OrderRow,
-    'priceMismatchDetails' | 'driveUrl' | 'shipTo' | 'entryDate' | 'cancelDate' | 'totalWeightKg' | 'totalPackages' | 'promoItems'
+    | 'priceMismatchDetails'
+    | 'driveUrl'
+    | 'shipTo'
+    | 'entryDate'
+    | 'cancelDate'
+    | 'totalWeightKg'
+    | 'totalPackages'
+    | 'promoItems'
+    | 'missingItems'
+    | 'poTotals'
   >
   label: string
 }[] = [
@@ -361,11 +371,11 @@ export function ResultTable() {
           <button
             type="button"
             onClick={openContentModalForSelection}
-            className="ml-auto inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 font-sans text-xs font-bold text-white transition-colors"
-            style={{ backgroundColor: '#0068FF' }}
+            className="ml-auto inline-flex items-center gap-1.5 rounded-lg border border-[#0068FF]/60 px-3 py-1.5 font-sans text-xs font-bold text-[#4d95ff] transition-colors hover:bg-[#0068FF]/10"
           >
             <FaCommentDots size={11} /> Xem nội dung Zalo
           </button>
+          <ZaloSendButton />
         </div>
       )}
       <div className="selectable flex-1 overflow-auto rounded-lg border border-border">

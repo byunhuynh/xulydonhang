@@ -60,6 +60,33 @@ type PromoItemSummary struct {
 	Qty         float64 `json:"qty"`
 }
 
+// MissingItemDetail is one PO line that wrote NO row to dondathang.xlsx
+// because the product sheet does not know its barcode (BigC skips such a
+// line, see processBigcStorePage). Barcode is as printed on the PO, since
+// the sheet had nothing to resolve it to, and Description is the PO's own
+// wording of the item for the same reason. Qty is the PO's OU Qty - the
+// unit its "Total Qty" is counted in - and Amount is that line's value at
+// the PO's own unit price.
+type MissingItemDetail struct {
+	Barcode     string  `json:"barcode"`
+	Description string  `json:"description"`
+	Qty         float64 `json:"qty"`
+	Amount      float64 `json:"amount"`
+}
+
+// POTotalsCheck sets the totals a PO prints about itself against what was
+// actually written for it. Only ever attached when the two disagree, so
+// its presence alone means "this order is incomplete in the workbook".
+// Written* are counted in the PO's own units and prices (OU Qty, the PO's
+// unit price), not the system price, so a price mismatch never reads as a
+// shortfall.
+type POTotalsCheck struct {
+	PrintedQty    float64 `json:"printedQty"`
+	PrintedAmount float64 `json:"printedAmount"`
+	WrittenQty    float64 `json:"writtenQty"`
+	WrittenAmount float64 `json:"writtenAmount"`
+}
+
 // OrderRow là một dòng trong bảng kết quả, ánh xạ đúng các cột của bảng
 // gốc: Tên file, Trang, Hệ thống, Mã khách hàng, PO, Đơn giá, Trạng thái.
 type OrderRow struct {
@@ -167,6 +194,13 @@ type OrderRow struct {
 	// since the frontend needs it to let the user review/resolve each
 	// mismatch after processing.
 	PriceMismatchDetails []PriceMismatchDetail `json:"priceMismatchDetails"`
+
+	// MissingItems lists this row's PO lines skipped for an unknown
+	// barcode, and POTotals is set on every row of a PO whose printed
+	// totals the written rows fall short of - see both types. Only BigC
+	// fills either today.
+	MissingItems []MissingItemDetail `json:"missingItems"`
+	POTotals     *POTotalsCheck      `json:"poTotals,omitempty"`
 }
 
 // Các giá trị Status giữ nguyên ký hiệu (emoji) của bản gốc để hiển thị

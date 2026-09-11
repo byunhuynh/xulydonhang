@@ -247,8 +247,8 @@ func TestExtractStoreItems_ParsesBarcodeAnchoredLines(t *testing.T) {
 		"8936156730992\nNuoc xa Pink 2L\nPack\n1\n6\n12\n"
 	got := ExtractStoreItems(text)
 	want := []StoreItem{
-		{Barcode: "8936156730879", SKUOrUnit: "4", OrderedUnitQty: "20"},
-		{Barcode: "8936156730992", SKUOrUnit: "6", OrderedUnitQty: "12"},
+		{Barcode: "8936156730879", SKUOrUnit: "4", OrderedUnitQty: "20", Description: "Nuoc giat Blue 3.8kg"},
+		{Barcode: "8936156730992", SKUOrUnit: "6", OrderedUnitQty: "12", Description: "Nuoc xa Pink 2L"},
 	}
 	if len(got) != len(want) {
 		t.Fatalf("ExtractStoreItems returned %d items, want %d: %+v", len(got), len(want), got)
@@ -300,9 +300,48 @@ func TestExtractStoreItems_NonBreakingSpaceAroundDescriptionAndPack(t *testing.T
 	nbsp := string(rune(0x00A0))
 	text := "8936156730879\nNuoc giat Blue" + nbsp + "\nPack\n1\n4\n20\n"
 	got := ExtractStoreItems(text)
-	want := []StoreItem{{Barcode: "8936156730879", SKUOrUnit: "4", OrderedUnitQty: "20"}}
+	want := []StoreItem{{Barcode: "8936156730879", SKUOrUnit: "4", OrderedUnitQty: "20", Description: "Nuoc giat Blue"}}
 	if len(got) != 1 || got[0] != want[0] {
 		t.Fatalf("ExtractStoreItems(NBSP) = %+v, want %+v", got, want)
+	}
+}
+
+// A description can wrap onto a second line in the PDF; it has to come out
+// as one readable name, since it is what a missing-product warning shows.
+func TestExtractStoreItems_CollapsesAWrappedDescription(t *testing.T) {
+	text := "header\n8936240510295\nTH2 SAVE NXV CUON HUT\n  ATTRACTION 10L\nPack\n1\n2\n19\n"
+	got := ExtractStoreItems(text)
+	if len(got) != 1 || got[0].Description != "TH2 SAVE NXV CUON HUT ATTRACTION 10L" {
+		t.Fatalf("ExtractStoreItems(wrapped description) = %+v, want Description %q", got, "TH2 SAVE NXV CUON HUT ATTRACTION 10L")
+	}
+}
+
+// Real captured foot of 802_NORTHDC_QP0_3006900_2636058652325.pdf's page 0.
+func TestParsePurchaseNoteTotals_ReadsTotalQtyAndAmount(t *testing.T) {
+	text := "Luu Y:\n- Nha cung cap vui long giao hang\n\nDeliver To Warehouse Before\n\nTotal Qty\n\n" +
+		"Total Net Purchase Price\n12/09/26\n\n42\n\n10,335,408\n11,162,241\n826,833\n10,335,408\n0\n0\n"
+	qty, amount, ok := ParsePurchaseNoteTotals(text)
+	if !ok || qty != 42 || amount != 10335408 {
+		t.Fatalf("ParsePurchaseNoteTotals = (%v, %v, %v), want (42, 10335408, true)", qty, amount, ok)
+	}
+}
+
+// The header row's own "Total NetPurchase Price" column label must not be
+// mistaken for the foot: a page with only the header reads as unreadable.
+func TestParsePurchaseNoteTotals_UnreadableWithoutTheFoot(t *testing.T) {
+	text := "Article\nOU Qty\nFree Qty\nNetPurchasePrice\nUnit\nTotal NetPurchase Price\nSO\n8936240510257\n"
+	if _, _, ok := ParsePurchaseNoteTotals(text); ok {
+		t.Fatal("ParsePurchaseNoteTotals(header only) ok = true, want false")
+	}
+}
+
+func TestParseStoreTotalQuantity(t *testing.T) {
+	page := "8936240510240\nTH2 NRC H.CHANH SAVE 10KG\nPack\n1\n2\n2\nHOUSEHOLD (450)\n\n4\nChu thich:\nTotal Quantity\n4"
+	if qty, ok := ParseStoreTotalQuantity(page); !ok || qty != 4 {
+		t.Fatalf("ParseStoreTotalQuantity = (%v, %v), want (4, true)", qty, ok)
+	}
+	if _, ok := ParseStoreTotalQuantity("FM LOGISTIC VSIP 2 (806)\nVietnam\nCTY TNHH DV EB\n"); ok {
+		t.Fatal("ParseStoreTotalQuantity(overflow page with no item table) ok = true, want false")
 	}
 }
 

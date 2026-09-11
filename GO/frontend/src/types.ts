@@ -15,6 +15,25 @@ export interface PromoItem {
   qty: number
 }
 
+// Một dòng trên PO KHÔNG ghi được xuống dondathang.xlsx vì SanPham chưa có
+// mã barcode đó (xem MissingItemDetail, types.go). qty tính theo OU Qty in
+// trên PO, amount theo đơn giá PO.
+export interface MissingItem {
+  barcode: string
+  description: string
+  qty: number
+  amount: number
+}
+
+// Tổng PO tự in so với phần đã ghi - chỉ có mặt khi hai bên LỆCH nhau
+// (xem POTotalsCheck, types.go).
+export interface POTotalsCheck {
+  printedQty: number
+  printedAmount: number
+  writtenQty: number
+  writtenAmount: number
+}
+
 export interface OrderRow {
   fileName: string
   sourceId: string
@@ -54,6 +73,10 @@ export interface OrderRow {
   // ở đó số đơn chính là số dòng.
   totalOrders: number
   promoItems: PromoItem[]
+  // Go gửi null khi không thiếu dòng nào (slice nil), và bỏ hẳn poTotals
+  // khi PO đủ - chỉ BigC gán hai trường này.
+  missingItems?: MissingItem[] | null
+  poTotals?: POTotalsCheck
 }
 
 export interface LogEntry {

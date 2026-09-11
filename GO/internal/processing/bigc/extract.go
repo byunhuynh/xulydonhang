@@ -203,6 +203,11 @@ type StoreItem struct {
 	SKUOrUnit      string
 	OrderedUnitQty string
 	UnitPrice      float64
+	// Description is the line's own "Article desc." text, whitespace-
+	// collapsed. Nothing matches on it: it exists to name an item the
+	// product sheet does not know, which has no product name of its own
+	// to show in a warning.
+	Description string
 }
 
 // storeItemPattern mirrors trichxuatdanhsachforstore_bigc's regex
@@ -215,10 +220,10 @@ type StoreItem struct {
 // in practice since every real BigC store page has header text preceding
 // the first item row, so offset-0 matching never actually fires (see
 // TestExtractStoreItems_MatchesAtStartOfTextToo for the test that
-// documents this same finding). Group 2 (the description line between
-// the barcode and "Pack") is matched but deliberately discarded, matching
-// Python's list comprehension only keeping groups 1, 3, 4
-// (xulydonhang.py:5906: m[0], m[2], m[3] from a 0-indexed findall tuple).
+// documents this same finding). Python's list comprehension only keeps
+// groups 1, 3, 4 (xulydonhang.py:5906: m[0], m[2], m[3] from a 0-indexed
+// findall tuple); group 2 (the description between the barcode and
+// "Pack") is kept here as StoreItem.Description, which feeds no row.
 var storeItemPattern = regexp.MustCompile(`(?s)(?:^|\n)(\d{13})\s*\n(.*?)\s*\nPack\s*\n\d+\s*\n(\d+)\s*\n(\d+)`)
 
 // ExtractStoreItems mirrors trichxuatdanhsachforstore_bigc
@@ -237,9 +242,56 @@ func ExtractStoreItems(storePageText string) []StoreItem {
 	storePageText = strings.ReplaceAll(storePageText, string(rune(0x00A0)), " ")
 	var items []StoreItem
 	for _, m := range storeItemPattern.FindAllStringSubmatch(storePageText, -1) {
-		items = append(items, StoreItem{Barcode: m[1], SKUOrUnit: m[3], OrderedUnitQty: m[4]})
+		items = append(items, StoreItem{Barcode: m[1], SKUOrUnit: m[3], OrderedUnitQty: m[4], Description: strings.Join(strings.Fields(m[2]), " ")})
 	}
 	return items
+}
+
+// purchaseNoteTotalsPattern reads the foot of page 0's PURCHASE NOTE,
+// which extraction delivers as the two labels, the delivery date, then
+// the two figures: "Total Qty\n\nTotal Net Purchase Price\n12/09/26\n\n
+// 42\n\n10,335,408". Same shape on all 27 archived BigC PDFs.
+var purchaseNoteTotalsPattern = regexp.MustCompile(`Total Qty\s+Total Net Purchase Price\s+\d{2}/\d{2}/\d{2}\s+([\d,]+)\s+([\d,]+)`)
+
+// ParsePurchaseNoteTotals returns the order-wide totals printed on page 0:
+// qty is "Total Qty", the sum of every line's OU Qty (packs, not pieces),
+// and amount is "Total Net Purchase Price" before tax. ok=false means the
+// figures could not be read, which callers must treat as "cannot check",
+// never as a shortfall.
+func ParsePurchaseNoteTotals(pageZeroText string) (qty, amount float64, ok bool) {
+	pageZeroText = strings.ReplaceAll(pageZeroText, string(rune(0x00A0)), " ")
+	m := purchaseNoteTotalsPattern.FindStringSubmatch(pageZeroText)
+	if m == nil {
+		return 0, 0, false
+	}
+	qty, errQty := parseGroupedNumber(m[1])
+	amount, errAmount := parseGroupedNumber(m[2])
+	if errQty != nil || errAmount != nil {
+		return 0, 0, false
+	}
+	return qty, amount, true
+}
+
+var storeTotalQuantityPattern = regexp.MustCompile(`Total Quantity\s+([\d,]+)`)
+
+// ParseStoreTotalQuantity returns the "Total Quantity" a store page prints
+// under its item table: the sum of that page's OU Qty. ok=false when the
+// page has none, which is normal for the PURCHASE NOTE's overflow page.
+func ParseStoreTotalQuantity(storePageText string) (float64, bool) {
+	storePageText = strings.ReplaceAll(storePageText, string(rune(0x00A0)), " ")
+	m := storeTotalQuantityPattern.FindStringSubmatch(storePageText)
+	if m == nil {
+		return 0, false
+	}
+	qty, err := parseGroupedNumber(m[1])
+	if err != nil {
+		return 0, false
+	}
+	return qty, true
+}
+
+func parseGroupedNumber(s string) (float64, error) {
+	return strconv.ParseFloat(strings.ReplaceAll(s, ",", ""), 64)
 }
 
 // JoinItemsWithPrices mirrors ghepgia_donhangbigc (xulydonhang.py:5888-5897):
