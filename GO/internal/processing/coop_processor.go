@@ -538,9 +538,9 @@ func (p *RealProcessor) processSegment(filePath string, realPageNum int, text, p
 	}
 
 	// Tách riêng tài liệu của ĐÚNG đơn này để link Drive của nó chỉ mở ra
-	// chính nó: cắt trang với PDF, ghi khối văn bản của đơn với báo cáo
-	// .txt. Thất bại thì lùi về upload nguyên file — thà link rộng hơn cần
-	// còn hơn không có link nào.
+	// chính nó: cắt trang với PDF, dựng PDF riêng từ khối văn bản của đơn
+	// với báo cáo .txt/.docx. Thất bại thì lùi về upload nguyên file — thà
+	// link rộng hơn cần còn hơn không có link nào.
 	uploadPath := filePath
 	if extractedPath, cleanup, extractErr := extractOrderDocument(filePath, realPageNum, text); extractErr == nil {
 		uploadPath = extractedPath
@@ -559,10 +559,13 @@ func (p *RealProcessor) processSegment(filePath string, realPageNum int, text, p
 		if p.LogFunc == nil {
 			return
 		}
+		// Ghi số PO: một file nhiều đơn upload mỗi đơn một lần, và nếu chỉ
+		// ghi tên file thì N dòng log giống hệt nhau đọc như cả file bị
+		// upload N lần.
 		if ok {
-			p.LogFunc(fmt.Sprintf("✅ Đã upload file lên Drive: %s", filepath.Base(filePath)))
+			p.LogFunc(fmt.Sprintf("✅ Đã upload đơn %s lên Drive (%s)", info.PONumber, filepath.Base(filePath)))
 		} else {
-			p.LogFunc(fmt.Sprintf("❌ Upload Drive thất bại (%s): %v", filepath.Base(filePath), err))
+			p.LogFunc(fmt.Sprintf("❌ Upload Drive thất bại đơn %s (%s): %v", info.PONumber, filepath.Base(filePath), err))
 		}
 	})
 	if uploadErr != nil && p.LogFunc != nil {

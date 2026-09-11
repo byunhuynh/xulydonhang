@@ -10,9 +10,11 @@ var allowedExtensions = map[string]bool{
 	".pdf":  true,
 	".xlsx": true,
 	".txt":  true,
+	// Báo cáo đơn Coop (JDA) lưu bằng Word - xem processing/docxextract.go.
+	".docx": true,
 }
 
-// IsAllowed báo file có đuôi được phép xử lý (.pdf, .xlsx, .txt) hay không.
+// IsAllowed báo file có đuôi được phép xử lý (.pdf, .xlsx, .txt, .docx) hay không.
 func IsAllowed(path string) bool {
 	return allowedExtensions[strings.ToLower(filepath.Ext(path))]
 }

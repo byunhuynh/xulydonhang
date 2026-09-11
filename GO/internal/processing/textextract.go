@@ -39,10 +39,15 @@ func extractTextFilePages(path string) ([]string, []int, error) {
 	// CRLF, trong khi van ban boc tu PDG chi co LF. Duong xu ly phia sau
 	// (va ca strings.TrimRight(..., "\n")) gia dinh LF.
 	text := strings.ReplaceAll(decodeReportText(raw), "\r\n", "\n")
+	return splitReportPages(text, "file text")
+}
 
+// splitReportPages cat van ban mot bao cao JDA - tu file .txt hay .docx -
+// thanh tung don. source chi dung cho thong bao loi.
+func splitReportPages(text, source string) ([]string, []int, error) {
 	pages := coop.SplitTextReport(text)
 	if len(pages) == 0 {
-		return nil, nil, fmt.Errorf("khong tim thay don nao trong file text (thieu moc POM343/POM346)")
+		return nil, nil, fmt.Errorf("khong tim thay don nao trong %s (thieu moc POM343/POM346)", source)
 	}
 
 	pageNumbers := make([]int, len(pages))

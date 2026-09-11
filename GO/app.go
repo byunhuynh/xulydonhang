@@ -552,7 +552,7 @@ func (a *App) SelectFiles() ([]string, error) {
 	paths, err := runtime.OpenMultipleFilesDialog(a.ctx, runtime.OpenDialogOptions{
 		Title: "Chọn file đơn hàng",
 		Filters: []runtime.FileFilter{
-			{DisplayName: "Đơn hàng (*.pdf;*.xlsx;*.txt)", Pattern: "*.pdf;*.xlsx;*.txt"},
+			{DisplayName: "Đơn hàng (*.pdf;*.xlsx;*.txt;*.docx)", Pattern: "*.pdf;*.xlsx;*.txt;*.docx"},
 		},
 	})
 	if err != nil {

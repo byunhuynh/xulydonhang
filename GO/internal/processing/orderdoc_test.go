@@ -27,17 +27,19 @@ func TestExtractOrderDocument_TxtChiChuaDungDonDo(t *testing.T) {
 	}
 	defer cleanup()
 
-	if filepath.Ext(path) != ".txt" {
-		t.Errorf("duoi file tam = %q, want .txt (driveupload lay MIME tu duoi)", filepath.Ext(path))
+	// Moi don len Drive la mot PDF rieng, nhu don cua moi he thong khac.
+	if filepath.Ext(path) != ".pdf" {
+		t.Errorf("duoi file tam = %q, want .pdf (driveupload lay MIME tu duoi)", filepath.Ext(path))
 	}
-	got, err := os.ReadFile(path)
+	gotPages, _, err := extractPageTexts(path)
 	if err != nil {
-		t.Fatalf("doc file tam: %v", err)
+		t.Fatalf("doc lai PDF tam: %v", err)
 	}
-	if !strings.Contains(string(got), "103617494-00") {
+	got := strings.Join(gotPages, "\n")
+	if !strings.Contains(got, "103617494-00") {
 		t.Errorf("file tam thieu don cua chinh no:\n%s", got)
 	}
-	if strings.Contains(string(got), "103617493-00") {
+	if strings.Contains(got, "103617493-00") {
 		t.Errorf("file tam chua ca don KHAC - dung la loi dang sua:\n%s", got)
 	}
 }

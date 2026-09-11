@@ -29,6 +29,10 @@ func extractPageTexts(path string) ([]string, []int, error) {
 	if isTextReport(path) {
 		return extractTextFilePages(path)
 	}
+	// Bao cao JDA luu bang Word (.docx) - doc chu bang docxextract.go.
+	if isWordReport(path) {
+		return extractDocxFilePages(path)
+	}
 
 	file, r, err := pdfOpen(path)
 	if err != nil {

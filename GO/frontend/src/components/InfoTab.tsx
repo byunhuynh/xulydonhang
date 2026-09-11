@@ -19,7 +19,7 @@ const CORE_FEATURES: { icon: React.ReactNode; title: string; desc: string }[] = 
   {
     icon: <FaFilePdf />,
     title: 'Đọc đơn hàng tự động',
-    desc: 'Phân tích PO gốc (PDF/XLSX/TXT) từ 10 hệ thống MT, tách đúng mã hàng/SL/giá.',
+    desc: 'Phân tích PO gốc (PDF/XLSX/TXT/DOCX) từ 10 hệ thống MT, tách đúng mã hàng/SL/giá.',
   },
   {
     icon: <FaScaleBalanced />,
