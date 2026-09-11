@@ -243,3 +243,16 @@ func ExtractShipTo(text string) string {
 	}
 	return ""
 }
+
+var coopfoodShipToPattern = regexp.MustCompile(`^\d+\s*-\s*C\s*F(\s|$)`)
+
+// ShipToIsCoopfood reports whether an ExtractShipTo value is a Coopfood
+// store's: JDA prints those as "<store number>-CF <name>" ("02231-CF DOC
+// LAP 93"), while Coopmart/Co-opXtra print the chain name. Checked against
+// the whole archive: 69 of 69 Coopfood store orders carry the marker and
+// none of the Coopmart ones do. The one Coopfood order without it is a
+// satellite warehouse ("KHO VE TINH BINH DUONG"), so a false here does not
+// mean Coopmart — MaKH stays the source of truth whenever it has the store.
+func ShipToIsCoopfood(shipTo string) bool {
+	return coopfoodShipToPattern.MatchString(strings.TrimSpace(shipTo))
+}

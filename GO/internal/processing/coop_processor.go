@@ -342,11 +342,17 @@ func (p *RealProcessor) processSegment(filePath string, realPageNum int, text, p
 		products[i].Barcode = p.Store.ResolveSku(products[i].Barcode)
 	}
 
+	storeMissing := customerCode == "Không tìm thấy"
 	system := p.Store.GetSystemForCustomer(customerCode)
 	if system == "COOPFOOD" {
 		if addr := p.Store.GetCoopfoodAddress(customerCode); addr != "" {
 			shipTo = shipTo + " - " + addr
 		}
+	} else if storeMissing && coop.ShipToIsCoopfood(shipTo) {
+		// Cửa hàng Coopfood mới khai trương chưa có dòng MaKH thì sheet
+		// không cho biết hệ thống — đọc dấu "-CF" in ngay trên PDF thay vì
+		// rơi về COOPMART và bị so với CTKM của Coopmart.
+		system = "COOPFOOD"
 	} else {
 		system = "COOPMART"
 	}
@@ -574,9 +580,23 @@ func (p *RealProcessor) processSegment(filePath string, realPageNum int, text, p
 
 	statusKind := StatusKindDone
 	statusText := StatusDone
+	// Cảnh báo cộng dồn như BigC: thiếu MaKH đứng trước vì ô trạng thái bị
+	// cắt ngắn, và một đơn không có mã khách hàng là điều không được bỏ
+	// sót. Chỉ có sai giá thì câu chữ giữ nguyên như trước.
+	var warnings []string
+	if storeMissing {
+		store := info.POLocation
+		if shipTo != "" {
+			store += " (" + shipTo + ")"
+		}
+		warnings = append(warnings, fmt.Sprintf("cửa hàng %s chưa có trong MaKH", store))
+	}
 	if saigia > 0 {
+		warnings = append(warnings, fmt.Sprintf("Có %d mã sai giá", saigia))
+	}
+	if len(warnings) > 0 {
 		statusKind = StatusKindWarning
-		statusText = fmt.Sprintf("%s - Có %d mã sai giá", StatusWarning, saigia)
+		statusText = fmt.Sprintf("%s - %s", StatusWarning, strings.Join(warnings, "; "))
 	}
 
 	return OrderRow{

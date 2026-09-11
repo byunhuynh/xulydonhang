@@ -103,3 +103,29 @@ func TestExtractShipTo_EmptyWhenNeitherFormMatches(t *testing.T) {
 		t.Fatalf("ExtractShipTo = %q, want empty", got)
 	}
 }
+
+// Mẫu lấy từ Ship To thật của PDF lưu trữ: cửa hàng Coopfood luôn in
+// "<mã cửa hàng>-CF <tên>", Coopmart/Co-opXtra in tên chuỗi.
+func TestShipToIsCoopfood(t *testing.T) {
+	cases := []struct {
+		shipTo string
+		want   bool
+	}{
+		{"02231-CF DOC LAP 93", true},
+		{"09107-CF HN PHUNG KHOANG", true},
+		{"02001 - C F TAN THANH DONG", true},
+		{"Co.opMart Nha Trang", false},
+		{"Co. opMar t Cai Lay", false},
+		{"Co-opXtra Pham Van Dong", false},
+		{"131 Co.opMart Vung Tau", false},
+		// Kho vệ tinh là Coopfood nhưng không mang dấu -CF: phải để sheet quyết.
+		{"KHO VE TINH BINH DUONG", false},
+		{"02231-CFX DOC LAP", false},
+		{"", false},
+	}
+	for _, c := range cases {
+		if got := ShipToIsCoopfood(c.shipTo); got != c.want {
+			t.Errorf("ShipToIsCoopfood(%q) = %v, want %v", c.shipTo, got, c.want)
+		}
+	}
+}
