@@ -22,8 +22,11 @@ var (
 	// không lọt vào nhánh JIT.
 	jitAirWaybillNamePattern      = regexp.MustCompile(`(?i)^air_waybill_(.+)_(\d{8}|\d{4})(?: \(\d+\))?\.pdf$`)
 	jitAirWaybillShortNamePattern = regexp.MustCompile(`(?i)^(WH\d+_[A-Z]+)_(\d{8}|\d{4})(?: \(\d+\))?\.pdf$`)
-	jitAirWaybillTrackingPattern  = regexp.MustCompile(`Mãvậnđơn:([A-Z0-9]+)Mãđơnhàng:`)
+	jitAirWaybillTrackingPattern  = regexp.MustCompile(`Mãvậnđơn:([A-Z0-9]+)(?:Mãđơnhàng:|Đơnvịvậnchuyển:)`)
 	jitAirWaybillPOPattern        = regexp.MustCompile(`Mãđơnhàng:(\d{6}[A-Z0-9]{8})`)
+	// Vận đơn giao về điểm nhận hàng SPX không in nhãn "Mã đơn hàng:": huy hiệu
+	// "ĐIỂM NHẬN HÀNG" bên trái chen chữ "HÀNG" vào giữa mã vận đơn và mã đơn hàng.
+	jitAirWaybillPickupPattern    = regexp.MustCompile(`Mãvậnđơn:([A-Z0-9]+)HÀNG(\d{6}[A-Z0-9]{8})`)
 	jitAirWaybillItemStartPattern = regexp.MustCompile(`\[TopValue\]`)
 	jitAirWaybillQtyPattern       = regexp.MustCompile(`SL:(\d+)`)
 	jitAirWaybillSkuPattern       = regexp.MustCompile(`CH\d+`)
@@ -103,13 +106,19 @@ func absDuration(d time.Duration) time.Duration {
 
 func parseJITAirWaybillPage(text string) (string, string, []coop.Product, error) {
 	compact := jitWhitespacePattern.ReplaceAllString(text, "")
-	trackingMatch := jitAirWaybillTrackingPattern.FindStringSubmatch(compact)
-	if trackingMatch == nil {
-		return "", "", nil, fmt.Errorf("không tìm thấy mã vận đơn JIT")
-	}
-	poMatch := jitAirWaybillPOPattern.FindStringSubmatch(compact)
-	if poMatch == nil {
-		return "", "", nil, fmt.Errorf("không tìm thấy mã đơn hàng JIT")
+	var tracking, po string
+	if pickupMatch := jitAirWaybillPickupPattern.FindStringSubmatch(compact); pickupMatch != nil {
+		tracking, po = pickupMatch[1], pickupMatch[2]
+	} else {
+		trackingMatch := jitAirWaybillTrackingPattern.FindStringSubmatch(compact)
+		if trackingMatch == nil {
+			return "", "", nil, fmt.Errorf("không tìm thấy mã vận đơn JIT")
+		}
+		poMatch := jitAirWaybillPOPattern.FindStringSubmatch(compact)
+		if poMatch == nil {
+			return "", "", nil, fmt.Errorf("không tìm thấy mã đơn hàng JIT")
+		}
+		tracking, po = trackingMatch[1], poMatch[1]
 	}
 
 	productsText := compact
@@ -142,7 +151,7 @@ func parseJITAirWaybillPage(text string) (string, string, []coop.Product, error)
 	if len(products) == 0 {
 		return "", "", nil, fmt.Errorf("không trích xuất được sản phẩm JIT nào")
 	}
-	return trackingMatch[1], poMatch[1], products, nil
+	return tracking, po, products, nil
 }
 
 func resolveJITProductSku(store *productdata.Store, productKey string) (string, bool) {

@@ -289,6 +289,48 @@ func TestParseJITAirWaybillPageAcceptsNonSPXTrackingNumber(t *testing.T) {
 	}
 }
 
+func TestParseJITAirWaybillPageAcceptsTrackingWithCarrierLineBeforePO(t *testing.T) {
+	text := "Mã vận đơn: EA341197725VN\n" +
+		"Đơn vị vận chuyển: VNPost Nhanh\n" +
+		"Mã đơn hàng: 261003MKGW2A0T\n" +
+		"Nội dung hàng (Tổng SL sản phẩm: 5)\n" +
+		"1. [Top Value] Bột tẩy lồng máy giặt Smile Mom 450g CH31 vệ sinh tiện dụng, Ngẫu nhiên, SL: 5"
+	tracking, po, products, err := parseJITAirWaybillPage(text)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if tracking != "EA341197725VN" {
+		t.Fatalf("tracking = %q, want EA341197725VN", tracking)
+	}
+	if po != "261003MKGW2A0T" {
+		t.Fatalf("PO = %q, want 261003MKGW2A0T", po)
+	}
+	if len(products) != 1 || products[0].Qty != 5 {
+		t.Fatalf("products = %#v, want one product with quantity 5", products)
+	}
+}
+
+func TestParseJITAirWaybillPageAcceptsPickupPointLayoutWithoutPOLabel(t *testing.T) {
+	text := "ĐI Ể M NH Ậ N\nMã v ậ n đ ơ n: SPXVN06915964341A\nHÀNG 261012EM68A0K5\nTB2-14\nMBD-26-09-TB02-N\n" +
+		"T ừ : Đ ế n:\nT op V alue Ph ạ m Thuỳ Linh\n" +
+		"N ộ i dung hàng (T ổ ng SL s ả n ph ẩ m: 1)\n" +
+		"1. [T op V alue] N ướ c gi ặ t Blue Deep Clean CH9 3.6L h ươ ng\n" +
+		"Thanh xuân | Thanh xuân-Túi 3.6L, Thanh xuân-Túi 3.6L, S\nL: 1\nHN-21-05-\nT OA05-N"
+	tracking, po, products, err := parseJITAirWaybillPage(text)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if tracking != "SPXVN06915964341A" {
+		t.Fatalf("tracking = %q, want SPXVN06915964341A", tracking)
+	}
+	if po != "261012EM68A0K5" {
+		t.Fatalf("PO = %q, want 261012EM68A0K5", po)
+	}
+	if len(products) != 1 || products[0].Qty != 1 {
+		t.Fatalf("products = %#v, want one product with quantity 1", products)
+	}
+}
+
 func TestParseJITAirWaybillPageKeepsAdjacentMultiProductsSeparate(t *testing.T) {
 	text := "Mã vận đơn: SPXVN065281192958\nMã đơn hàng: 260823EXAMPLE1\nNội dung hàng (Tổng SL sản phẩm: 3)\n" +
 		"1. [Top Value] Nước xả vải Blue CH14, SL: 1" +
