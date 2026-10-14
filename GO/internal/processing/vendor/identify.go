@@ -49,7 +49,8 @@ var (
 	// literal regex against the whitespace-normalized page text, no
 	// alternation, no case-insensitivity flag in Python (the supplier
 	// code string itself is fixed, so case sensitivity is moot).
-	winmartPattern = regexp.MustCompile(`Nhà cung cấp \(Supplier\): 0002011398`)
+	winmartPattern = regexp.MustCompile(`Nhà cung cấp \(Supplier\): (0002011398|0002011974)`)
+	
 	// FujiMart's identify pattern (xulydonhang.py:128-129): a single
 	// literal numeric substring (the vendor's own tax code), no
 	// alternation.
@@ -71,6 +72,14 @@ var (
 	// whitespace-normalized text (see Identify), so it still fires when
 	// text extraction happens to break the name across lines.
 	maxidiPattern = regexp.MustCompile(`CÔNG TY TNHH MAXIDI VIỆT NAM`)
+	// Osifood, like Maxidi, has no counterpart in xulydonhang.py and is
+	// appended last. Its name appears on the order only as a logo image,
+	// never as text, so the marker is the supplier code Osifood assigned
+	// to us (00758), as chosen by the project owner — anchored to the
+	// order's own title ("ĐƠN ĐẶT HÀNG NCC 00758 DH-HÀ THÀNH LA1") rather
+	// than matched bare, since five digits on their own turn up inside
+	// barcodes and amounts on other vendors' pages.
+	osifoodPattern = regexp.MustCompile(`ĐƠN ĐẶT HÀNG NCC\s*00758\b`)
 )
 
 // Identify tries to recognize which retail vendor produced this
@@ -113,6 +122,9 @@ func Identify(text string) string {
 	}
 	if maxidiPattern.MatchString(cleaned) {
 		return "Maxidi"
+	}
+	if osifoodPattern.MatchString(cleaned) {
+		return "Osifood"
 	}
 	return ""
 }

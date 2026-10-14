@@ -59,6 +59,9 @@ var Branches = []Branch{
 	// không dựng thêm ô nào cho một nhánh không tồn tại.
 	{"jmart", "JMart", "LA_TP"},
 
+	// Osifood cũng chỉ có một nhánh: mọi cửa hàng đều ở miền Nam.
+	{"osifood", "Osifood", "LA_KHO2026"},
+
 	{"jit/MB", "JIT-CHOICE · Miền Bắc", "TP_HN_12"},
 	{"jit/khac", "JIT-CHOICE · Còn lại", "LA_KHOTMDT"},
 

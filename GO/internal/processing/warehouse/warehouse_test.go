@@ -13,7 +13,7 @@ func TestBranches_CoverEveryVendorSlotExactlyOnce(t *testing.T) {
 		}
 		seen[b.Key] = true
 	}
-	// The 19 slots the vendor processors actually branch on, enumerated
+	// The 20 slots the vendor processors actually branch on, enumerated
 	// when this was designed. A vendor gaining a branch must add its key
 	// here too, or its warehouse silently stays hardcoded.
 	want := []string{
@@ -24,6 +24,7 @@ func TestBranches_CoverEveryVendorSlotExactlyOnce(t *testing.T) {
 		"fujimart/MB", "fujimart/khac",
 		"kingfood/MB", "kingfood/khac",
 		"jmart",
+		"osifood",
 		"jit/MB", "jit/khac",
 		"tmdt/HN", "tmdt/khac",
 	}

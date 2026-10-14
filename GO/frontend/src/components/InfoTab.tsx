@@ -13,7 +13,7 @@ import {
 import AnimatedBlueLogo from './AnimatedBlueLogo'
 import { SectionHeader } from './SectionHeader'
 
-const SUPPORTED_SYSTEMS = ['Co.op Mart', 'BigC / GO!', 'Lotte Mart', 'Satra', 'Emart', 'Kingfood Mart', 'WinMart', 'FujiMart', 'JMart', 'Maxidi']
+const SUPPORTED_SYSTEMS = ['Co.op Mart', 'BigC / GO!', 'Lotte Mart', 'Satra', 'Emart', 'Kingfood Mart', 'WinMart', 'FujiMart', 'JMart', 'Maxidi', 'OsiFood']
 
 const CORE_FEATURES: { icon: React.ReactNode; title: string; desc: string }[] = [
   {

@@ -315,3 +315,25 @@ func TestIdentify_RecognizesMaxidiByCompanyName(t *testing.T) {
 		})
 	}
 }
+
+func TestIdentify_RecognizesOsifoodBySupplierCodeInTheOrderTitle(t *testing.T) {
+	cases := []struct {
+		name string
+		text string
+		want string
+	}{
+		{"real order title, one cell per line", "Hạn chót CH nhận đơn ngày :\n19/10/2026\nĐƠN ĐẶT HÀNG NCC\n00758\nDH-HÀ THÀNH LA1", "Osifood"},
+		{"title on one line", "ĐƠN ĐẶT HÀNG NCC   00758   DH-HÀ THÀNH LA1", "Osifood"},
+		{"another supplier's order", "ĐƠN ĐẶT HÀNG NCC\n00759\nDH-KHÁC", ""},
+		{"a longer code that merely starts the same", "ĐƠN ĐẶT HÀNG NCC\n007581", ""},
+		{"the bare digits with no title", "Mã hàng 00758 số lượng 12", ""},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			got := Identify(c.text)
+			if got != c.want {
+				t.Fatalf("Identify(%q) = %q, want %q", c.text, got, c.want)
+			}
+		})
+	}
+}

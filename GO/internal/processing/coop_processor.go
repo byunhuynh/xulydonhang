@@ -13,6 +13,7 @@ import (
 	"order-processor/internal/processing/coop"
 	"order-processor/internal/processing/excelwriter"
 	"order-processor/internal/processing/manualentry"
+	"order-processor/internal/processing/osifood"
 	"order-processor/internal/processing/pricing"
 	"order-processor/internal/processing/productdata"
 	"order-processor/internal/processing/vendor"
@@ -79,6 +80,22 @@ func (p *RealProcessor) process(ctx context.Context, filePath string, emit func(
 			row := emitIdentifiedOrderRow(emit, filePath, "file", OrderRow{
 				FileName:   filepath.Base(filePath),
 				Status:     fmt.Sprintf("%s - %v", StatusFailed, manualErr),
+				StatusKind: StatusKindFailed,
+			})
+			return []OrderRow{row}, nil
+		}
+		return rows, nil
+	}
+
+	// Đơn Osifood dạng bảng CTKM (.xlsx, mỗi cửa hàng một khối cột) - cũng
+	// phải bắt TRƯỚC extractPageTexts, cùng lý do với đơn nhập tay ở trên.
+	if osifood.IsWorkbook(filePath) {
+		rows, osifoodErr := p.processOsifoodWorkbook(filePath, emit)
+		if osifoodErr != nil {
+			row := emitIdentifiedOrderRow(emit, filePath, "file", OrderRow{
+				FileName:   filepath.Base(filePath),
+				System:     osifoodSystem,
+				Status:     fmt.Sprintf("%s - %v", StatusFailed, osifoodErr),
 				StatusKind: StatusKindFailed,
 			})
 			return []OrderRow{row}, nil
@@ -265,6 +282,17 @@ func (p *RealProcessor) process(ctx context.Context, filePath string, emit func(
 			if err != nil {
 				rows = append(rows, emitIdentifiedOrderRow(emit, filePath, fmt.Sprintf("page:%d:segment:1", physicalPage), OrderRow{
 					FileName: filepath.Base(filePath), Page: pageLabel, System: maxidiSystem,
+					Status: fmt.Sprintf("%s - %v", StatusFailed, err), StatusKind: StatusKindFailed,
+				}))
+				continue
+			}
+			rows = append(rows, emitIdentifiedOrderRow(emit, filePath, fmt.Sprintf("page:%d:segment:1", physicalPage), row))
+
+		case osifoodSystem:
+			row, err := p.processOsifoodSegment(filePath, pageNumbers[pageIdx], text, pageLabel)
+			if err != nil {
+				rows = append(rows, emitIdentifiedOrderRow(emit, filePath, fmt.Sprintf("page:%d:segment:1", physicalPage), OrderRow{
+					FileName: filepath.Base(filePath), Page: pageLabel, System: osifoodSystem,
 					Status: fmt.Sprintf("%s - %v", StatusFailed, err), StatusKind: StatusKindFailed,
 				}))
 				continue

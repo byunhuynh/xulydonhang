@@ -101,6 +101,7 @@ func SeedRouting() map[string]string {
 		"MR.DIY":                BranchHTLA,
 		"FujiMart":              BranchHTLA,
 		"Maxidi":                BranchHTLA,
+		"Osifood":               BranchHTLA,
 		systemBigC + "/GC":      BranchHTLA,
 		systemJIT + "/WH6_HTLA": BranchHTLA,
 		systemBigC + "/MT":      BranchHaThanh,
