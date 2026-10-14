@@ -575,68 +575,62 @@ func (p *RealProcessor) processBigcStorePage(storePageText string, priceList []b
 		unitPrice := appliedUnitPrice(matched, invoicePrice, finalPrice)
 		skuLog = append(skuLog, formatSkuLogLine(barcode, productInfo.Name, matched, invoicePrice, finalPrice, khuyenmai, khuyenmaiColumn))
 
-		// Promo bonus-row check (xulydonhang.py:4754-4808). BigC has NO
-		// khuyenmai.split('|') loop (confirmed structurally different
-		// from Coop/Satra during planning) — exactly one bonus row per
-		// item, driven by the single khuyenmai string this item ended
-		// up with. This is computed BEFORE productRow is built below
-		// because Python writes AO/AP (xulydonhang.py:4771/4777) on the
-		// PRODUCT row (current_row, before current_row is incremented
-		// for the bonus row) — NOT on the bonus row itself, despite the
-		// bonus-row fields being written physically later in the
-		// function. Putting PromoNote/PromoBundleSku on the bonus row
-		// (an earlier version of this port did) produces an off-by-one
-		// row shift versus every real fixture.
-		bonusQty := qtyOrdPcs
-		bonusBarcode := ""
+		// Like the other vendor processors, each pipe-separated promo part
+		// can produce its own bonus row. Keep the complete promo on AQ, but
+		// resolve each part's SKU, 2+1 quantity and AO/AP data independently.
+		var bonusRows []excelwriter.Row
 		var promoNote, promoBundleSku string
-		// NOT gated on matched (see promoGiftOnMismatchRule) — this
-		// block runs for every item, exactly like Python's does.
-		bonusSku := p.Store.FindSkusMentioned(khuyenmai)
-		if len(bonusSku) > 0 {
-			bonusBarcode = strings.Join(bonusSku, ", ")
-		}
-		if xm := xPlus1Pattern.FindStringSubmatch(khuyenmai); xm != nil {
-			// xPlus1Pattern is already in scope here — it's declared in
-			// processor_shared.go (Task 0), same package `processing`
-			// as this file, so no new import or helper is needed.
-			x, _ := strconv.Atoi(xm[1])
-			if bonusBarcode == "" {
-				bonusBarcode = barcode
-			}
-			if x >= 2 {
-				bonusQty = math.Floor(qtyOrdPcs / float64(x))
-			}
-		}
-
-		if bonusBarcode != "" {
-			// xulydonhang.py:4769's laycachbo_khuyenmai(value) uses the
-			// leftover "value" loop variable from the promo-matching
-			// loop above, not "khuyenmai" — this plan's Global
-			// Constraints section documents this as a confirmed Python
-			// quirk NOT being ported; using khuyenmai (this item's own
-			// resolved promo string) here instead, per Phase 2b's
-			// "correct main flow" policy. Flag via knownDivergences_BigC
-			// during Task 8 if a real fixture traces a mismatch to this.
-			bundleNote := coop.ExtractBraceContent(khuyenmai)
-			if bundleNote != "" {
-				promoNote = bundleNote
-				lower := strings.ToLower(bundleNote)
-				if strings.Contains(lower, "bó kèm") || strings.Contains(lower, "quấn kèm") {
-					// xulydonhang.py:4774-4775 — same AP value written on
-					// BOTH the product row and the bonus row. Not
-					// observed in any of the 29 real fixtures (cachbokem
-					// is always empty for BigC's actual promo data), but
-					// ported for fidelity in case it's ever hit.
-					promoBundleSku = fmt.Sprintf("%s_%s_1", coop.LastFourDigits(barcode), coop.LastFourDigits(bonusBarcode))
+		// NOT gated on matched (see promoGiftOnMismatchRule): promotions
+		// still create their gift rows when the PO price differs.
+		for i, promoPart := range strings.Split(khuyenmai, "|") {
+			promoPart = strings.TrimSpace(promoPart)
+			bonusQty := qtyOrdPcs
+			bonusBarcode := strings.Join(p.Store.FindSkusMentioned(promoPart), ", ")
+			if xm := xPlus1Pattern.FindStringSubmatch(promoPart); xm != nil {
+				x, _ := strconv.Atoi(xm[1])
+				if bonusBarcode == "" {
+					bonusBarcode = barcode
 				}
-			} else {
-				// BigC's per-item no-brace fallback text is genuinely
-				// different from Coop/Satra's "KM Bó Kèm - Che Barcode"
-				// (xulydonhang.py:4777: "KM Rời - Không Che Barcode") —
-				// confirmed during planning, not a transcription error.
-				promoNote = "KM Rời - Không Che Barcode"
+				if x >= 2 {
+					bonusQty = math.Floor(qtyOrdPcs / float64(x))
+				}
 			}
+			if bonusBarcode == "" {
+				continue
+			}
+
+			bonusInfo, _ := p.Store.GetProductInfo(bonusBarcode)
+			bonusWeight := bonusInfo.WeightKg * bonusQty
+			weightKg += bonusWeight
+			bundleNote := coop.ExtractBraceContent(promoPart)
+			partPromoNote := bundleNote
+			if bundleNote == "" {
+				// BigC's per-item fallback is distinct from the other
+				// processors' defaults (xulydonhang.py:4777).
+				partPromoNote = "KM Rời - Không Che Barcode"
+			}
+			partBundleSku := ""
+			lower := strings.ToLower(bundleNote)
+			if strings.Contains(lower, "bó kèm") || strings.Contains(lower, "quấn kèm") {
+				partBundleSku = fmt.Sprintf("%s_%s_1", coop.LastFourDigits(barcode), coop.LastFourDigits(bonusBarcode))
+			}
+
+			bonusRow := excelwriter.Row{
+				EntryDate: entryDate, DebtDays: coopDebtDays, OrderNumber: orderNum,
+				Status: "Chưa thực hiện", CancelDate: cancelDate, ShipTo: shipTo, CustomerCode: customerCode,
+				Description: description, SKU: bonusBarcode, Warehouse: warehouse, VATPercent: 8,
+				RegionCode: region, StatCode: statCode, IsPromoItem: true, Qty: bonusQty,
+				ProductName: bonusInfo.Name, LineWeightKg: bonusWeight, UseZFormula: false,
+				PromoBundleSku: partBundleSku, NoCaseCount: true, SiteCode: siteCode,
+			}
+			if i == 0 {
+				promoNote = partPromoNote
+				promoBundleSku = partBundleSku
+			} else {
+				bonusRow.PromoNote = partPromoNote
+			}
+			bonusRows = append(bonusRows, bonusRow)
+			accumulatePromoItem(promoTotals, bonusRow.SKU, bonusRow.ProductName, bonusRow.Qty)
 		}
 
 		productRow := excelwriter.Row{
@@ -662,20 +656,7 @@ func (p *RealProcessor) processBigcStorePage(storePageText string, priceList []b
 		rows = append(rows, productRow)
 		tongtien += unitPrice * qtyOrdPcs // xulydonhang.py:4749 — uses qtyOrdPcs BEFORE any promo-bonus division below
 
-		if bonusBarcode != "" {
-			bonusInfo, _ := p.Store.GetProductInfo(bonusBarcode)
-			bonusWeight := bonusInfo.WeightKg * bonusQty
-			weightKg += bonusWeight
-
-			bonusRow := excelwriter.Row{
-				EntryDate: entryDate, DebtDays: coopDebtDays, OrderNumber: orderNum,
-				Status: "Chưa thực hiện", CancelDate: cancelDate, ShipTo: shipTo, CustomerCode: customerCode,
-				Description: description, SKU: bonusBarcode, Warehouse: warehouse, VATPercent: 8,
-				RegionCode: region, StatCode: statCode, IsPromoItem: true, Qty: bonusQty,
-				ProductName: bonusInfo.Name, LineWeightKg: bonusWeight, UseZFormula: false,
-				PromoBundleSku: promoBundleSku, NoCaseCount: true, SiteCode: siteCode,
-			}
-			accumulatePromoItem(promoTotals, bonusRow.SKU, bonusRow.ProductName, bonusRow.Qty)
+		for _, bonusRow := range bonusRows {
 			rows = append(rows, bonusRow)
 		}
 	}

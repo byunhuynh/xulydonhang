@@ -926,6 +926,64 @@ func TestRealProcessor_BigcPerItemGiftStillBuiltOnPriceMismatch(t *testing.T) {
 	}
 }
 
+func TestRealProcessor_BigcSplitsPerItemPromotionsOnPipe(t *testing.T) {
+	store, err := productdata.Load("../../../data.xlsx")
+	if err != nil {
+		t.Fatalf("Load production productdata failed: %v", err)
+	}
+
+	const barcode = "8936156731647"
+	storeText := "FM LOGISTIC VSIP 2 (806)\n" +
+		"Some Address Line\n" +
+		"Vietnam\n" +
+		"Store One\n" +
+		barcode + "\nBlue 3.2L không mùi\nPack\n1\n4\n1\n"
+
+	cases := []struct {
+		name       string
+		promo      string
+		wantSecond string
+	}{
+		{
+			name:       "second segment names its SKU",
+			promo:      "Tặng túi gạo 2.1L TP30473 | 2+1 TP31647 {KM Giao rời - Che barcode}",
+			wantSecond: "TP31647",
+		},
+		{
+			name:       "second segment falls back to purchased SKU",
+			promo:      "Tặng túi gạo 2.1L TP30473 | 2+1 {KM Giao rời - Che barcode}",
+			wantSecond: "TP31647",
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			priceIndex := pricing.ParseIndex([][]string{
+				{"STT", "Mã hàng", "Tên", "Đơn giá", "1/1-31/12"},
+				{"1", "TP31647", "Blue 3.2L không mùi", "1000", tc.promo},
+			})
+			result := (&RealProcessor{Store: store}).processBigcStorePage(
+				storeText,
+				[]bigc.Product{{Barcode: barcode, SKUOrUnit: "1", OrderedUnitQty: "4", UnitPrice: 1000}},
+				priceIndex,
+				"ĐĐHBIGC-TEST", "15/08/2026", "20/08/2026",
+				"MN_MT_BIGCAC", "FM LOGISTIC VSIP 2 (806)", "BIGC PO-TEST",
+				"LA_KHO2026", "MT_MN", "LA", false,
+			)
+
+			if len(result.rows) != 3 {
+				t.Fatalf("got %d rows, want product + 2 promo rows: %+v", len(result.rows), result.rows)
+			}
+			if result.rows[1].SKU != "TP30473" || result.rows[1].Qty != 4 {
+				t.Errorf("first promo row = SKU %q Qty %v, want TP30473 Qty 4", result.rows[1].SKU, result.rows[1].Qty)
+			}
+			if result.rows[2].SKU != tc.wantSecond || result.rows[2].Qty != 2 {
+				t.Errorf("second promo row = SKU %q Qty %v, want %s Qty 2", result.rows[2].SKU, result.rows[2].Qty, tc.wantSecond)
+			}
+		})
+	}
+}
+
 // TestRealProcessor_BigcUnmatchedPriceFallsBackToLeftmostPromoColumn is the
 // BigC half of TestRealProcessor_UnmatchedPriceFallsBackToLeftmostPromoColumn
 // (see that test for the rule). BigC needs its own coverage because its promo
