@@ -1,6 +1,9 @@
 package maxidi
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
 
 // Both fixtures below are the EXACT text this repo's own extractPageTexts
 // produces for two real archived delivery notes — captured verbatim, not
@@ -29,6 +32,20 @@ func TestParseOrderInfo_BinhDuongDeliveryNote(t *testing.T) {
 	}
 	if got != want {
 		t.Errorf("ParseOrderInfo =\n%+v\nwant\n%+v", got, want)
+	}
+}
+
+func TestParseOrderInfo_InfersBinhDuongWhenTaxCodeIsMissing(t *testing.T) {
+	text := strings.Replace(binhDuongText, "Tax Code: 0317899481-002", "Tax Code: ", 1)
+	got, ok := ParseOrderInfo(text)
+	if !ok {
+		t.Fatal("ParseOrderInfo returned ok=false when the Bình Dương branch name was available")
+	}
+	if got.TaxCode != "0317899481-002" {
+		t.Errorf("TaxCode = %q, want inferred Bình Dương tax code %q", got.TaxCode, "0317899481-002")
+	}
+	if got.PONumber != "HO-PO00085936" || got.EntryDate != "26/08/2026" || got.ShipDate != "24/09/2026" {
+		t.Errorf("order fields = %+v, want PO and dates preserved", got)
 	}
 }
 

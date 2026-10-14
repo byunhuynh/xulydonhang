@@ -37,6 +37,28 @@ import (
 // separator, so a whitespace-terminated match would swallow it.
 var taxCodePattern = regexp.MustCompile(`Tax Code\s*:\s*(.+?)Delivery note`)
 
+var branchLetterheadPatterns = []struct {
+	pattern *regexp.Regexp
+	taxCode string
+}{
+	{regexp.MustCompile(`(?i)CHI NHÁNH\s+BÌNH\s+D(?:ƯƠNG|UONG)`), "0317899481-002"},
+	{regexp.MustCompile(`(?i)CHI NHÁNH\s+(?:ĐỒNG|DONG)\s+NAI`), "0317899481-001"},
+}
+
+func inferTaxCodeFromLetterhead(text string) string {
+	if end := strings.Index(text, "Tax Code"); end >= 0 {
+		text = text[:end]
+	} else if end := strings.Index(text, "Delivery note"); end >= 0 {
+		text = text[:end]
+	}
+	for _, branch := range branchLetterheadPatterns {
+		if branch.pattern.MatchString(text) {
+			return branch.taxCode
+		}
+	}
+	return ""
+}
+
 // entryDateAndPOPattern reads the order date and the PO number, which
 // the template prints in that order directly under the
 // "(Số đơn hàng)" label. The PO is captured as "everything up to the
@@ -108,9 +130,9 @@ type Branch struct {
 // different form than accounting uses ("CHI NHÁNH ĐỒNG NAI-CÔNG TY..."
 // with no spaces around the dash), and the letterhead address is the
 // warehouse address, which for the Đồng Nai branch is not the address it
-// invoices from. The tax code is the only field taken from the page,
-// because it is the only one that identifies WHICH branch issued the
-// note.
+// invoices from. The tax code is preferred to identify the issuing
+// branch; when it is absent, the explicit branch name in the letterhead
+// is used as a fallback.
 var branchesByTaxCode = map[string]Branch{
 	"0317899481-002": {
 		TaxCode:        "0317899481-002",
@@ -145,11 +167,10 @@ type OrderInfo struct {
 	TaxCode         string
 }
 
-// ParseOrderInfo extracts the page header. Returns ok=false unless EVERY
-// field was found: a Maxidi delivery note that is missing its PO number,
-// either date, the delivery address or the issuing branch's tax code is
-// not a page this parser understood, and half-understood is the one
-// outcome that must never reach the accounting workbook.
+// ParseOrderInfo extracts the page header. Returns ok=false unless the
+// PO number, both dates, delivery address and issuing branch can be
+// identified. A missing tax code may be recovered from the explicit
+// branch name in the letterhead.
 //
 // Remarks is the single exception — it is genuinely optional on the
 // template (the caption prints whether or not a note was entered), so an
@@ -158,12 +179,20 @@ func ParseOrderInfo(text string) (OrderInfo, bool) {
 	taxMatch := taxCodePattern.FindStringSubmatch(text)
 	orderMatch := entryDateAndPOPattern.FindStringSubmatch(text)
 	shipMatch := shipDateAndAddressPattern.FindStringSubmatch(text)
-	if taxMatch == nil || orderMatch == nil || shipMatch == nil {
+	if orderMatch == nil || shipMatch == nil {
 		return OrderInfo{}, false
 	}
 
+	taxCode := ""
+	if taxMatch != nil {
+		taxCode = strings.TrimSpace(taxMatch[1])
+	}
+	if taxCode == "" {
+		taxCode = inferTaxCodeFromLetterhead(text)
+	}
+
 	info := OrderInfo{
-		TaxCode:         strings.TrimSpace(taxMatch[1]),
+		TaxCode:         taxCode,
 		EntryDate:       orderMatch[1],
 		PONumber:        strings.TrimSpace(orderMatch[2]),
 		ShipDate:        shipMatch[1],
