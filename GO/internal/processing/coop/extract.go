@@ -86,6 +86,11 @@ func ExtractProducts(text string) ([]Product, error) {
 			continue
 		}
 
+		if qty, ok := zeroCostLineQty(block[0]); ok {
+			products = append(products, Product{Barcode: barcode, Qty: qty, Cost: 0})
+			continue
+		}
+
 		joined := strings.Join(block, " ")
 		nums := findDecimalNumbers(joined)
 		var large []string
@@ -171,6 +176,45 @@ func checkWholeNumberQuantities(products []Product) error {
 		}
 	}
 	return nil
+}
+
+// rowFigurePattern is one numeric column of a product row, including the
+// bare ".00" this generator prints for zero — which findDecimalNumbers
+// deliberately skips (it needs a leading digit, like the Python original).
+var rowFigurePattern = regexp.MustCompile(`^(?:\d[\d,]*)?\.\d+$`)
+
+// zeroCostLineQty recognises a product row whose money columns are all
+// zero — the CTKM gift Coop prints as its own line (real: 104743481-00,
+// "3613120-9 KM2T1-TuiNLS1L ... .00 .00 .00 100.00 .00 .00"). Such a row
+// leaves the general heuristic a single number to work with, so it used
+// to refuse the whole page.
+//
+// It only fires on a row laid out on one line with the generator's six
+// trailing figures — Buy Cost, Net Buy Cost, Qty Ord/CS, Qty Ord/Pcs, Qty
+// Rec/Pcs, Extended Cost — and only when both costs and the extended cost
+// are zero, so no billed row (all 378 archived ones carry a cost) can
+// take this path. The quantity is Qty Ord/Pcs, the same column the
+// heuristic reads for billed rows.
+func zeroCostLineQty(line string) (float64, bool) {
+	fields := strings.Fields(line)
+	var figures []string
+	for i := len(fields) - 1; i >= 0 && rowFigurePattern.MatchString(fields[i]); i-- {
+		figures = append([]string{fields[i]}, figures...)
+	}
+	if len(figures) < 6 {
+		return 0, false
+	}
+	figures = figures[len(figures)-6:]
+	for _, i := range []int{0, 1, 5} {
+		if v, ok := parseAmount(figures[i]); !ok || v != 0 {
+			return 0, false
+		}
+	}
+	qty, ok := parseAmount(figures[3])
+	if !ok || qty <= 0 {
+		return 0, false
+	}
+	return qty, true
 }
 
 // findDecimalNumbers mirrors the regex

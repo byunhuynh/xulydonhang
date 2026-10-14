@@ -25,6 +25,43 @@ func TestExtractProducts_SingleProductBlock(t *testing.T) {
 	}
 }
 
+// Real PO 104743481-00: Coop prints the CTKM gift as its own line with
+// every money column ".00". The bare ".00" form has no leading digit, so
+// the line used to yield a single number and refuse the whole page.
+func TestExtractProducts_ZeroCostGiftLine(t *testing.T) {
+	const gift = "  3613120-9  KM2T1-TuiNLS1L(NGX Blue CL)                     EA   EA               .00             .00         .00      100.00         .00              .00 \n"
+	for _, tc := range []struct {
+		name string
+		text string
+	}{
+		{"gift last", "  3558665-1  NGX BLUE h.thao moc tui3.6L                     EA   C04        162881.25       162881.25      120.00      120.00         .00    19,545,750.00 \n" +
+			"             MUA 1 TANG 1 QUAN KEM \n" + gift +
+			"            Sub Total -       120.00      220.00         .00    19,545,750.00 \n"},
+		{"gift first", gift +
+			"  3558665-1  NGX BLUE h.thao moc tui3.6L                     EA   C04        162881.25       162881.25      120.00      120.00         .00    19,545,750.00 \n" +
+			"            Sub Total -       120.00      220.00         .00    19,545,750.00 \n"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			products, err := ExtractProducts(tc.text)
+			if err != nil {
+				t.Fatalf("ExtractProducts returned error: %v", err)
+			}
+			var giftLine *Product
+			for i := range products {
+				if products[i].Barcode == "3613120-9" {
+					giftLine = &products[i]
+				}
+			}
+			if len(products) != 2 || giftLine == nil {
+				t.Fatalf("ExtractProducts = %+v, want the paid line plus gift 3613120-9", products)
+			}
+			if giftLine.Qty != 100 || giftLine.Cost != 0 {
+				t.Errorf("gift line = %+v, want Qty 100, Cost 0", *giftLine)
+			}
+		})
+	}
+}
+
 func TestExtractProducts_TwoProductBlocks(t *testing.T) {
 	text := "3564270-4  Chai tay toilet   1.00   24.00   809,424.00\n" +
 		"3564271-9  Chai tay khac    1.00   12.00   400,000.00\nSub Total"

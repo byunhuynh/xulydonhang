@@ -367,6 +367,11 @@ func (p *RealProcessor) processSegment(filePath string, realPageNum int, text, p
 		return OrderRow{}, fmt.Errorf("không trích xuất được sản phẩm nào")
 	}
 	for i := range products {
+		// Dòng quà 0đ giữ mã Coop gốc cho log: sheet ánh xạ mã quà về "km",
+		// đọc log thấy "km" thì không biết là quà nào.
+		if products[i].Cost == 0 {
+			continue
+		}
 		products[i].Barcode = p.Store.ResolveSku(products[i].Barcode)
 	}
 
@@ -413,6 +418,14 @@ func (p *RealProcessor) processSegment(filePath string, realPageNum int, text, p
 	var mismatchDetails []PriceMismatchDetail
 
 	for _, product := range products {
+		// Dòng 0 đồng là quà CTKM Coop in sẵn trên PO (xem
+		// coop.zeroCostLineQty). Quà đó do CTKM của chính mã bán sinh ra ở
+		// vòng dưới, nên ghi thêm dòng này là xuất quà hai lần.
+		if product.Cost == 0 {
+			skuLog = append(skuLog, fmt.Sprintf("%s - dòng quà 0đ trên PO (SL %s), bỏ qua: quà lấy theo CTKM",
+				product.Barcode, strconv.FormatFloat(product.Qty, 'f', -1, 64)))
+			continue
+		}
 		productInfo, _ := p.Store.GetProductInfo(product.Barcode)
 		lineWeight := productInfo.WeightKg * product.Qty
 		caseCount := 0

@@ -53,6 +53,26 @@ func TestRealProcessor_CoopfoodStoreMissingFromMaKHStaysCoopfood(t *testing.T) {
 	}
 }
 
+// Ca thật 104743481-00: Coop in quà CTKM (3613120-9, 100 túi NLS) thành
+// một dòng riêng, mọi cột tiền ".00". Trước đây cả đơn bị từ chối. Dòng
+// này không được ghi vào sổ đặt hàng: quà đã do CTKM "2+1 tặng NLS 1L"
+// của chính hai mã bán sinh ra, ghi thêm là xuất quà hai lần.
+func TestRealProcessor_CoopZeroCostGiftLineIsNotWritten(t *testing.T) {
+	row := processCoopSampleWithTestStore(t, "testdata/sample_coop_zero_cost_gift_line.pdf")
+
+	if row.StatusKind == StatusKindFailed {
+		t.Fatalf("Status = %q, want the order processed", row.Status)
+	}
+	// Dòng ghi chú + 2 mã bán; bảng giá test không có CTKM nên không có dòng quà.
+	if len(row.ExcelRows) != 3 {
+		t.Errorf("ExcelRows = %v, want 3 rows (note + 2 billed lines, no gift line)", row.ExcelRows)
+	}
+	logged := strings.Join(row.SkuLog, "\n")
+	if !strings.Contains(logged, "3613120") {
+		t.Errorf("SkuLog = %q, want a line saying gift 3613120 was skipped", logged)
+	}
+}
+
 // Không có dấu -CF thì giữ nguyên mặc định COOPMART, nhưng vẫn phải cảnh
 // báo thiếu MaKH.
 func TestRealProcessor_CoopmartStoreMissingFromMaKHWarns(t *testing.T) {
