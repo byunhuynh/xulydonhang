@@ -61,6 +61,22 @@ func TestParseOrderInfo_NoteWithMultipleLinesIsJoinedWithSpaces(t *testing.T) {
 	}
 }
 
+// Winmart also issues orders under supplier code 0002011974 (the second
+// code vendor.Identify accepts); the note must stop at that marker too.
+func TestParseOrderInfo_NoteStopsAtSecondSupplierCode(t *testing.T) {
+	text := "Ngày đặt hàng (PO date)\n07.31.2026\n" +
+		"Số đơn hàng (PO No.)\n4194002858\n" +
+		"Ngày giao (Delivery Date)\n08.08.2026\n" +
+		"Ghi chú\nline one\nline two\nline three\nNhà cung cấp (Supplier): 0002011974\n"
+	_, _, _, note, ok := ParseOrderInfo(text)
+	if !ok {
+		t.Fatal("ParseOrderInfo: no match, want match")
+	}
+	if note != "line one line two" {
+		t.Fatalf("note = %q, want %q", note, "line one line two")
+	}
+}
+
 func TestParseDeliveryAddress_JoinsLinesFilteringWMPlusDuplicates(t *testing.T) {
 	text := "header\n" +
 		"Địa chỉ giao hàng (Delivery Address)\n" +

@@ -64,7 +64,10 @@ func lineAfterMarker(lines []string, marker string) (string, bool) {
 	return "", false
 }
 
-const supplierIDMarker = "Nhà cung cấp (Supplier): 0002011398"
+// supplierIDMarker ends the note block. Winmart issues orders to us under
+// two supplier codes — the same pair vendor.Identify accepts — so a note
+// is cut at whichever one the page carries.
+var supplierIDMarker = regexp.MustCompile(`Nhà cung cấp \(Supplier\): (?:0002011398|0002011974)`)
 
 // parseNote mirrors xulydonhang.py:8994-9000 exactly.
 func parseNote(text string) string {
@@ -72,7 +75,10 @@ func parseNote(text string) string {
 	if len(parts) != 2 {
 		return ""
 	}
-	block := strings.SplitN(parts[1], supplierIDMarker, 2)[0]
+	block := parts[1]
+	if loc := supplierIDMarker.FindStringIndex(block); loc != nil {
+		block = block[:loc[0]]
+	}
 	block = strings.TrimSpace(block)
 	if block == "" {
 		return ""
