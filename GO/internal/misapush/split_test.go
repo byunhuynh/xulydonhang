@@ -115,18 +115,56 @@ func TestSplitWorkbook_HạĐúngChỉSốCôngThức(t *testing.T) {
 	}
 	defer f.Close()
 
-	// Công thức tự trỏ vào chính dòng mình PHẢI theo dòng xuống chỗ mới,
-	// nếu không "Thành tiền" sẽ nhân sai hàng và MISA đọc vào số bậy.
+	// Bản upload phải mang giá trị Thành tiền đã tính theo Y hiện tại.
+	wantAmounts := []string{"981", "1221", "1469"}
 	for i := 0; i < 3; i++ {
 		r := FirstDataRow + i
-		got, err := f.GetCellFormula(SheetName, fmt.Sprintf("Z%d", r))
+		got, err := f.GetCellValue(SheetName, fmt.Sprintf("Z%d", r))
 		if err != nil {
-			t.Fatalf("GetCellFormula Z%d: %v", r, err)
+			t.Fatalf("GetCellValue Z%d: %v", r, err)
 		}
-		want := fmt.Sprintf("Y%d*X%d", r, r)
+		want := wantAmounts[i]
 		if got != want {
-			t.Errorf("Z%d = %q, want %q", r, got, want)
+			t.Errorf("Z%d = %q, want calculated amount %q", r, got, want)
 		}
+	}
+}
+
+func TestSplitWorkbook_RecalculatesAmountAfterUnitPriceChanges(t *testing.T) {
+	dir := t.TempDir()
+	src := filepath.Join(dir, "dondathang.xlsx")
+	dst := filepath.Join(dir, "ha_thanh.xlsx")
+	buildWorkbook(t, src, 1)
+
+	f, err := excelize.OpenFile(src)
+	if err != nil {
+		t.Fatalf("OpenFile src: %v", err)
+	}
+	if err := f.SetCellValue(SheetName, "Y9", 999); err != nil {
+		t.Fatalf("SetCellValue Y9: %v", err)
+	}
+	if err := f.Save(); err != nil {
+		t.Fatalf("Save src: %v", err)
+	}
+	if err := f.Close(); err != nil {
+		t.Fatalf("Close src: %v", err)
+	}
+
+	if err := SplitWorkbook(src, dst, []int{9}); err != nil {
+		t.Fatalf("SplitWorkbook: %v", err)
+	}
+
+	f, err = excelize.OpenFile(dst)
+	if err != nil {
+		t.Fatalf("OpenFile dst: %v", err)
+	}
+	defer f.Close()
+	amount, err := f.GetCellValue(SheetName, "Z9")
+	if err != nil {
+		t.Fatalf("GetCellValue Z9: %v", err)
+	}
+	if amount != "8991" {
+		t.Fatalf("Z9 = %q, want 8991 after PO price change", amount)
 	}
 }
 

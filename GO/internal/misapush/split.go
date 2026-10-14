@@ -3,6 +3,8 @@ package misapush
 import (
 	"fmt"
 	"os"
+	"strconv"
+	"strings"
 
 	"github.com/xuri/excelize/v2"
 )
@@ -22,9 +24,11 @@ const (
 //
 // Cách làm là copy-rồi-xoá chứ không dựng lại workbook từ đầu: khối tiêu
 // đề của mẫu MISA mang ô gộp, style và độ rộng cột: chép tay từng thứ đó
-// là thêm một nguồn sai lệch không cần thiết. excelize.RemoveRow tự hạ
-// chỉ số các công thức tương đối, nên "Thành tiền" (=Y{r}*X{r}) vẫn trỏ
-// đúng hàng của nó sau khi dồn lên.
+// là thêm một nguồn sai lệch không cần thiết. Trước khi upload, cột Z
+// ("Thành tiền") được materialize từ X*Y trong bản tạm. excelize giữ
+// cached value cũ của công thức sau khi ConfirmPrice sửa Y, còn MISA đọc
+// cached value đó thay vì tự tính lại, nên chỉ giữ công thức sẽ đẩy lên
+// số tiền theo giá hệ thống cũ.
 func SplitWorkbook(src, dst string, keep []int) error {
 	if len(keep) == 0 {
 		return fmt.Errorf("misapush: không có dòng nào để tách")
@@ -84,8 +88,53 @@ func trimRows(path string, wanted map[int]bool) error {
 		}
 	}
 
+	if err := materializeAmounts(f); err != nil {
+		return err
+	}
+
 	if err := f.Save(); err != nil {
 		return fmt.Errorf("misapush: lưu %s: %w", path, err)
 	}
 	return nil
+}
+
+func materializeAmounts(f *excelize.File) error {
+	rows, err := f.GetRows(SheetName)
+	if err != nil {
+		return fmt.Errorf("misapush: đọc lại dữ liệu sau khi tách: %w", err)
+	}
+	for rowNumber := FirstDataRow; rowNumber <= len(rows); rowNumber++ {
+		formula, err := f.GetCellFormula(SheetName, fmt.Sprintf("Z%d", rowNumber))
+		if err != nil {
+			return fmt.Errorf("misapush: đọc công thức Z%d: %w", rowNumber, err)
+		}
+		if formula == "" {
+			continue
+		}
+
+		qty, err := cellNumber(f, fmt.Sprintf("X%d", rowNumber))
+		if err != nil {
+			return fmt.Errorf("misapush: đọc số lượng X%d: %w", rowNumber, err)
+		}
+		price, err := cellNumber(f, fmt.Sprintf("Y%d", rowNumber))
+		if err != nil {
+			return fmt.Errorf("misapush: đọc đơn giá Y%d: %w", rowNumber, err)
+		}
+		if err := f.SetCellValue(SheetName, fmt.Sprintf("Z%d", rowNumber), qty*price); err != nil {
+			return fmt.Errorf("misapush: ghi thành tiền Z%d: %w", rowNumber, err)
+		}
+	}
+	return nil
+}
+
+func cellNumber(f *excelize.File, cell string) (float64, error) {
+	value, err := f.GetCellValue(SheetName, cell)
+	if err != nil {
+		return 0, err
+	}
+	value = strings.ReplaceAll(strings.TrimSpace(value), ",", "")
+	if value == "" {
+		return 0, nil
+	}
+	return strconv.ParseFloat(value, 64)
 }
