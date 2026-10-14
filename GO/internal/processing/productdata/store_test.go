@@ -149,6 +149,28 @@ func TestGetCustomerCodeByFuzzyAddress_MatchesSatraByAddress(t *testing.T) {
 	}
 }
 
+func TestGetCustomerCodeByFuzzyAddress_ResolvesKingfoodByDeliveryAddress(t *testing.T) {
+	store := newStore([][]string{
+		{"HỆ THỐNG", "Mã ST", "Mã KH", "Địa chỉ"},
+		{"Kingfood", "KFM-MB", "MB_MT_KFMSL", "101 North Road, Hanoi"},
+		{"Kingfood", "KFM-MN", "MN_MT_KFMSL", "202 South Street, Saigon"},
+	}, nil)
+
+	for _, tc := range []struct {
+		address string
+		want    string
+	}{
+		{"101 North Road, Hanoi", "MB_MT_KFMSL"},
+		{"202 South Street, Saigon", "MN_MT_KFMSL"},
+	} {
+		got, ok := store.GetCustomerCodeByFuzzyAddress("KINGFOOD", tc.address)
+		if !ok || got != tc.want {
+			t.Errorf("GetCustomerCodeByFuzzyAddress(KINGFOOD, %q) = (%q, %v), want (%q, true)",
+				tc.address, got, ok, tc.want)
+		}
+	}
+}
+
 func TestGetCustomerCodeByFuzzyAddress_BlankColumnANeverMatches(t *testing.T) {
 	store, err := Load(testDataPath)
 	if err != nil {

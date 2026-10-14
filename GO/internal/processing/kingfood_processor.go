@@ -15,29 +15,13 @@ import (
 	"order-processor/internal/processing/warehouse"
 )
 
-// kingfoodCustomerCode mirrors write_to_dondathang_kingfood's default/
-// only makhachhang value — the literal "MN_MT_KFMSL", hardcoded at the
-// process_file call site (xulydonhang.py:9273). Kingfood never derives a
-// customer code from the PDF.
-const kingfoodCustomerCode = "MN_MT_KFMSL"
-
-// kingfoodDeliveryAddress mirrors write_to_dondathang_kingfood's default/
-// only delivery value — hardcoded at the process_file call site
-// (xulydonhang.py:9274), never extracted from the PDF even though the
-// same string DOES appear in the PDF's own "Địa chỉ giao hàng:" field
-// (confirmed during planning) — Python simply doesn't read it from
-// there.
+// kingfoodDeliveryAddress is retained only for older PDFs without a
+// delivery-address field.
 const kingfoodDeliveryAddress = "Số 324, đường ĐT743A, Phường Đông Hoà, Thành phố Hồ Chí Minh"
 
 // kingfoodRegionInfo mirrors write_to_dondathang_kingfood's warehouse/
 // region branching (xulydonhang.py:3871-3883) — a genuine 3-way split,
-// the first in this project (FujiMart/Winmart only ever had 2). The MB
-// and "MN_MT_JM0001" branches are unreachable with real Kingfood input
-// today — customerCode is always the hardcoded constant
-// kingfoodCustomerCode, which is neither "MB"-prefixed nor exactly
-// "MN_MT_JM0001" — but this is modeled as a full 3-branch function
-// anyway, matching the fujimartRegionInfo/winmartRegionInfo precedent,
-// for architectural consistency.
+// the first in this project (FujiMart/Winmart only ever had 2).
 func kingfoodRegionInfo(customerCode string, wh *warehouse.Resolver) (region, statCode, warehouseCode string) {
 	switch {
 	case strings.HasPrefix(customerCode, "MB"):
@@ -45,11 +29,7 @@ func kingfoodRegionInfo(customerCode string, wh *warehouse.Resolver) (region, st
 	case customerCode == "MN_MT_JM0001":
 		// Nhánh này có từ bản Python và sinh ra là vì JMart, nhưng JMart
 		// giờ có hàm riêng (jmartRegionInfo) và mã kho riêng trong Cài
-		// đặt. Kingfood không bao giờ tự sinh ra mã này —
-		// kingfoodCustomerCode là hằng số "MN_MT_KFMSL" — nên nhánh này
-		// không còn với tới được bằng dữ liệu thật. Giữ lại cho đúng
-		// parity, và để hằng số chứ không thành một ô cài đặt: một ô
-		// không nhánh nào chạy vào chỉ làm rối bảng.
+		// đặt. Giữ nhánh để đúng parity với mã Python cũ.
 		return "MT_MN", "LA", "LA_TP"
 	default:
 		return "MT_MN", "LA", wh.Get("kingfood/khac")
@@ -98,19 +78,28 @@ func (p *RealProcessor) processKingfoodSegment(filePath string, realPageNum int,
 		return OrderRow{}, fmt.Errorf("không trích xuất được sản phẩm nào")
 	}
 
+	_, deliveryAddress := kingfood.ParseDeliveryInfo(text)
+	if deliveryAddress == "" {
+		deliveryAddress = kingfoodDeliveryAddress
+	}
+	customerCode, found := p.Store.GetCustomerCodeByFuzzyAddress("KINGFOOD", deliveryAddress)
+	if !found {
+		customerCode = "Không xác định"
+	}
+
 	priceIndex, err := p.Pricing.FetchIndex("KINGFOOD")
 	if err != nil {
 		return OrderRow{}, fmt.Errorf("không tải được giá/khuyến mãi: %w", err)
 	}
 
-	region, statCode, warehouse := kingfoodRegionInfo(kingfoodCustomerCode, p.Warehouses)
+	region, statCode, warehouse := kingfoodRegionInfo(customerCode, p.Warehouses)
 	orderNum := kingfoodOrderNumber(poNumber)
 	description := fmt.Sprintf("KINGFOOD %s", poNumber)
 
 	var rows []excelwriter.Row
 	rows = append(rows, excelwriter.Row{
 		EntryDate: entryDate, DebtDays: coopDebtDays, OrderNumber: orderNum,
-		Status: "Chưa thực hiện", CancelDate: cancelDate, ShipTo: kingfoodDeliveryAddress, CustomerCode: kingfoodCustomerCode,
+		Status: "Chưa thực hiện", CancelDate: cancelDate, ShipTo: deliveryAddress, CustomerCode: customerCode,
 		Description: description, Warehouse: warehouse, VATPercent: 8, RegionCode: region,
 		StatCode: statCode, IsNoteRow: true, ProductName: description,
 	})
@@ -183,11 +172,16 @@ func (p *RealProcessor) processKingfoodSegment(filePath string, realPageNum int,
 			matched = true
 		}
 		unitPrice := appliedUnitPrice(matched, invoicePrice, finalPrice)
+		if !matched && realPrice <= 0 && invoicePrice > 0 {
+			// Keep the PO price when no usable system price exists; the
+			// mismatch below still alerts the operator to the missing price.
+			unitPrice = invoicePrice
+		}
 		skuLog = append(skuLog, formatSkuLogLine(barcode, productInfo.Name, matched, invoicePrice, finalPrice, khuyenmai, khuyenmaiColumn))
 
 		productRow := excelwriter.Row{
 			EntryDate: entryDate, DebtDays: coopDebtDays, OrderNumber: orderNum,
-			Status: "Chưa thực hiện", CancelDate: cancelDate, ShipTo: kingfoodDeliveryAddress, CustomerCode: kingfoodCustomerCode,
+			Status: "Chưa thực hiện", CancelDate: cancelDate, ShipTo: deliveryAddress, CustomerCode: customerCode,
 			Description: description, SKU: barcode, Warehouse: warehouse, VATPercent: 8,
 			RegionCode: region, StatCode: statCode, Qty: ouQty, UnitPrice: unitPrice,
 			ProductName: productInfo.Name, CaseCount: caseCount, LineWeightKg: lineWeight, UseZFormula: true,
@@ -215,8 +209,8 @@ func (p *RealProcessor) processKingfoodSegment(filePath string, realPageNum int,
 		// NOT gated on matched — this block runs for every item,
 		// exactly like Python's does; see promoGiftOnMismatchRule.
 		bonusRow, mainRowNote, mainRowBundleSku, added := buildPromoBonusRow(p.Store, khuyenmai,
-			coop.Product{Barcode: barcode, Qty: ouQty}, 0, entryDate, cancelDate, kingfoodDeliveryAddress,
-			kingfoodCustomerCode, description, warehouse, region, statCode, orderNum)
+			coop.Product{Barcode: barcode, Qty: ouQty}, 0, entryDate, cancelDate, deliveryAddress,
+			customerCode, description, warehouse, region, statCode, orderNum)
 		if added {
 			totalWeight += bonusRow.LineWeightKg
 			totalPackages += bonusRow.CaseCount
@@ -292,7 +286,7 @@ func (p *RealProcessor) processKingfoodSegment(filePath string, realPageNum int,
 
 			rows = append(rows, excelwriter.Row{
 				EntryDate: entryDate, DebtDays: coopDebtDays, OrderNumber: orderNum,
-				Status: "Chưa thực hiện", CancelDate: cancelDate, ShipTo: kingfoodDeliveryAddress, CustomerCode: kingfoodCustomerCode,
+				Status: "Chưa thực hiện", CancelDate: cancelDate, ShipTo: deliveryAddress, CustomerCode: customerCode,
 				Description: description, SKU: invoiceSku, Warehouse: warehouse, VATPercent: 8,
 				RegionCode: region, StatCode: statCode, IsPromoItem: true, Qty: soluongkm,
 				ProductName: invoiceInfo.Name, CaseCount: invoiceCase, LineWeightKg: invoiceWeight, UseZFormula: false,
@@ -322,7 +316,7 @@ func (p *RealProcessor) processKingfoodSegment(filePath string, realPageNum int,
 	driveURL, uploadErr := driveupload.Upload(p.DriveClient, uploadPath, driveupload.Metadata{
 		Vendor:       "KINGFOOD",
 		EntryDate:    entryDate,
-		CustomerCode: kingfoodCustomerCode,
+		CustomerCode: customerCode,
 		CancelDate:   cancelDate,
 		OutputName:   poNumber,
 	}, func(ok bool, err error) {
@@ -347,13 +341,13 @@ func (p *RealProcessor) processKingfoodSegment(filePath string, realPageNum int,
 	}
 
 	return OrderRow{
-		FileName: filepath.Base(filePath), Page: pageLabel, System: "Kingfood", MaKhachHang: kingfoodCustomerCode,
+		FileName: filepath.Base(filePath), Page: pageLabel, System: "Kingfood", MaKhachHang: customerCode,
 		// So dong that cua don nay trong so dat hang - push MISA dua vao
 		// day de tach file theo nhanh ke toan.
 		ExcelRows: excelRowsFrom(startRow, len(rows)),
 		PO:        poNumber, DonGia: fmt.Sprintf("%.0f", totalValue), Status: statusText, StatusKind: statusKind,
 		DriveURL: driveURL,
-		ShipTo:   kingfoodDeliveryAddress, EntryDate: entryDate, CancelDate: cancelDate,
+		ShipTo:   deliveryAddress, EntryDate: entryDate, CancelDate: cancelDate,
 		TotalWeightKg: totalWeightFormatted, TotalPackages: totalPackages,
 		PromoItems: finalizePromoItems(promoTotals),
 		SkuLog:     skuLog, PriceMismatchCount: saigia, PriceMismatchDetails: mismatchDetails,

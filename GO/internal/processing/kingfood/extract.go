@@ -2,6 +2,7 @@ package kingfood
 
 import (
 	"regexp"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -107,6 +108,62 @@ func ParseOrderInfo(text string) (poNumber, entryDate, cancelDate string, ok boo
 	return poNumber, entryDate, cancelDate, ok
 }
 
+// ParseDeliveryInfo extracts the delivery-place and delivery-address
+// fields when they are present. Older Kingfood PDFs omit the address;
+// callers can retain their legacy fallback for those documents.
+func ParseDeliveryInfo(text string) (place, address string) {
+	lines := splitNonEmptyLines(normalizeTabs(text))
+	place = valueAfterLabelOrInline(lines, "Nơi giao")
+	address = valueAfterWrappedLabel(lines, []string{"Địa chỉ giao", "hàng:"})
+	if address == "" {
+		address = valueAfterLabelOrInline(lines, "Địa chỉ giao hàng")
+	}
+	return place, address
+}
+
+func valueAfterWrappedLabel(lines, labelParts []string) string {
+	for i, line := range lines {
+		if !strings.EqualFold(line, labelParts[0]) {
+			continue
+		}
+
+		labelEnd := i + 1
+		matched := true
+		for _, part := range labelParts[1:] {
+			if labelEnd >= len(lines) || !strings.EqualFold(lines[labelEnd], part) {
+				matched = false
+				break
+			}
+			labelEnd++
+		}
+		if matched && labelEnd < len(lines) {
+			return strings.TrimSpace(lines[labelEnd])
+		}
+	}
+	return ""
+}
+
+func valueAfterLabelOrInline(lines []string, label string) string {
+	for i, line := range lines {
+		if len(line) < len(label) || !strings.EqualFold(line[:len(label)], label) {
+			continue
+		}
+
+		remainder := strings.TrimSpace(line[len(label):])
+		if remainder != "" && !strings.HasPrefix(remainder, ":") {
+			continue
+		}
+		value := strings.TrimSpace(strings.TrimPrefix(remainder, ":"))
+		if value != "" {
+			return value
+		}
+		if i+1 < len(lines) {
+			return strings.TrimSpace(lines[i+1])
+		}
+	}
+	return ""
+}
+
 // tableStartPattern mirrors lamsachdonhang_kingfood's start marker
 // (xulydonhang.py:6674): case-insensitive "Khu vực", the last column
 // header immediately before the first product row. Applied to
@@ -183,8 +240,15 @@ func ExtractProducts(text string) []Product {
 		return nil
 	}
 
+	hasComplimentaryNote := strings.Contains(
+		strings.ToLower(strings.Join(strings.Fields(normalizeTabs(text)), " ")),
+		"hàng km tặng kèm",
+	)
 	var products []Product
 	for _, m := range productLinePattern.FindAllStringSubmatch(table, -1) {
+		if hasComplimentaryNote && isZeroKingfoodPrice(m[6]) {
+			continue
+		}
 		products = append(products, Product{
 			Barcode:    m[2],
 			OUQty:      strings.ReplaceAll(m[5], ".", ""),
@@ -192,4 +256,11 @@ func ExtractProducts(text string) []Product {
 		})
 	}
 	return products
+}
+
+func isZeroKingfoodPrice(price string) bool {
+	price = strings.ReplaceAll(price, ".", "")
+	price = strings.ReplaceAll(price, ",", ".")
+	value, err := strconv.ParseFloat(price, 64)
+	return err == nil && value == 0
 }

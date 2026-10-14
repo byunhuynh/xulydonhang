@@ -147,8 +147,8 @@ func TestJMartRegionInfoKeepsItsOwnCodes(t *testing.T) {
 			region, statCode, warehouse)
 	}
 	// And Kingfood's own always-used code is untouched by the split.
-	if _, _, warehouse := kingfoodRegionInfo(kingfoodCustomerCode, nil); warehouse != "LA_KHO2026" {
-		t.Errorf("kingfoodRegionInfo(%q) warehouse = %q, want %q", kingfoodCustomerCode, warehouse, "LA_KHO2026")
+	if _, _, warehouse := kingfoodRegionInfo("MN_MT_KFMSL", nil); warehouse != "LA_KHO2026" {
+		t.Errorf("kingfoodRegionInfo(%q) warehouse = %q, want %q", "MN_MT_KFMSL", warehouse, "LA_KHO2026")
 	}
 }
 

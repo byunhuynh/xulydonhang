@@ -46,7 +46,7 @@ func TestRegionInfo_UsesTheConfiguredWarehouseForEveryBranch(t *testing.T) {
 		{"fujimart khac", only(fujimartRegionInfo("MN_FUJI1", r)), "KHO-fujimart/khac"},
 
 		{"kingfood MB", only(kingfoodRegionInfo("MB_KF0001", r)), "KHO-kingfood/MB"},
-		{"kingfood khac", only(kingfoodRegionInfo(kingfoodCustomerCode, r)), "KHO-kingfood/khac"},
+		{"kingfood khac", only(kingfoodRegionInfo("MN_MT_KFMSL", r)), "KHO-kingfood/khac"},
 
 		// JMart gets its own slot: a different vendor, and its own
 		// hardcoded customer code is the only input it ever sees.
@@ -84,7 +84,7 @@ func TestRegionInfo_WithoutSettingsKeepsTheShippedCodes(t *testing.T) {
 		{"winmart khac", only(winmartRegionInfo("MN_MT_WIN0001", r)), "LA_KHO2026"},
 		{"emart khac", only(emartRegionInfo("MN_EMART1", r)), "LA_KHO2026"},
 		{"fujimart khac", only(fujimartRegionInfo("MN_FUJI1", r)), "LA_KHO2026"},
-		{"kingfood khac", only(kingfoodRegionInfo(kingfoodCustomerCode, r)), "LA_KHO2026"},
+		{"kingfood khac", only(kingfoodRegionInfo("MN_MT_KFMSL", r)), "LA_KHO2026"},
 		{"jmart", only(jmartRegionInfo(r)), "LA_TP"},
 		{"jit MB", only(jitRegionInfo("WH6_HN", r)), "TP_HN_12"},
 		{"jit khac", only(jitRegionInfo("WH6_LA", r)), "LA_KHOTMDT"},

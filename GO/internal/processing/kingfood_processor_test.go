@@ -2,6 +2,8 @@ package processing
 
 import (
 	"context"
+	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/xuri/excelize/v2"
@@ -34,8 +36,8 @@ func TestRealProcessor_ProcessesRealSampleKingfoodFile(t *testing.T) {
 	if rows[0].StatusKind == StatusKindFailed {
 		t.Fatalf("Process produced a Failed row: %+v", rows[0])
 	}
-	if rows[0].MaKhachHang != kingfoodCustomerCode {
-		t.Fatalf("MaKhachHang = %q, want the hardcoded constant %q", rows[0].MaKhachHang, kingfoodCustomerCode)
+	if rows[0].MaKhachHang != "Không xác định" {
+		t.Fatalf("MaKhachHang = %q, want %q because the test customer sheet has no matching Kingfood address", rows[0].MaKhachHang, "Không xác định")
 	}
 
 	f, err := excelize.OpenFile(excelPath)
@@ -62,21 +64,21 @@ func TestKingfoodRegionInfo(t *testing.T) {
 		wantRegion, wantStatCode, wantWarehouse string
 	}{
 		{
-			name:          "the real, always-used hardcoded constant (else branch)",
-			customerCode:  kingfoodCustomerCode,
+			name:          "southern code",
+			customerCode:  "MN_MT_KFMSL",
 			wantRegion:    "MT_MN",
 			wantStatCode:  "LA",
 			wantWarehouse: "LA_KHO2026",
 		},
 		{
-			name:          "MB branch (unreachable with real input today, still tested)",
-			customerCode:  "MB_SOMETHING",
+			name:          "northern code",
+			customerCode:  "MB_MT_KFMSL",
 			wantRegion:    "MT_MB",
 			wantStatCode:  "HN",
 			wantWarehouse: "TP_HN_12",
 		},
 		{
-			name:          "MN_MT_JM0001 exact-match branch (unreachable with real input today, still tested)",
+			name:          "legacy JMart exact-match branch",
 			customerCode:  "MN_MT_JM0001",
 			wantRegion:    "MT_MN",
 			wantStatCode:  "LA",
@@ -93,6 +95,100 @@ func TestKingfoodRegionInfo(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestRealProcessor_KingfoodUsesDeliveryAddressAndCustomerSheetLookup(t *testing.T) {
+	store, err := kingfoodStoreWithCustomerAddress(t, "MB_MT_KFMSL", "Số 10, Phố Huế, Hà Nội")
+	if err != nil {
+		t.Fatalf("Load productdata failed: %v", err)
+	}
+	excelPath := copyTestWorkbookForProcessor(t)
+	pricingSource := &fixturePricingSource{index: pricing.ParseIndex([][]string{
+		{"STT", "Mã hàng", "Tên", "Giá", "1/1-31/12"},
+		{"1", "8936156732620", "Viên giặt xả", "52195", ""},
+	})}
+	processor := &RealProcessor{Store: store, Pricing: pricingSource, ExcelPath: excelPath}
+
+	pages, _, err := extractPageTexts("testdata/sample_kingfood_order.pdf")
+	if err != nil {
+		t.Fatalf("extractPageTexts failed: %v", err)
+	}
+	const address = "Số 10, Phố Huế, Hà Nội"
+	text := strings.Replace(
+		pages[0],
+		"Địa\tchỉ\tgiao\nhàng:\nSố\t324,\tđường\tĐT743A,\tPhường\tĐông\tHoà,\tThành\tphố\tHồ\tChí\tMinh\n",
+		"Địa\tchỉ\tgiao\nhàng:\n"+strings.ReplaceAll(address, " ", "\t")+"\n",
+		1,
+	)
+	if text == pages[0] {
+		t.Fatal("failed to replace the sample delivery-place field")
+	}
+
+	row, err := processor.processKingfoodSegment("testdata/sample_kingfood_order.pdf", 1, text, "1/1")
+	if err != nil {
+		t.Fatalf("processKingfoodSegment returned error: %v", err)
+	}
+	if row.MaKhachHang != "MB_MT_KFMSL" {
+		t.Errorf("MaKhachHang = %q, want %q from the MaKH address lookup", row.MaKhachHang, "MB_MT_KFMSL")
+	}
+	if row.ShipTo != address {
+		t.Errorf("ShipTo = %q, want %q", row.ShipTo, address)
+	}
+
+	f, err := excelize.OpenFile(excelPath)
+	if err != nil {
+		t.Fatalf("failed reopening written workbook: %v", err)
+	}
+	defer f.Close()
+	sheetRows, err := f.GetRows("Don dat hang")
+	if err != nil {
+		t.Fatalf("failed reading Don dat hang rows: %v", err)
+	}
+	const colShipTo = 4
+	if got := sheetRows[8][colShipTo]; got != address {
+		t.Errorf("header row ShipTo = %q, want extracted address %q", got, address)
+	}
+	const colCustomerCode = 6
+	if got := sheetRows[8][colCustomerCode]; got != "MB_MT_KFMSL" {
+		t.Errorf("header row customer code = %q, want mapped code %q", got, "MB_MT_KFMSL")
+	}
+}
+
+func kingfoodStoreWithCustomerAddress(t *testing.T, code, address string) (*productdata.Store, error) {
+	t.Helper()
+	sourcePath := "productdata/testdata/data.xlsx"
+	tempPath := filepath.Join(t.TempDir(), "productdata.xlsx")
+	copyFile(t, sourcePath, tempPath)
+
+	f, err := excelize.OpenFile(tempPath)
+	if err != nil {
+		return nil, err
+	}
+	rows, err := f.GetRows("MaKH")
+	if err != nil {
+		f.Close()
+		return nil, err
+	}
+	rowNumber := len(rows) + 1
+	for column, value := range []string{"Kingfood", "KFM-MB", code, address} {
+		cell, err := excelize.CoordinatesToCellName(column+1, rowNumber)
+		if err != nil {
+			f.Close()
+			return nil, err
+		}
+		if err := f.SetCellValue("MaKH", cell, value); err != nil {
+			f.Close()
+			return nil, err
+		}
+	}
+	if err := f.Save(); err != nil {
+		f.Close()
+		return nil, err
+	}
+	if err := f.Close(); err != nil {
+		return nil, err
+	}
+	return productdata.Load(tempPath)
 }
 
 func TestParseKingfoodPrice(t *testing.T) {
@@ -113,6 +209,47 @@ func TestParseKingfoodPrice(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestRealProcessor_KingfoodUsesInvoicePriceWhenSystemPriceIsMissing(t *testing.T) {
+	store, err := productdata.Load("productdata/testdata/data.xlsx")
+	if err != nil {
+		t.Fatalf("Load productdata failed: %v", err)
+	}
+	excelPath := copyTestWorkbookForProcessor(t)
+
+	pricingSource := &fixturePricingSource{index: pricing.ParseIndex([][]string{
+		{"STT", "Mã hàng", "Tên", "Giá", "1/1-31/12"},
+	})}
+	rp := &RealProcessor{Store: store, Pricing: pricingSource, ExcelPath: excelPath}
+	rows, err := rp.Process(context.Background(), "testdata/sample_kingfood_order.pdf")
+	if err != nil {
+		t.Fatalf("Process returned error: %v", err)
+	}
+	if rows[0].PriceMismatchCount != 1 {
+		t.Fatalf("PriceMismatchCount = %d, want 1 when the system price is missing", rows[0].PriceMismatchCount)
+	}
+
+	f, err := excelize.OpenFile(excelPath)
+	if err != nil {
+		t.Fatalf("failed reopening written workbook: %v", err)
+	}
+	defer f.Close()
+	sheetRows, err := f.GetRows("Don dat hang")
+	if err != nil {
+		t.Fatalf("failed reading Don dat hang rows: %v", err)
+	}
+
+	const colSKU, colUnitPrice = 16, 24
+	for _, row := range sheetRows {
+		if colSKU < len(row) && row[colSKU] == "8936156732620" {
+			if got, want := row[colUnitPrice], "52195.073"; got != want {
+				t.Errorf("cột Y (đơn giá) = %q, want PO price %q when system price is unavailable", got, want)
+			}
+			return
+		}
+	}
+	t.Fatal("không tìm thấy dòng sản phẩm trong sheet")
 }
 
 // TestRealProcessor_KingfoodNoBraceBonusRowDoesNotWriteAP regression-tests

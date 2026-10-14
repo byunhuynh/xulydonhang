@@ -39,6 +39,49 @@ func TestParseOrderInfo_ExtractsRealSampleFields(t *testing.T) {
 	}
 }
 
+func TestParseDeliveryInfo_ExtractsPlaceAndInlineAddress(t *testing.T) {
+	text := "Nơi\tgiao:\tKHO MB\n" +
+		"Địa\tchỉ\tgiao\thàng:\tSố 10, Phố Huế, Hà Nội\n"
+
+	place, address := ParseDeliveryInfo(text)
+	if place != "KHO MB" {
+		t.Errorf("place = %q, want %q", place, "KHO MB")
+	}
+	if address != "Số 10, Phố Huế, Hà Nội" {
+		t.Errorf("address = %q, want %q", address, "Số 10, Phố Huế, Hà Nội")
+	}
+}
+
+func TestParseDeliveryInfo_ExtractsNextLineValuesAndIgnoresSimilarLabels(t *testing.T) {
+	text := "Địa chỉ:\n436 Nguyễn Thị Thập, Thành phố Hồ Chí Minh\n" +
+		"Nơi giao:\nKHO SEEDLOG\n" +
+		"Địa chỉ giao hàng:\nSố 20, Đường Lê Lợi, Hải Phòng\n"
+
+	place, address := ParseDeliveryInfo(text)
+	if place != "KHO SEEDLOG" {
+		t.Errorf("place = %q, want %q", place, "KHO SEEDLOG")
+	}
+	if address != "Số 20, Đường Lê Lợi, Hải Phòng" {
+		t.Errorf("address = %q, want %q", address, "Số 20, Đường Lê Lợi, Hải Phòng")
+	}
+}
+
+func TestParseDeliveryInfo_ExtractsAddressWithWrappedLabelFromRealPDF(t *testing.T) {
+	text := "Nơi\tgiao:\nKHO\tSEEDLOG\n" +
+		"Địa\tchỉ\tgiao\n" +
+		"hàng:\n" +
+		"Số\t324,\tđường\tĐT743A,\tPhường\tĐông\tHoà,\tThành\tphố\tHồ\tChí\tMinh\n"
+
+	place, address := ParseDeliveryInfo(text)
+	if place != "KHO SEEDLOG" {
+		t.Errorf("place = %q, want %q", place, "KHO SEEDLOG")
+	}
+	const wantAddress = "Số 324, đường ĐT743A, Phường Đông Hoà, Thành phố Hồ Chí Minh"
+	if address != wantAddress {
+		t.Errorf("address = %q, want %q", address, wantAddress)
+	}
+}
+
 func TestParseOrderInfo_MissingPONumberMarkerFailsCleanly(t *testing.T) {
 	// No "PO Number:" marker anywhere -> poNumber resolves empty ->
 	// ok=false. Mirrors Python's real crash risk here (a downstream
@@ -175,6 +218,67 @@ func TestExtractProducts_ParsesRealSampleTwoProducts(t *testing.T) {
 	}
 	if products[1].Barcode != "8936156732620" {
 		t.Errorf("products[1].Barcode = %q, want %q", products[1].Barcode, "8936156732620")
+	}
+}
+
+func TestExtractProducts_SkipsZeroPriceItemsWhenComplimentaryNoteExists(t *testing.T) {
+	product := func(number, barcode, price string) string {
+		return number + "\n" +
+			barcode + "\n" +
+			"BLUE - SẢN PHẨM TÚI\n" +
+			"1 L\n" +
+			"TÚI\n" +
+			"12\n" +
+			"1\n" +
+			"1 Thùng\n" +
+			"10.000\n" +
+			"0%\n" +
+			"0%\n" +
+			"0%\n" +
+			price + "\n" +
+			"8%\n"
+	}
+
+	text := "Khu vực\n" +
+		product("1", "8936156732620", "0") +
+		product("2", "8936156730992", "10.000") +
+		"Ghi chú\n" +
+		"Hàng KM tặng kèm\n" +
+		"TỔNG CỘNG\n"
+
+	got := ExtractProducts(text)
+	if len(got) != 1 {
+		t.Fatalf("len(ExtractProducts) = %d, want 1 (zero-priced gift excluded)", len(got))
+	}
+	if got[0].Barcode != "8936156730992" {
+		t.Errorf("remaining product Barcode = %q, want %q", got[0].Barcode, "8936156730992")
+	}
+}
+
+func TestExtractProducts_KeepsZeroPriceItemsWithoutComplimentaryNote(t *testing.T) {
+	text := "Khu vực\n" +
+		"1\n" +
+		"8936156732620\n" +
+		"BLUE - VIÊN GIẶT XẢ PHẤN HỒNG TÚI\n" +
+		"30 VIÊN\n" +
+		"TÚI\n" +
+		"300\n" +
+		"12\n" +
+		"25 Thùng\n" +
+		"102.143\n" +
+		"27%\n" +
+		"0%\n" +
+		"30%\n" +
+		"0,000\n" +
+		"8%\n" +
+		"TỔNG CỘNG\n"
+
+	got := ExtractProducts(text)
+	if len(got) != 1 {
+		t.Fatalf("len(ExtractProducts) = %d, want 1 (zero price alone must not exclude product)", len(got))
+	}
+	if got[0].TotalPrice != "0,000" {
+		t.Errorf("TotalPrice = %q, want %q", got[0].TotalPrice, "0,000")
 	}
 }
 
