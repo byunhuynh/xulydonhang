@@ -30,6 +30,7 @@ export namespace appsettings {
 export namespace main {
 	
 	export class MisaPushJob {
+	    key: string;
 	    po: string;
 	    routeKey: string;
 	    branch: string;
@@ -41,6 +42,7 @@ export namespace main {
 	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.key = source["key"];
 	        this.po = source["po"];
 	        this.routeKey = source["routeKey"];
 	        this.branch = source["branch"];

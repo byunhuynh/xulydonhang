@@ -463,11 +463,20 @@ export function ResultTable() {
                             ? price.label
                             : String(row[c.key] ?? '')
                       const isCopied = copiedKey === cellKey
+                      // Ô đối soát của đơn SAI GIÁ: bấm vào bất kỳ đâu trong ô
+                      // là bung/thu bảng chi tiết, không copy. Copy chữ "3 mã
+                      // sai giá" không giúp được gì, còn trước đây bấm hụt ra
+                      // ngoài cái nhãn là copy thay vì mở chi tiết.
+                      const togglesDetail = c.key === 'priceMismatchCount' && row.priceMismatchCount > 0 && !isPending
                       return (
                         <td
                           key={c.key}
-                          onClick={() => handleCopy(cellKey, copyValue)}
-                          title="Nhấp để copy"
+                          onClick={() =>
+                            togglesDetail
+                              ? setExpandedRow((cur) => (cur === i ? null : i))
+                              : handleCopy(cellKey, copyValue)
+                          }
+                          title={togglesDetail ? (expandedRow === i ? 'Nhấp để thu gọn' : 'Nhấp để xem chi tiết sai giá') : 'Nhấp để copy'}
                           className={`relative cursor-pointer border-b border-border px-2.5 py-2 text-ink transition-colors ${
                             cellClassByColumn[c.key] ?? ''
                           } ${isCopied ? 'bg-accent/20' : 'hover:bg-accent/[0.08]'}`}
@@ -495,12 +504,11 @@ export function ResultTable() {
                             </span>
                           ) : c.key === 'priceMismatchCount' ? (
                             row.priceMismatchCount > 0 ? (
+                              // Không có onClick riêng: cú bấm nổi lên ô <td> và
+                              // ô đó lo việc bung/thu (xem togglesDetail).
                               <button
                                 type="button"
-                                onClick={(e) => {
-                                  e.stopPropagation()
-                                  setExpandedRow((cur) => (cur === i ? null : i))
-                                }}
+                                aria-expanded={expandedRow === i}
                                 className={`inline-flex cursor-pointer items-center gap-1.5 whitespace-nowrap rounded-full px-2.5 py-0.5 font-sans font-semibold ${price.classes}`}
                               >
                                 <FaTriangleExclamation size={11} />

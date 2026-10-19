@@ -1,6 +1,7 @@
 import { useEffect } from 'react'
 import { EventsOn, OnFileDrop, OnFileDropOff } from '../../wailsjs/runtime/runtime'
 import { useAppStore, type LockStatus, type MisaPushResult } from '../store/appStore'
+import type { MisaOrderStatus } from '../lib/misaBranch'
 import type { OrderRow } from '../types'
 import type { BatchProgress } from '../lib/batchProgress'
 import type { TMDTMissingCombo } from '../lib/tmdtMissing'
@@ -17,6 +18,7 @@ export function useWailsEvents() {
   const setTMDTMissing = useAppStore((s) => s.setTMDTMissing)
   const setPushing = useAppStore((s) => s.setPushing)
   const appendMisaResult = useAppStore((s) => s.appendMisaResult)
+  const mergeMisaOrders = useAppStore((s) => s.mergeMisaOrders)
 
   useEffect(() => {
     const offLog = EventsOn('process:log', (line: string) => appendLog(line))
@@ -55,6 +57,9 @@ export function useWailsEvents() {
     // misa:pushed báo theo NHÁNH chứ không theo đơn: một nhánh là một
     // lần đẩy nguyên khối, MISA không trả kết quả riêng cho từng đơn.
     const offMisaPushed = EventsOn('misa:pushed', (result: MisaPushResult) => appendMisaResult(result))
+    // misa:orders là trạng thái TỪNG đơn, suy từ kết quả kiểm tra của MISA
+    // (refno của từng chứng từ) — phát lúc bắt đầu đẩy và lúc có kết quả.
+    const offMisaOrders = EventsOn('misa:orders', (statuses: MisaOrderStatus[]) => mergeMisaOrders(statuses ?? []))
     const offMisaDone = EventsOn('misa:done', () => setPushing(false))
     // Attaches the actual dragover/dragleave/drop DOM listeners on window;
     // without this call the Go-side runtime.OnFileDrop callback never fires
@@ -76,8 +81,9 @@ export function useWailsEvents() {
       offTMDTMissing()
       offMisaLog()
       offMisaPushed()
+      offMisaOrders()
       offMisaDone()
       OnFileDropOff()
     }
-  }, [appendLog, upsertRow, setBatchProgress, setProcessing, addFiles, setLockStatus, deselectPO, setZaloQR, setTMDTMissing, setPushing, appendMisaResult])
+  }, [appendLog, upsertRow, setBatchProgress, setProcessing, addFiles, setLockStatus, deselectPO, setZaloQR, setTMDTMissing, setPushing, appendMisaResult, mergeMisaOrders])
 }

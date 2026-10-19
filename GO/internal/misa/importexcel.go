@@ -128,6 +128,10 @@ type ImportResult struct {
 	RowErrors      []RowError       `json:"row_errors,omitempty"`
 	Step3Log       []string         `json:"step3_log"`
 
+	// CommitStarted bật ngay TRƯỚC khi gửi lệnh ghi sổ (step4). Lỗi xảy ra
+	// sau mốc này thì không biết MISA đã ghi hay chưa — worker của họ vẫn
+	// có thể chạy nốt — nên bên gọi không được coi là "chưa ghi gì".
+	CommitStarted  bool     `json:"commit_started"`
 	Committed      bool     `json:"committed"`
 	Step4SessionID string   `json:"step4_session_id,omitempty"`
 	Valid          int      `json:"valid"`
@@ -331,6 +335,7 @@ func (c *Client) ImportExcel(ctx context.Context, opts ImportOptions) (*ImportRe
 
 	// Bước 5: ghi vào sổ.
 	c.logf("5/5 ghi vào sổ")
+	res.CommitStarted = true
 	q4 := url.Values{}
 	q4.Set("token", res.Token)
 	q4.Set("skip", "0")

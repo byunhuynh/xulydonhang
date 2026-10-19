@@ -57,6 +57,27 @@ func SplitWorkbook(src, dst string, keep []int) error {
 	return nil
 }
 
+// OrderNumbers đọc "Số đơn hàng" (cột B) của từng dòng trong rows. Đây
+// chính là cột MISA ghép vào refno, nên là khoá DUY NHẤT nối kết quả
+// kiểm tra của MISA (theo chứng từ) ngược về từng đơn trên bảng kết quả.
+func OrderNumbers(path string, rows []int) (map[int]string, error) {
+	f, err := excelize.OpenFile(path)
+	if err != nil {
+		return nil, fmt.Errorf("misapush: mở %s: %w", path, err)
+	}
+	defer f.Close()
+
+	out := make(map[int]string, len(rows))
+	for _, r := range rows {
+		v, err := f.GetCellValue(SheetName, fmt.Sprintf("B%d", r))
+		if err != nil {
+			return nil, fmt.Errorf("misapush: đọc số đơn hàng B%d: %w", r, err)
+		}
+		out[r] = strings.TrimSpace(v)
+	}
+	return out, nil
+}
+
 func trimRows(path string, wanted map[int]bool) error {
 	f, err := excelize.OpenFile(path)
 	if err != nil {

@@ -7,6 +7,9 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/wailsapp/wails/v2/pkg/runtime"
+
+	"order-processor/internal/misa"
 	"order-processor/internal/misapush"
 )
 
@@ -75,6 +78,9 @@ func (a *App) MisaRouteOptions() ([]MisaRouteInfo, error) {
 
 // MisaPushJob là một nhóm đơn mà người dùng đã tick và đã gán nhánh.
 type MisaPushJob struct {
+	// Key là khoá nhóm của đơn trên bảng kết quả (groupKeyFor phía
+	// frontend) — trạng thái từng đơn báo ngược về theo đúng khoá này.
+	Key       string `json:"key"`
 	PO        string `json:"po"`
 	RouteKey  string `json:"routeKey"`
 	Branch    string `json:"branch"`
@@ -134,29 +140,147 @@ func (a *App) runMisaPush(emitter Emitter, jobs []MisaPushJob, force bool) {
 		return
 	}
 
-	rowsByBranch := map[string][]int{}
+	jobsByBranch := map[string][]MisaPushJob{}
 	for _, job := range jobs {
-		rowsByBranch[job.Branch] = append(rowsByBranch[job.Branch], job.ExcelRows...)
+		jobsByBranch[job.Branch] = append(jobsByBranch[job.Branch], job)
 	}
 
 	for _, branch := range misaBranchOrder {
-		rows := dedupSorted(rowsByBranch[branch])
-		if len(rows) == 0 {
+		if len(jobsByBranch[branch]) == 0 {
 			continue
 		}
-		a.pushOneBranch(emitter, settings.Misa, branch, rows, force)
+		a.pushOneBranch(emitter, settings.Misa, branch, jobsByBranch[branch], force)
 	}
+}
+
+// Trạng thái của TỪNG đơn sau một lượt đẩy — phát qua misa:orders. MISA
+// chỉ nhận/trả theo nhánh (một file một lần), nhưng bước kiểm tra của họ
+// trả về từng chứng từ kèm refno, đủ để chỉ đích danh đơn nào hỏng.
+const (
+	misaOrderPushing = "pushing" // đang đẩy
+	misaOrderOK      = "ok"      // đã ghi vào sổ
+	misaOrderExists  = "exists"  // số đơn hàng đã có trên MISA
+	misaOrderInvalid = "invalid" // MISA từ chối vì dữ liệu của chính đơn này
+	misaOrderHeld    = "held"    // hợp lệ, nhưng nhánh không ghi vì đơn khác lỗi
+	misaOrderFailed  = "failed"  // cả nhánh hỏng trước khi MISA kịp kiểm tra
+	misaOrderUnknown = "unknown" // lỗi giữa lúc ghi sổ — chưa rõ đã vào sổ chưa
+)
+
+// MisaOrderStatus là trạng thái một đơn, khoá theo MisaPushJob.Key.
+type MisaOrderStatus struct {
+	Key     string `json:"key"`
+	PO      string `json:"po"`
+	Branch  string `json:"branch"`
+	Status  string `json:"status"`
+	Message string `json:"message"`
+}
+
+func emitOrderStatuses(emitter Emitter, statuses []MisaOrderStatus) {
+	if len(statuses) > 0 {
+		emitter.Emit("misa:orders", statuses)
+	}
+}
+
+// sameStatusForAll gán cùng một trạng thái cho mọi đơn của nhánh — dùng
+// khi lỗi xảy ra trước khi MISA đọc tới từng chứng từ.
+func sameStatusForAll(jobs []MisaPushJob, branch, status, message string) []MisaOrderStatus {
+	out := make([]MisaOrderStatus, 0, len(jobs))
+	for _, j := range jobs {
+		out = append(out, MisaOrderStatus{Key: j.Key, PO: j.PO, Branch: branch, Status: status, Message: message})
+	}
+	return out
+}
+
+func normalizeRefNo(s string) string {
+	return strings.ToUpper(strings.TrimSpace(s))
+}
+
+// classifyMisaOrders suy trạng thái từng đơn từ kết quả của cả nhánh.
+// numbers là "Số đơn hàng" (cột B) của từng dòng Excel — MISA trả lỗi theo
+// refno, chính là cột này, nên đây là cách nối lỗi về đúng đơn.
+func classifyMisaOrders(jobs []MisaPushJob, branch string, numbers map[int]string,
+	res *misa.ImportResult, pushErr error, force bool) []MisaOrderStatus {
+
+	errByRef := map[string][]string{}
+	if res != nil {
+		for _, e := range res.RowErrors {
+			if ref := normalizeRefNo(e.RefNo); ref != "" {
+				errByRef[ref] = append(errByRef[ref], e.Description)
+			}
+		}
+	}
+
+	out := make([]MisaOrderStatus, 0, len(jobs))
+	for _, j := range jobs {
+		st := MisaOrderStatus{Key: j.Key, PO: j.PO, Branch: branch}
+
+		// Một đơn có thể trải trên nhiều dòng (nhiều mã hàng) và — với BigC
+		// — nhiều số đơn hàng; gom lỗi của mọi số đơn thuộc đơn này.
+		seenRef := map[string]bool{}
+		seenDesc := map[string]bool{}
+		var descs []string
+		for _, r := range j.ExcelRows {
+			ref := normalizeRefNo(numbers[r])
+			if ref == "" || seenRef[ref] {
+				continue
+			}
+			seenRef[ref] = true
+			for _, d := range errByRef[ref] {
+				if !seenDesc[d] {
+					seenDesc[d] = true
+					descs = append(descs, d)
+				}
+			}
+		}
+
+		switch {
+		case len(descs) > 0:
+			st.Status = misaOrderInvalid
+			for _, d := range descs {
+				if strings.Contains(strings.ToLower(d), "đã tồn tại") {
+					st.Status = misaOrderExists
+				}
+			}
+			st.Message = strings.Join(descs, "; ")
+			if force && (pushErr == nil || (res != nil && res.CommitStarted)) {
+				st.Message += " — đã bỏ qua, không ghi đơn này"
+			}
+		case pushErr == nil:
+			st.Status = misaOrderOK
+			st.Message = "đã ghi vào sổ"
+		case res != nil && res.CommitStarted:
+			st.Status = misaOrderUnknown
+			st.Message = fmt.Sprintf("lỗi giữa lúc ghi sổ (%v) — kiểm tra trên MISA trước khi đẩy lại", pushErr)
+		case res != nil && len(res.RowErrors) > 0:
+			st.Status = misaOrderHeld
+			st.Message = "hợp lệ, nhưng chưa ghi vì có đơn khác cùng nhánh bị lỗi"
+		default:
+			st.Status = misaOrderFailed
+			st.Message = pushErr.Error()
+		}
+		out = append(out, st)
+	}
+	return out
 }
 
 // pushOneBranch tách workbook cho đúng một nhánh rồi đẩy. Mọi lỗi ở đây
 // chỉ dừng nhánh này — nhánh còn lại vẫn chạy, vì người dùng thà vào sổ
 // được một nửa còn hơn phải làm lại cả hai.
-func (a *App) pushOneBranch(emitter Emitter, misaCfg map[string]string, branch string, rows []int, force bool) {
+func (a *App) pushOneBranch(emitter Emitter, misaCfg map[string]string, branch string, jobs []MisaPushJob, force bool) {
 	label := misaBranchLabel[branch]
+
+	var all []int
+	for _, j := range jobs {
+		all = append(all, j.ExcelRows...)
+	}
+	rows := dedupSorted(all)
+
+	emitOrderStatuses(emitter, sameStatusForAll(jobs, branch, misaOrderPushing, "đang đẩy lên MISA"))
 
 	fail := func(format string, args ...any) {
 		msg := fmt.Sprintf(format, args...)
 		emitter.Emit("misa:log", fmt.Sprintf("❌ %s: %s", label, msg))
+		emitOrderStatuses(emitter, sameStatusForAll(jobs, branch, misaOrderFailed, msg))
 		emitter.Emit("misa:pushed", map[string]any{
 			"branch": branch, "ok": false, "valid": 0, "invalid": 0, "message": msg,
 			// Lỗi ở đây (chưa khai bộ dữ liệu, không tách được file, đăng
@@ -190,9 +314,14 @@ func (a *App) pushOneBranch(emitter Emitter, misaCfg map[string]string, branch s
 	// SplitWorkbook đang đọc nó - reserveBatch() đã chặn batch mới trong
 	// lúc a.pushing bật, nhưng khoá này vẫn cần cho đúng phần đọc/ghi
 	// thật sự tranh chấp, cùng khuôn ConfirmPrice/UpdateJITPeriod dùng.
+	var numbers map[int]string
 	splitErr := func() error {
 		a.excelMu.Lock()
 		defer a.excelMu.Unlock()
+		var err error
+		if numbers, err = misapush.OrderNumbers(a.excelPath, rows); err != nil {
+			return err
+		}
 		return misapush.SplitWorkbook(a.excelPath, tmpPath, rows)
 	}()
 	if splitErr != nil {
@@ -229,6 +358,7 @@ func (a *App) pushOneBranch(emitter Emitter, misaCfg map[string]string, branch s
 		}
 		msg := err.Error()
 		emitter.Emit("misa:log", fmt.Sprintf("❌ %s: %s", label, msg))
+		emitOrderStatuses(emitter, classifyMisaOrders(jobs, branch, numbers, res, err, force))
 		emitter.Emit("misa:pushed", map[string]any{
 			"branch": branch, "ok": false,
 			"valid": valid, "invalid": invalid,
@@ -239,6 +369,7 @@ func (a *App) pushOneBranch(emitter Emitter, misaCfg map[string]string, branch s
 
 	emitter.Emit("misa:log", fmt.Sprintf("✅ %s: đã ghi vào sổ %d chứng từ hợp lệ, %d lỗi, %d bỏ qua",
 		label, res.Valid, res.Invalid, res.Skipped))
+	emitOrderStatuses(emitter, classifyMisaOrders(jobs, branch, numbers, res, nil, force))
 	emitter.Emit("misa:pushed", map[string]any{
 		"branch": branch, "ok": true, "valid": res.Valid, "invalid": res.Invalid,
 		"message": fmt.Sprintf("đã ghi %d chứng từ", res.Valid),
@@ -262,4 +393,28 @@ func dedupSorted(rows []int) []int {
 	}
 	sort.Ints(out)
 	return out
+}
+
+// beforeClose chặn thoát app giữa lúc đang đẩy MISA. Lượt đẩy chạy trong
+// goroutine của chính tiến trình này: thoát là cắt ngang nó, nhánh đang
+// đẩy có thể đã hoặc chưa vào sổ, và lần mở sau không còn gì để biết.
+// Đóng modal Push MISA thì KHÔNG sao — goroutine vẫn chạy nốt.
+func (a *App) beforeClose(ctx context.Context) bool {
+	if !a.pushing.Load() {
+		return false
+	}
+	choice, err := runtime.MessageDialog(ctx, runtime.MessageDialogOptions{
+		Type:  runtime.QuestionDialog,
+		Title: "Đang đẩy đơn lên MISA",
+		Message: "Lượt đẩy MISA vẫn đang chạy. Thoát bây giờ sẽ cắt ngang giữa chừng: " +
+			"đơn có thể đã hoặc chưa vào sổ, phải tự kiểm tra trên MISA trước khi đẩy lại.\n\n" +
+			"Vẫn thoát?",
+		DefaultButton: "No",
+		CancelButton:  "No",
+	})
+	if err != nil {
+		// Không hiện được hộp thoại thì đừng nhốt người dùng trong app.
+		return false
+	}
+	return choice != "Yes"
 }

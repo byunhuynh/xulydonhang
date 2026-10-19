@@ -14,7 +14,6 @@ export function ControlPanel() {
   const resetRows = useAppStore((s) => s.resetRows)
   const rows = useAppStore((s) => s.rows)
   const isPushing = useAppStore((s) => s.isPushing)
-  const clearMisaResults = useAppStore((s) => s.clearMisaResults)
 
   // Danh sách file TMĐT đang chờ người dùng chọn khoảng ngày. Modal chỉ
   // bật khi người dùng bấm "Xử lý" — thả file vào không hỏi gì.
@@ -63,15 +62,22 @@ export function ControlPanel() {
       <section className="flex flex-shrink-0 items-center gap-3 rounded-xl border border-border bg-panel px-4 py-3">
         <button
           type="button"
-          onClick={() => {
-            clearMisaResults()
-            setIsMisaOpen(true)
-          }}
-          disabled={rows.length === 0 || isProcessing || isPushing}
-          title={rows.length === 0 ? 'Xử lý đơn hàng trước đã' : 'Đẩy đơn vừa xử lý lên AMIS Kế toán'}
+          // KHÔNG xoá kết quả lượt trước khi mở, và vẫn mở được giữa lúc
+          // đang đẩy: đóng modal không dừng lượt đẩy ở backend, nên mở lại
+          // phải thấy đúng trạng thái từng đơn (xem misaOrders trong store).
+          onClick={() => setIsMisaOpen(true)}
+          disabled={rows.length === 0 || isProcessing}
+          title={
+            rows.length === 0
+              ? 'Xử lý đơn hàng trước đã'
+              : isPushing
+                ? 'Đang đẩy lên MISA — bấm để xem tiến độ từng đơn'
+                : 'Đẩy đơn vừa xử lý lên AMIS Kế toán'
+          }
           className="inline-flex items-center gap-2 rounded-lg border border-border px-3 py-2 font-sans text-xs font-semibold text-muted transition-colors hover:border-accent hover:text-accent disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:border-border disabled:hover:text-muted"
         >
-          <FaCloudArrowUp /> Push MISA
+          {isPushing ? <FaSpinner className="animate-spin" /> : <FaCloudArrowUp />}
+          {isPushing ? 'Đang đẩy MISA…' : 'Push MISA'}
         </button>
         <button
           onClick={handleProcess}

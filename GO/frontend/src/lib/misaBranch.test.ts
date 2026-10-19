@@ -6,9 +6,13 @@ import {
   branchTotals,
   buildMisaGroups,
   canPush,
+  doneOrderKeys,
   pendingGroups,
   rememberRouting,
+  shouldPreselect,
+  summarizeOrderStatuses,
   type MisaGroup,
+  type MisaOrderStatus,
 } from './misaBranch.ts'
 import type { OrderRow } from '../types.ts'
 
@@ -133,15 +137,49 @@ test('cho đẩy khi mọi đơn đã tick đều có nhánh', () => {
   assert.equal(canPush([group({ branch: 'htla' }), group({ key: 'b', selected: false, branch: '' })], [], 0), true)
 })
 
-test('nhánh đã vào sổ bị loại khỏi lượt đẩy sau, nhánh lỗi thì không', () => {
+test('đơn đã vào sổ bị loại khỏi lượt đẩy sau, đơn cùng nhánh còn lỗi thì không', () => {
   const groups = [
     group({ key: 'a', branch: 'htla' }),
-    group({ key: 'b', branch: 'ha_thanh' }),
+    group({ key: 'b', branch: 'htla' }),
+    group({ key: 'c', branch: 'ha_thanh' }),
   ]
-  const pending = pendingGroups(groups, ['htla'])
-  assert.deepEqual(pending.map((g) => g.key), ['b'])
-  assert.equal(canPush(groups, ['htla'], 0), true)
-  assert.equal(canPush(groups, ['htla', 'ha_thanh'], 0), false)
+  const pending = pendingGroups(groups, ['a'])
+  assert.deepEqual(pending.map((g) => g.key), ['b', 'c'])
+  assert.equal(canPush(groups, ['a'], 0), true)
+  assert.equal(canPush(groups, ['a', 'b', 'c'], 0), false)
+})
+
+test('đơn đã vào sổ thiếu nhánh không chặn nút đẩy các đơn còn lại', () => {
+  const groups = [group({ key: 'a', branch: '' }), group({ key: 'b', branch: 'htla' })]
+  assert.equal(canPush(groups, ['a'], 0), true)
+})
+
+test('chỉ đơn đã vào sổ hoặc đang đẩy mới bị khoá; chưa rõ thì không', () => {
+  const st = (key: string, status: MisaOrderStatus['status']): MisaOrderStatus =>
+    ({ key, po: key, branch: 'htla', status, message: '' })
+  const keys = doneOrderKeys({
+    a: st('a', 'ok'), b: st('b', 'pushing'), c: st('c', 'exists'),
+    d: st('d', 'unknown'), e: st('e', 'held'), f: st('f', 'failed'),
+  })
+  assert.deepEqual(keys.sort(), ['a', 'b'])
+})
+
+test('đơn đã tồn tại được bỏ tick sẵn, đơn khác giữ tick', () => {
+  const st = (status: MisaOrderStatus['status']): MisaOrderStatus =>
+    ({ key: 'a', po: 'a', branch: 'htla', status, message: '' })
+  assert.equal(shouldPreselect(undefined), true)
+  assert.equal(shouldPreselect(st('exists')), false)
+  assert.equal(shouldPreselect(st('held')), true)
+  assert.equal(shouldPreselect(st('invalid')), true)
+})
+
+test('tóm tắt đếm theo trạng thái, thứ tự cố định', () => {
+  const st = (key: string, status: MisaOrderStatus['status']): MisaOrderStatus =>
+    ({ key, po: key, branch: 'htla', status, message: '' })
+  assert.deepEqual(
+    summarizeOrderStatuses([st('a', 'held'), st('b', 'ok'), st('c', 'ok'), st('d', 'exists')]),
+    [{ status: 'ok', count: 2 }, { status: 'exists', count: 1 }, { status: 'held', count: 1 }],
+  )
 })
 
 test('còn đơn bị bỏ thì luôn chặn đẩy, dù mọi thứ khác đều hợp lệ', () => {

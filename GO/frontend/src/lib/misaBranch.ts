@@ -122,12 +122,13 @@ export function branchTotals(groups: MisaGroup[]): Record<string, { orders: numb
   return totals
 }
 
-// pendingGroups là các đơn còn phải đẩy: đã tick, và thuộc nhánh CHƯA vào
-// sổ thành công. Nhánh đã ghi xong bị loại hẳn - bấm đẩy lại chỉ gửi
-// nhánh còn lỗi, không có đường nào ghi trùng nhánh đã vào sổ.
-export function pendingGroups(groups: MisaGroup[], pushedBranches: string[]): MisaGroup[] {
-  const done = new Set(pushedBranches)
-  return groups.filter((g) => g.selected && !done.has(g.branch))
+// pendingGroups là các đơn còn phải đẩy: đã tick, và CHƯA vào sổ. Trước
+// đây khoá theo nhánh (nhánh ok thì loại cả nhánh); giờ MISA báo được
+// từng đơn nên khoá theo từng đơn — trong một nhánh lỗi, đơn "đã tồn tại"
+// bỏ tick đi thì phần còn lại đẩy lại được mà không ghi trùng đơn nào.
+export function pendingGroups(groups: MisaGroup[], doneKeys: string[]): MisaGroup[] {
+  const done = new Set(doneKeys)
+  return groups.filter((g) => g.selected && !done.has(g.key))
 }
 
 // canPush khoá nút đẩy cho tới khi mọi đơn đang tick đều có nhánh. Không
@@ -140,12 +141,59 @@ export function pendingGroups(groups: MisaGroup[], pushedBranches: string[]): Mi
 // hàng) mà không ai biết - người dùng phải thấy băng cảnh báo và tự
 // quyết định (chấp nhận bỏ đơn đó, hay quay lại kiểm tra sổ đặt hàng)
 // trước khi được phép bấm đẩy, chứ không được đẩy một phần trong im lặng.
-export function canPush(groups: MisaGroup[], pushedBranches: string[], skippedCount: number): boolean {
+export function canPush(groups: MisaGroup[], doneKeys: string[], skippedCount: number): boolean {
   if (skippedCount > 0) return false
-  const pending = groups.filter((g) => g.selected)
+  const pending = pendingGroups(groups, doneKeys)
   if (pending.length === 0) return false
-  if (pending.some((g) => !g.branch)) return false
-  return pendingGroups(groups, pushedBranches).length > 0
+  return !pending.some((g) => !g.branch)
+}
+
+// Trạng thái từng đơn mà backend phát qua misa:orders — PHẢI khớp các
+// hằng misaOrder* trong app_misa.go.
+export type MisaOrderState = 'pushing' | 'ok' | 'exists' | 'invalid' | 'held' | 'failed' | 'unknown'
+
+export interface MisaOrderStatus {
+  key: string
+  po: string
+  branch: string
+  status: MisaOrderState
+  message: string
+}
+
+export const MISA_ORDER_META: Record<MisaOrderState, { label: string; tone: 'accent' | 'success' | 'warning' | 'danger' | 'muted' }> = {
+  pushing: { label: 'Đang đẩy…', tone: 'accent' },
+  ok: { label: 'Đã vào sổ', tone: 'success' },
+  exists: { label: 'Đã tồn tại', tone: 'warning' },
+  invalid: { label: 'Lỗi dữ liệu', tone: 'danger' },
+  held: { label: 'Chưa ghi', tone: 'muted' },
+  failed: { label: 'Không đẩy được', tone: 'danger' },
+  unknown: { label: 'Chưa rõ', tone: 'warning' },
+}
+
+// doneOrderKeys là các đơn KHÔNG được đẩy lại: đã vào sổ, hoặc đang đẩy.
+// "Chưa rõ" (lỗi giữa lúc ghi sổ) cố ý KHÔNG nằm đây — người dùng phải
+// kiểm tra MISA rồi tự quyết; nếu đơn thật ra đã vào, MISA sẽ báo "đã
+// tồn tại" chứ không ghi trùng.
+export function doneOrderKeys(statuses: Record<string, MisaOrderStatus>): string[] {
+  return Object.values(statuses)
+    .filter((s) => s.status === 'ok' || s.status === 'pushing')
+    .map((s) => s.key)
+}
+
+// shouldPreselect: lúc mở modal hoặc khi kết quả về, đơn đã tồn tại trên
+// MISA được bỏ tick sẵn — đẩy lại chỉ khiến cả nhánh bị chặn lần nữa.
+export function shouldPreselect(status: MisaOrderStatus | undefined): boolean {
+  return !status || (status.status !== 'exists' && status.status !== 'ok')
+}
+
+// summarizeOrderStatuses đếm số đơn theo trạng thái, theo thứ tự cố định
+// của MISA_ORDER_META, bỏ trạng thái không có đơn nào.
+export function summarizeOrderStatuses(statuses: MisaOrderStatus[]): { status: MisaOrderState; count: number }[] {
+  const counts = new Map<MisaOrderState, number>()
+  for (const s of statuses) counts.set(s.status, (counts.get(s.status) ?? 0) + 1)
+  return (Object.keys(MISA_ORDER_META) as MisaOrderState[])
+    .filter((k) => counts.has(k))
+    .map((k) => ({ status: k, count: counts.get(k)! }))
 }
 
 // rememberRouting dựng map khoá định tuyến -> nhánh để lưu vào Cài đặt.

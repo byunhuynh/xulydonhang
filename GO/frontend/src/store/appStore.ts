@@ -13,6 +13,7 @@ import {
 } from '../lib/jitPeriodState'
 import { createBatchProgress, type BatchProgress } from '../lib/batchProgress'
 import type { TMDTMissingCombo } from '../lib/tmdtMissing'
+import type { MisaOrderStatus } from '../lib/misaBranch'
 
 export type LockStatus = 'checking' | 'unlocked' | 'locked'
 
@@ -41,6 +42,8 @@ interface AppState {
   setPushing: (pushing: boolean) => void
   appendMisaResult: (result: MisaPushResult) => void
   clearMisaResults: () => void
+  misaOrders: Record<string, MisaOrderStatus>
+  mergeMisaOrders: (statuses: MisaOrderStatus[]) => void
   selectedPOs: Set<string>
   resolvedChoice: Record<string, PriceBasis>
   receivedAt: Record<number, string>
@@ -92,6 +95,11 @@ export const useAppStore = create<AppState>((set, get) => ({
   // khi xong - nó chuyển sang màn hình kết quả, và nhánh đã vào sổ bị
   // khoá lại để bấm đẩy lại chỉ gửi nhánh còn lỗi.
   misaResults: [],
+  // Trạng thái từng đơn (khoá theo groupKeyFor) qua MỌI lượt đẩy của lô
+  // hiện tại. Sống ở store chứ không trong modal: đóng modal giữa lúc đẩy
+  // thì backend vẫn chạy nốt, mở lại phải thấy đúng đơn nào đã vào sổ —
+  // và không được cho đẩy lại đơn đó. Chỉ xoá khi sang lô mới (resetRows).
+  misaOrders: {},
   selectedPOs: new Set(),
   resolvedChoice: {},
   // Wall-clock moment each row FIRST appeared in the results table, keyed
@@ -142,6 +150,8 @@ export const useAppStore = create<AppState>((set, get) => ({
   upsertRow: (row) => set((state) => ({ rows: upsertOrderRow(state.rows, row) })),
   resetRows: () => set((state) => ({
     rows: [],
+    misaOrders: {},
+    misaResults: [],
     jitPeriodState: resetJITPeriodState(state.jitPeriodState),
   })),
   beginJITPeriodUpdate: (sourceId) => {
@@ -177,6 +187,12 @@ export const useAppStore = create<AppState>((set, get) => ({
   appendMisaResult: (result) =>
     set((state) => ({ misaResults: [...state.misaResults, result] })),
   clearMisaResults: () => set({ misaResults: [] }),
+  mergeMisaOrders: (statuses) =>
+    set((state) => {
+      const next = { ...state.misaOrders }
+      for (const s of statuses) next[s.key] = s
+      return { misaOrders: next }
+    }),
   togglePOSelection: (po) =>
     set((state) => {
       const next = new Set(state.selectedPOs)
