@@ -18,8 +18,11 @@ import (
 // truoc moi POM343 roi xuat PDF - moi dua duoc vao app. Doc thang chu tu
 // file Word thi khong can Word, khong can PDF, va chu giu dung nhu bao cao
 // goc thay vi phai boc lai tu PDF.
+//
+// Ca dinh dang Word 97-2003 (.doc) cung la bao cao do - xem docextract.go.
 func isWordReport(path string) bool {
-	return strings.EqualFold(filepath.Ext(path), ".docx")
+	ext := filepath.Ext(path)
+	return strings.EqualFold(ext, ".docx") || strings.EqualFold(ext, ".doc")
 }
 
 const (
@@ -31,7 +34,11 @@ const (
 // duoi dang "trang" - dung y nhu extractTextFilePages, vi sau khi lay chu ra
 // thi hai loai file la mot.
 func extractDocxFilePages(path string) ([]string, []int, error) {
-	text, err := readDocxText(path)
+	read := readDocxText
+	if strings.EqualFold(filepath.Ext(path), ".doc") {
+		read = readDocText
+	}
+	text, err := read(path)
 	if err != nil {
 		return nil, nil, err
 	}

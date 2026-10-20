@@ -7,11 +7,10 @@ import (
 )
 
 func TestFilterValid_KeepsOnlyAllowedExtensions(t *testing.T) {
-	input := []string{"a.pdf", "b.xlsx", "c.txt", "d.docx", "e.PDF", "f.doc", "g.DOCX"}
+	input := []string{"a.pdf", "b.xlsx", "c.txt", "d.docx", "e.PDF", "f.doc", "g.DOCX", "h.rtf"}
 	got := FilterValid(input)
-	// .docx là báo cáo đơn Coop lưu bằng Word; .doc (Word 97-2003, định
-	// dạng nhị phân) thì app không đọc được nên vẫn bị loại.
-	want := []string{"a.pdf", "b.xlsx", "c.txt", "d.docx", "e.PDF", "g.DOCX"}
+	// .docx và .doc (Word 97-2003) đều là báo cáo đơn Coop lưu bằng Word.
+	want := []string{"a.pdf", "b.xlsx", "c.txt", "d.docx", "e.PDF", "f.doc", "g.DOCX"}
 
 	if len(got) != len(want) {
 		t.Fatalf("FilterValid(%v) = %v, want %v", input, got, want)
@@ -27,7 +26,7 @@ func TestListFiles_ReturnsOnlyAllowedFilesNotDirs(t *testing.T) {
 	dir := t.TempDir()
 	mustWrite(t, filepath.Join(dir, "order1.pdf"))
 	mustWrite(t, filepath.Join(dir, "order2.xlsx"))
-	mustWrite(t, filepath.Join(dir, "notes.doc"))
+	mustWrite(t, filepath.Join(dir, "notes.rtf"))
 	if err := os.Mkdir(filepath.Join(dir, "08-2026"), 0o755); err != nil {
 		t.Fatalf("setup mkdir failed: %v", err)
 	}
