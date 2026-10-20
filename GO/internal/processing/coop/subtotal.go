@@ -42,6 +42,12 @@ func SubTotal(text string) (float64, bool) {
 	if end := afterSubTotalPattern.FindStringIndex(tail); end != nil {
 		tail = tail[:end[0]]
 	}
+	// Same rejoining ExtractProducts applies to each product block: the
+	// generator sometimes splits a figure after its separator
+	// ("7, 593,966.00", real: 104839850-00), and reading that as-is keeps
+	// only the part after the space.
+	tail = strings.ReplaceAll(tail, ", ", ",")
+	tail = strings.ReplaceAll(tail, ". ", ".")
 	nums := findDecimalNumbers(tail)
 	if len(nums) == 0 {
 		return 0, false

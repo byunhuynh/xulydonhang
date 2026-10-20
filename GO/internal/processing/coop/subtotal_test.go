@@ -82,3 +82,25 @@ func TestSubTotal(t *testing.T) {
 		t.Error("SubTotal reported ok on a page with no Sub Total line")
 	}
 }
+
+// TestExtractProducts_AcceptsASubTotalSplitAfterItsThousandsComma is real
+// PO 104839850-00 (Bến Lức): the generator draws "7, 593,966.00" with a
+// space after the first comma — on the Sub Total AND on the product rows.
+// The rows were already read whole; the Sub Total was read as just
+// "593,966.00", so a page that adds up exactly was refused.
+func TestExtractProducts_AcceptsASubTotalSplitAfterItsThousandsComma(t *testing.T) {
+	rows := []string{
+		"   3547984-5   NG BLUE huong thao  moc 3kg   EA   C04   341640.00   341640.00   5.00   20.00   .00   1, 708,200.00",
+		"   3564270-4   Chai  tay t oi l et  CHUNGBLUE180g   EA   C24   809424.00   809424.00   1.00   24.00   .00   809,424.00",
+	}
+	products, err := ExtractProducts(pageWith(rows, "2, 517,624.00"))
+	if err != nil {
+		t.Fatalf("ExtractProducts refused a page that adds up: %v", err)
+	}
+	if len(products) != 2 {
+		t.Fatalf("got %d products, want 2", len(products))
+	}
+	if got, ok := SubTotal(pageWith(rows, "2, 517,624.00")); !ok || got != 2517624 {
+		t.Errorf("SubTotal = (%v, %v), want (2517624, true)", got, ok)
+	}
+}
