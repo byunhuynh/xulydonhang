@@ -153,6 +153,8 @@ func TestResolveCustomerCode_AllFourCombinationsAndDefault(t *testing.T) {
 	}{
 		{"3006900+LINFOX", "3006900 LINFOX WAREHOUSE (802)", "MB_GC_BIGC", "LINFOX WAREHOUSE (802)"},
 		{"3005382+LINFOX", "3005382 LINFOX WAREHOUSE (802)", "MB_MT_BIGC", "LINFOX WAREHOUSE (802)"},
+		{"3006900+NORTHDRY", "3006900 NORTH DRY DC (839)", "MB_GC_BIGC", "NORTH DRY DC (839)"},
+		{"3005382+NORTHDRY", "3005382 NORTH DRY DC (839)", "MB_MT_BIGC", "NORTH DRY DC (839)"},
 		{"3005382+FMLOGISTIC", "3005382 FM LOGISTIC VSIP 2 (806)", "MN_MT_BIGCAC", "FM LOGISTIC VSIP 2 (806)"},
 		{"3006900+FMLOGISTIC", "3006900 FM LOGISTIC VSIP 2 (806)", "MN_GC_BIGCAC", "FM LOGISTIC VSIP 2 (806)"},
 		{"neither signal", "nothing relevant here", "MN_MT_BIGCAC", "FM LOGISTIC VSIP 2 (806)"},
@@ -206,6 +208,7 @@ func TestExtractStoreName_FindsLineAfterWarehouseAndVietnam(t *testing.T) {
 	}{
 		{"FM LOGISTIC", "header\nFM LOGISTIC VSIP 2, Binh Duong, Vietnam\nGO! DONG NAI\nfooter", "GO! DONG NAI"},
 		{"LINFOX", "header\nLINFOX WAREHOUSE (802), Hanoi, Vietnam\nGO! AN LAC\nfooter", "GO! AN LAC"},
+		{"NORTH DRY DC", "header\nNORTH DRY DC (839)75-77, DUONG HUU NGHI, KCN DO THI &DV VSIP BAC NINH,P.TU SON, BAC NINHVietnam\nGO! THANG LONGSO 222, DUONG TRAN DUY HUNGPHUONG YEN HOAHA NOIVietnam\nfooter", "GO! THANG LONGSO 222, DUONG TRAN DUY HUNGPHUONG YEN HOAHA NOIVietnam"},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {

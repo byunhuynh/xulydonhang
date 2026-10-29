@@ -165,11 +165,12 @@ func ExtractPriceList(pageZeroText string) []Product {
 	return products
 }
 
-var storeNamePattern = regexp.MustCompile(`(?s)(FM LOGISTIC VSIP 2|LINFOX WAREHOUSE \(802\)).*?Vietnam\s*\n(.*?)\n`)
+var storeNamePattern = regexp.MustCompile(`(?s)(FM LOGISTIC VSIP 2|LINFOX WAREHOUSE \(802\)|NORTH DRY DC \(839\)).*?Vietnam\s*\n(.*?)\n`)
 
 // ExtractStoreName mirrors lay_ten_store (xulydonhang.py:5878-5884): the
 // line immediately following the first "Vietnam" occurrence after the
-// warehouse name (FM LOGISTIC VSIP 2 or LINFOX WAREHOUSE (802)) on a
+// warehouse name (FM LOGISTIC VSIP 2, LINFOX WAREHOUSE (802) or NORTH
+// DRY DC (839)) on a
 // single store page. Returns ("", false) if no match — mirrors Python
 // returning None.
 //
@@ -337,12 +338,19 @@ func ResolveCustomerCode(pageZeroText string) (customerCode, deliveryWarehouse s
 	has3005382 := strings.Contains(pageZeroText, "3005382")
 	hasLinfox := strings.Contains(pageZeroText, "LINFOX WAREHOUSE (802)")
 	hasFMLogistic := strings.Contains(pageZeroText, "FM LOGISTIC VSIP 2 (806)")
+	// NORTH DRY DC (839) — kho miền Bắc mới (VSIP Bắc Ninh), cùng mã
+	// khách hàng MB với LINFOX.
+	hasNorthDry := strings.Contains(pageZeroText, "NORTH DRY DC (839)")
 
 	switch {
 	case has3006900 && hasLinfox:
 		return "MB_GC_BIGC", "LINFOX WAREHOUSE (802)"
 	case has3005382 && hasLinfox:
 		return "MB_MT_BIGC", "LINFOX WAREHOUSE (802)"
+	case has3006900 && hasNorthDry:
+		return "MB_GC_BIGC", "NORTH DRY DC (839)"
+	case has3005382 && hasNorthDry:
+		return "MB_MT_BIGC", "NORTH DRY DC (839)"
 	case has3005382 && hasFMLogistic:
 		return "MN_MT_BIGCAC", "FM LOGISTIC VSIP 2 (806)"
 	case has3006900 && hasFMLogistic:
