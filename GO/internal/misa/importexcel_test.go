@@ -177,6 +177,31 @@ func runImport(t *testing.T, c *Client, commit bool) (*ImportResult, error) {
 	})
 }
 
+// Ô "Tự động lấy lên mặt hàng chi tiết của mặt hàng có tính chất combo":
+// mặc định bật (step3 gửi true), chỉ tắt khi DisableAutoGetItemCombo.
+func TestImportExcelCoTuBungCombo(t *testing.T) {
+	for _, tc := range []struct {
+		off  bool
+		want string
+	}{{false, "true"}, {true, "false"}} {
+		f := &fakeMISA{}
+		c, _ := newTestClient(t, f)
+		_, err := c.ImportExcel(context.Background(), ImportOptions{
+			FileName:                "dondathang.xlsx",
+			Data:                    []byte("PK gia lap file xlsx"),
+			DisableAutoGetItemCombo: tc.off,
+			PollInterval:            time.Millisecond,
+			PollTimeout:             5 * time.Second,
+		})
+		if err != nil {
+			t.Fatalf("ImportExcel: %v", err)
+		}
+		if got := f.step3Query["isAutoGetItemCombo"]; got != tc.want {
+			t.Errorf("DisableAutoGetItemCombo=%v: step3 isAutoGetItemCombo = %q, muốn %q", tc.off, got, tc.want)
+		}
+	}
+}
+
 func TestImportExcelDryRunKhongGhiSo(t *testing.T) {
 	f := &fakeMISA{}
 	c, _ := newTestClient(t, f)

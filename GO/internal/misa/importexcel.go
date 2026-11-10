@@ -46,6 +46,12 @@ type ImportOptions struct {
 
 	Take int // số dòng mỗi lô, mặc định 500
 
+	// Ô "Tự động lấy lên mặt hàng chi tiết của mặt hàng có tính chất combo"
+	// ở bước kiểm tra dữ liệu MẶC ĐỊNH BẬT: tắt thì MISA từ chối dòng có mã
+	// combo, bật thì MISA tự bung combo ra các mặt hàng thành phần.
+	// DisableAutoGetItemCombo = true để tắt ô này.
+	DisableAutoGetItemCombo bool
+
 	// Commit = false thì dừng sau bước kiểm tra dữ liệu, KHÔNG ghi vào sổ.
 	Commit bool
 	// Force cho phép ghi sổ dù còn dòng không hợp lệ. MISA sẽ bỏ qua các dòng đó.
@@ -293,7 +299,7 @@ func (c *Client) ImportExcel(ctx context.Context, opts ImportOptions) (*ImportRe
 	q3.Set("option", "true")
 	q3.Set("skip", "0")
 	q3.Set("take", strconv.Itoa(opts.Take))
-	q3.Set("isAutoGetItemCombo", "false")
+	q3.Set("isAutoGetItemCombo", strconv.FormatBool(!opts.DisableAutoGetItemCombo))
 
 	env, err = c.PostRawJSON(ctx, "/g2/api/import/v1/import/step3", q3, res.RawColumns)
 	if err != nil {
