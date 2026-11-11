@@ -24,6 +24,7 @@ func TestParseOrderInfo_ReadsTheRealOrderHeader(t *testing.T) {
 	}
 	want := OrderInfo{
 		PONumber:   "07300PO2611606019",
+		BranchCode: "36560",
 		StoreCode:  "7300",
 		StoreName:  "7300 - BHX_HCM_Q12 - 31 Vườn Lài",
 		EntryDate:  "10/11/2026",
@@ -35,13 +36,13 @@ func TestParseOrderInfo_ReadsTheRealOrderHeader(t *testing.T) {
 }
 
 func TestParseOrderInfo_AcceptsValuesOnTheLabelLine(t *testing.T) {
-	text := "Kho NCC giao hàng: 7300 - BHX_HCM_Q12\nNgày NCC giao hàng: 1/12/2026 - 3/12/2026\nMã đơn hàng: 07300PO26.1\nNgày đặt hàng: 1/12/2026 08:00\n"
+	text := "Tên chi nhánh NCC: 36560 - BHX <> HTLA1\nKho NCC giao hàng: 7300 - BHX_HCM_Q12\nNgày NCC giao hàng: 1/12/2026 - 3/12/2026\nMã đơn hàng: 07300PO26.1\nNgày đặt hàng: 1/12/2026 08:00\n"
 	got, ok := ParseOrderInfo(text)
 	if !ok {
 		t.Fatalf("ParseOrderInfo returned ok=false: %+v", got)
 	}
 	// Python turns "." in the PO into "/"; dates are zero-padded.
-	if got.PONumber != "07300PO26/1" || got.EntryDate != "01/12/2026" || got.CancelDate != "03/12/2026" || got.StoreCode != "7300" {
+	if got.PONumber != "07300PO26/1" || got.EntryDate != "01/12/2026" || got.CancelDate != "03/12/2026" || got.StoreCode != "7300" || got.BranchCode != "36560" {
 		t.Errorf("ParseOrderInfo = %+v", got)
 	}
 }

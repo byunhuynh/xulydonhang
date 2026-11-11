@@ -330,11 +330,15 @@ func TestGetCustomerCodeByStoreKey(t *testing.T) {
 		{"BHX", "BHX17300", "MN_MT_BHX17300", ""},
 		{"BHX", "BHX730", "MN_MT_BHX730", ""},
 		{"BHX", " bhx7300 ", " MN_MT_BHX7300 ", ""},
+		{"BHX", "MN_MT_BHX36560", "MN_MT_BHX36560", ""},
 		{"COOP", "BHX5851", "WRONG_SYSTEM", ""},
 	}, nil)
 
 	if got := store.GetCustomerCodeByStoreKey("BHX", "BHX7300"); got != "MN_MT_BHX7300" {
 		t.Errorf("GetCustomerCodeByStoreKey(BHX, BHX7300) = %q, want MN_MT_BHX7300 (not the 17300 or 730 store)", got)
+	}
+	if got := store.GetCustomerCodeByStoreKey("BHX", "BHX36560"); got != "MN_MT_BHX36560" {
+		t.Errorf("GetCustomerCodeByStoreKey(BHX, BHX36560) = %q, want MN_MT_BHX36560 (region prefix on column B ignored)", got)
 	}
 	if got := store.GetCustomerCodeByStoreKey("bhx", "BHX5851"); got != "" {
 		t.Errorf("GetCustomerCodeByStoreKey(bhx, BHX5851) = %q, want empty (that row belongs to another system)", got)

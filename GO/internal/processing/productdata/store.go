@@ -193,6 +193,10 @@ func buildSkuAlternation(products map[string]ProductInfo) *regexp.Regexp {
 
 var trailingDigitsPattern = regexp.MustCompile(`(\d+)$`)
 
+// regionPrefixPattern is a MaKH customer-code region prefix such as
+// "MN_MT_" or "MB_MT_".
+var regionPrefixPattern = regexp.MustCompile(`^[A-Z]{2}_[A-Z]{2}_`)
+
 // GetCustomerCode mirrors get_makhachhang exactly, including its bug —
 // see this plan's Global Constraints for the exact explanation.
 func (s *Store) GetCustomerCode(poLocation string) string {
@@ -261,7 +265,11 @@ func (s *Store) GetCustomerCodeBySuffix(system, storeCode string) string {
 // GetCustomerCodeByStoreKey returns the customer code (column C) of the
 // row of the named system (column A) whose store key (column B) equals
 // key exactly, both compared case-insensitively after trimming — the
-// lookup laymakhachhang_STF does for Bách Hóa Xanh ("BHX7300").
+// lookup laymakhachhang_STF does for Bách Hóa Xanh ("BHX36560").
+//
+// A region prefix on column B ("MN_MT_BHX36560", the shape the live
+// sheet's BHX36560 row was entered in) is ignored, so both
+// "BHX36560" and "MN_MT_BHX36560" match key "BHX36560".
 //
 // Deliberately exact, unlike GetCustomerCodeBySuffix and
 // LookupSiteValue's prefix fallback: BHX store codes are plain numbers
@@ -278,7 +286,7 @@ func (s *Store) GetCustomerCodeByStoreKey(system, key string) string {
 		if strings.ToUpper(strings.TrimSpace(row[0])) != system {
 			continue
 		}
-		if strings.ToUpper(strings.TrimSpace(row[1])) == key {
+		if regionPrefixPattern.ReplaceAllString(strings.ToUpper(strings.TrimSpace(row[1])), "") == key {
 			return strings.TrimSpace(row[2])
 		}
 	}

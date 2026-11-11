@@ -50,8 +50,14 @@ var (
 // OrderInfo is everything the page header carries about the order.
 type OrderInfo struct {
 	PONumber string
+	// BranchCode is the numeric code of "Tên chi nhánh NCC" — the
+	// supplier branch BHX orders from ("36560 - BHX <> CÔNG TY CP HÀ
+	// THÀNH LONG AN 1"). The customer code is looked up by it ("BHX36560"),
+	// as decided by the project owner on 2026-11-11, rather than by the
+	// receiving store as in Python.
+	BranchCode string
 	// StoreCode is the store's numeric code from "Kho NCC giao hàng",
-	// e.g. "7300" — the key of its MaKH row is "BHX" + StoreCode.
+	// e.g. "7300".
 	StoreCode string
 	// StoreName is the whole "Kho NCC giao hàng" value, which is what
 	// Python writes as the delivery address (column E).
@@ -158,8 +164,16 @@ func ParseOrderInfo(text string) (OrderInfo, bool) {
 	if m := storeLinePattern.FindStringSubmatch(info.StoreName); m != nil {
 		info.StoreCode = m[1]
 	}
+	// The label wraps too ("Tên chi nhánh" / "NCC:").
+	info.BranchCode = valueAfter(lines, "Tên chi nhánh", 3, func(s string) string {
+		s = strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(strings.TrimPrefix(s, "NCC")), ":"))
+		if m := storeLinePattern.FindStringSubmatch(s); m != nil {
+			return m[1]
+		}
+		return ""
+	})
 
-	ok := info.PONumber != "" && info.EntryDate != "" && info.CancelDate != "" && info.StoreCode != ""
+	ok := info.PONumber != "" && info.EntryDate != "" && info.CancelDate != "" && info.StoreCode != "" && info.BranchCode != ""
 	return info, ok
 }
 

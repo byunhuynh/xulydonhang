@@ -42,7 +42,7 @@ func bhxOrderNumber(poNumber string) string {
 // processBhxSegment turns one Bách Hóa Xanh order page into one order,
 // porting the BHX branch of xulydonhang.py's process_file and
 // write_to_dondathang_bhx: "1 page = 1 order", customer code looked up
-// by "BHX" + store code, prices and promotions reconciled against the
+// by "BHX" + supplier branch code, prices and promotions reconciled against the
 // BHX tab by the order date.
 //
 // The unit price reconciled is line total ÷ quantity, as in Python. BHX
@@ -64,9 +64,11 @@ func (p *RealProcessor) processBhxSegment(filePath string, realPageNum int, text
 		return OrderRow{}, fmt.Errorf("không đọc được dòng Tổng của đơn (đơn nhiều trang chưa được hỗ trợ)")
 	}
 
-	customerCode := p.Store.GetCustomerCodeByStoreKey(bhxSystem, bhxSystem+info.StoreCode)
+	// Looked up by the supplier branch code, not the receiving store
+	// (project owner's rule, 2026-11-11).
+	customerCode := p.Store.GetCustomerCodeByStoreKey(bhxSystem, bhxSystem+info.BranchCode)
 	if customerCode == "" {
-		return OrderRow{}, fmt.Errorf("chưa có mã khách hàng cho cửa hàng BHX%s (%s) trong sheet MAKH", info.StoreCode, info.StoreName)
+		return OrderRow{}, fmt.Errorf("chưa có mã khách hàng cho chi nhánh BHX%s trong sheet MAKH", info.BranchCode)
 	}
 
 	// Rows are found by shape, not by position (see the bhx package
