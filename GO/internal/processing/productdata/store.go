@@ -258,6 +258,33 @@ func (s *Store) GetCustomerCodeBySuffix(system, storeCode string) string {
 	return ""
 }
 
+// GetCustomerCodeByStoreKey returns the customer code (column C) of the
+// row of the named system (column A) whose store key (column B) equals
+// key exactly, both compared case-insensitively after trimming — the
+// lookup laymakhachhang_STF does for Bách Hóa Xanh ("BHX7300").
+//
+// Deliberately exact, unlike GetCustomerCodeBySuffix and
+// LookupSiteValue's prefix fallback: BHX store codes are plain numbers
+// of varying length, so a suffix or prefix match would bill store 7300
+// to a store 17300 or 730 that happens to be in the sheet. Returns "" when
+// no row matches or its code cell is blank.
+func (s *Store) GetCustomerCodeByStoreKey(system, key string) string {
+	system = strings.ToUpper(strings.TrimSpace(system))
+	key = strings.ToUpper(strings.TrimSpace(key))
+	if key == "" {
+		return ""
+	}
+	for _, row := range s.customerRows {
+		if strings.ToUpper(strings.TrimSpace(row[0])) != system {
+			continue
+		}
+		if strings.ToUpper(strings.TrimSpace(row[1])) == key {
+			return strings.TrimSpace(row[2])
+		}
+	}
+	return ""
+}
+
 // GetCustomerCodeForSystem returns the customer code (column C) of the
 // FIRST row belonging to the named system (column A, compared
 // case-insensitively), for a retailer that has exactly one customer code

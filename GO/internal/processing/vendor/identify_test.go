@@ -337,3 +337,24 @@ func TestIdentify_RecognizesOsifoodBySupplierCodeInTheOrderTitle(t *testing.T) {
 		})
 	}
 }
+
+func TestIdentify_RecognizesBhxByCompanyName(t *testing.T) {
+	cases := []struct {
+		name string
+		text string
+		want string
+	}{
+		// Real order: carries our own tax code 1102018142 without Lotte's
+		// 010544 suffix, which must not make it Lotte.
+		{"real order", "Mã số thuế:\n1102018142\nVP:\nCông Ty Cổ Phần Thương Mại Bách Hóa Xanh\nLầu 5", "BHX"},
+		{"name split across lines", "Công Ty Cổ Phần\nThương Mại Bách Hóa Xanh", "BHX"},
+		{"store name only", "7300 - BHX_HCM_Q12 - 31 Vườn Lài", ""},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			if got := Identify(c.text); got != c.want {
+				t.Fatalf("Identify(%q) = %q, want %q", c.text, got, c.want)
+			}
+		})
+	}
+}

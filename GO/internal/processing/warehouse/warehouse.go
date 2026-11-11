@@ -62,6 +62,11 @@ var Branches = []Branch{
 	// Osifood cũng chỉ có một nhánh: mọi cửa hàng đều ở miền Nam.
 	{"osifood", "Osifood", "LA_KHO2026"},
 
+	// BHX giữ đúng hai nhánh của write_to_dondathang_bhx: mã KH bắt đầu
+	// bằng "MB" thì kho Hà Nội, còn lại LA_KHO2026.
+	{"bhx/MB", "Bách Hóa Xanh · Miền Bắc", "TP_HN_12"},
+	{"bhx/khac", "Bách Hóa Xanh · Còn lại", "LA_KHO2026"},
+
 	{"jit/MB", "JIT-CHOICE · Miền Bắc", "TP_HN_12"},
 	{"jit/khac", "JIT-CHOICE · Còn lại", "LA_KHOTMDT"},
 

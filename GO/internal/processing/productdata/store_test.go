@@ -321,3 +321,25 @@ func TestLookupSiteValue_ReportsWhetherTheStoreWasFoundInMaKH(t *testing.T) {
 		t.Fatalf("LookupSiteValue(store missing from MaKH) = (%q, %v), want (%q, false)", got, ok, wantFallback)
 	}
 }
+
+// TestGetCustomerCodeByStoreKey uses rows shaped like the live MaKH
+// sheet's BHX block ("BHX", "BHX7300", "MN_MT_BHX7300").
+func TestGetCustomerCodeByStoreKey(t *testing.T) {
+	store := newStore([][]string{
+		{"header row, skipped"},
+		{"BHX", "BHX17300", "MN_MT_BHX17300", ""},
+		{"BHX", "BHX730", "MN_MT_BHX730", ""},
+		{"BHX", " bhx7300 ", " MN_MT_BHX7300 ", ""},
+		{"COOP", "BHX5851", "WRONG_SYSTEM", ""},
+	}, nil)
+
+	if got := store.GetCustomerCodeByStoreKey("BHX", "BHX7300"); got != "MN_MT_BHX7300" {
+		t.Errorf("GetCustomerCodeByStoreKey(BHX, BHX7300) = %q, want MN_MT_BHX7300 (not the 17300 or 730 store)", got)
+	}
+	if got := store.GetCustomerCodeByStoreKey("bhx", "BHX5851"); got != "" {
+		t.Errorf("GetCustomerCodeByStoreKey(bhx, BHX5851) = %q, want empty (that row belongs to another system)", got)
+	}
+	if got := store.GetCustomerCodeByStoreKey("BHX", "BHX73"); got != "" {
+		t.Errorf("GetCustomerCodeByStoreKey(BHX, BHX73) = %q, want empty (no partial matches)", got)
+	}
+}

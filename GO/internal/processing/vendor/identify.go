@@ -60,6 +60,15 @@ var (
 	// JMart after Tiktok/KOC (both unported) and after FujiMart — see
 	// Identify's own doc comment for the full chain.
 	jmartPattern = regexp.MustCompile(`Đơn vị : HỆ THỐNG SIÊU THỊ JMART`)
+	// Bách Hóa Xanh's identify pattern (xulydonhang.py:152-153): the
+	// retailer's own company name, printed in the "VP:" block of every
+	// order. Python checks it after JMart and MR.DIY (unported), and
+	// before BC Mart/Farmer (unported) — so it sits right after JMart
+	// here. Confirmed on the real sample
+	// (BHX_HCM_Q12 - 31 Vuon Lai-07300PO2611606019...pdf), whose text
+	// also carries our own tax code 1102018142 without Lotte's 010544
+	// suffix, so Lotte's pattern does not steal it.
+	bhxPattern = regexp.MustCompile(`Công Ty Cổ Phần Thương Mại Bách Hóa Xanh`)
 	// Maxidi has NO counterpart in xulydonhang.py at all — it is the
 	// first vendor in this project implemented directly in Go with no
 	// Python original to mirror, so there is no "real Python order" to
@@ -84,13 +93,14 @@ var (
 
 // Identify tries to recognize which retail vendor produced this
 // page/PO text, mirroring xulydonhang.py's identify_vendor. Coop, BigC,
-// Lotte, Satra, Emart, Kingfood, Winmart, FujiMart, and JMart are implemented in
+// Lotte, Satra, Emart, Kingfood, Winmart, FujiMart, JMart and BHX are implemented in
 // that order (order is load-bearing and mirrors Python's real
 // identify_vendor precedence). Python's real order still has CN-HCM between
 // Kingfood and Winmart, SHOPEE-CHOICE between Winmart and FujiMart, and Tiktok/KOC
-// between FujiMart and JMart, that aren't ported yet — a future implementer adding one of those must
+// between FujiMart and JMart, and MR.DIY between JMart and BHX, that aren't ported yet — a future implementer adding one of those must
 // insert it at the correct relative position, not simply append. Identify
-// returns "" for anything that isn't one of the nine implemented vendors.
+// returns "" for anything that isn't one of the implemented vendors
+// (Maxidi and Osifood, which have no Python original, come last).
 func Identify(text string) string {
 	cleaned := strings.TrimSpace(whitespacePattern.ReplaceAllString(text, " "))
 	if coopPattern.MatchString(cleaned) {
@@ -119,6 +129,9 @@ func Identify(text string) string {
 	}
 	if jmartPattern.MatchString(cleaned) {
 		return "JMart"
+	}
+	if bhxPattern.MatchString(cleaned) {
+		return "BHX"
 	}
 	if maxidiPattern.MatchString(cleaned) {
 		return "Maxidi"

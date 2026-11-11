@@ -277,6 +277,17 @@ func (p *RealProcessor) process(ctx context.Context, filePath string, emit func(
 			}
 			rows = append(rows, emitIdentifiedOrderRow(emit, filePath, fmt.Sprintf("page:%d:segment:1", physicalPage), row))
 
+		case bhxSystem:
+			row, err := p.processBhxSegment(filePath, pageNumbers[pageIdx], text, pageLabel)
+			if err != nil {
+				rows = append(rows, emitIdentifiedOrderRow(emit, filePath, fmt.Sprintf("page:%d:segment:1", physicalPage), OrderRow{
+					FileName: filepath.Base(filePath), Page: pageLabel, System: bhxSystem,
+					Status: fmt.Sprintf("%s - %v", StatusFailed, err), StatusKind: StatusKindFailed,
+				}))
+				continue
+			}
+			rows = append(rows, emitIdentifiedOrderRow(emit, filePath, fmt.Sprintf("page:%d:segment:1", physicalPage), row))
+
 		case maxidiSystem:
 			row, err := p.processMaxidiSegment(filePath, pageNumbers[pageIdx], text, pageLabel)
 			if err != nil {
