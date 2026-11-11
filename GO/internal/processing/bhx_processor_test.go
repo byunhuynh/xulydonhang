@@ -27,8 +27,7 @@ func bhxPricingRows() [][]string {
 }
 
 // bhxTestProcessor builds a processor over the shared data.xlsx fixture
-// plus branch 36560's MaKH row (as the live sheet has it) and the two
-// products, on a temporary copy.
+// plus store 7300's MaKH row and the two products, on a temporary copy.
 func bhxTestProcessor(t *testing.T, pricingRows [][]string, withCustomer bool) (*RealProcessor, string) {
 	t.Helper()
 	data, err := os.ReadFile("productdata/testdata/data.xlsx")
@@ -53,12 +52,12 @@ func bhxTestProcessor(t *testing.T, pricingRows [][]string, withCustomer bool) (
 			t.Fatalf("SetSheetRow(%s): %v", sheet, err)
 		}
 	}
-	// Neither the receiving store (7300) nor a code that merely ends in
-	// 36560 may be picked.
-	appendRow("MaKH", "BHX", "BHX7300", "MN_MT_BHX7300", "")
-	appendRow("MaKH", "BHX", "BHX136560", "MN_MT_BHX136560", "")
+	// Neither the supplier branch (36560) nor a store whose code merely
+	// ends in 7300 may be picked.
+	appendRow("MaKH", "BHX", "MN_MT_BHX36560", "MN_MT_BHX36560", "")
+	appendRow("MaKH", "BHX", "BHX17300", "MN_MT_BHX17300", "")
 	if withCustomer {
-		appendRow("MaKH", "BHX", "MN_MT_BHX36560", "MN_MT_BHX36560", "")
+		appendRow("MaKH", "BHX", "BHX7300", "MN_MT_BHX7300", "")
 	}
 	appendRow("SanPham", "TP30879_02", "Nước giặt xả Blue Đậm đặc Hương Thảo Mộc túi 3.6L", 3.8, 4, nil, nil, nil, nil, nil, nil, "8936156730879")
 	appendRow("SanPham", "TP30886_02", "Nước giặt xả Blue Đậm đặc Hương Nước Hoa túi 3.6L", 3.8, 4, nil, nil, nil, nil, nil, nil, "8936156730886")
@@ -98,13 +97,13 @@ func TestRealProcessor_ProcessesRealBhxOrder(t *testing.T) {
 	if row.StatusKind != StatusKindDone {
 		t.Fatalf("StatusKind = %q (%s), want %q\nlog: %s", row.StatusKind, row.Status, StatusKindDone, strings.Join(row.SkuLog, "\n"))
 	}
-	if row.System != "BHX" || row.MaKhachHang != "MN_MT_BHX36560" || row.PO != "07300PO2611606019" {
+	if row.System != "BHX" || row.MaKhachHang != "MN_MT_BHX7300" || row.PO != "07300PO2611606019" {
 		t.Errorf("System/MaKhachHang/PO = %q/%q/%q", row.System, row.MaKhachHang, row.PO)
 	}
 	if row.EntryDate != "10/11/2026" || row.CancelDate != "13/11/2026" {
 		t.Errorf("EntryDate/CancelDate = %q/%q, want 10/11/2026 and the end of the delivery window 13/11/2026", row.EntryDate, row.CancelDate)
 	}
-	if row.ShipTo != "7300 - BHX_HCM_Q12 - 31 Vườn Lài" {
+	if row.ShipTo != "29-31 Vườn Lài, Phường An Phú Đông, Thành phố Hồ Chí Minh, Việt Nam" {
 		t.Errorf("ShipTo = %q", row.ShipTo)
 	}
 	// The PO's own pre-VAT total, 35,933,333.34.
@@ -124,7 +123,7 @@ func TestRealProcessor_ProcessesRealBhxOrder(t *testing.T) {
 		{"A9", "10/11/2026"},
 		{"B9", "ĐĐHBHX-07300PO2611606019"},
 		{"D9", "13/11/2026"},
-		{"G9", "MN_MT_BHX36560"},
+		{"G9", "MN_MT_BHX7300"},
 		{"V9", "LA_KHO2026"},
 		{"AJ9", "MT_MN"},
 		{"AM9", "LA"},
@@ -167,8 +166,8 @@ func TestRealProcessor_FailsBhxOrderForAStoreWithNoCustomerCode(t *testing.T) {
 	rp, excelPath := bhxTestProcessor(t, bhxPricingRows(), false)
 	row := processBhxRealOrder(t, rp)
 
-	if row.StatusKind != StatusKindFailed || !strings.Contains(row.Status, "BHX36560") {
-		t.Fatalf("StatusKind = %q, Status = %q, want a failure naming BHX36560", row.StatusKind, row.Status)
+	if row.StatusKind != StatusKindFailed || !strings.Contains(row.Status, "BHX7300") {
+		t.Fatalf("StatusKind = %q, Status = %q, want a failure naming BHX7300", row.StatusKind, row.Status)
 	}
 	f, err := excelize.OpenFile(excelPath)
 	if err != nil {

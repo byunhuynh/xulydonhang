@@ -23,12 +23,13 @@ func TestParseOrderInfo_ReadsTheRealOrderHeader(t *testing.T) {
 		t.Fatalf("ParseOrderInfo returned ok=false: %+v", got)
 	}
 	want := OrderInfo{
-		PONumber:   "07300PO2611606019",
-		BranchCode: "36560",
-		StoreCode:  "7300",
-		StoreName:  "7300 - BHX_HCM_Q12 - 31 Vườn Lài",
-		EntryDate:  "10/11/2026",
-		CancelDate: "13/11/2026", // the END of the delivery window, as in Python
+		PONumber:        "07300PO2611606019",
+		BranchCode:      "36560",
+		StoreCode:       "7300",
+		StoreName:       "7300 - BHX_HCM_Q12 - 31 Vườn Lài",
+		DeliveryAddress: "29-31 Vườn Lài, Phường An Phú Đông, Thành phố Hồ Chí Minh, Việt Nam",
+		EntryDate:       "10/11/2026",
+		CancelDate:      "13/11/2026", // the END of the delivery window, as in Python
 	}
 	if got != want {
 		t.Errorf("ParseOrderInfo =\n  %+v\nwant\n  %+v", got, want)

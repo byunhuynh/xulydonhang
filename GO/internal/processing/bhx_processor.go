@@ -42,7 +42,7 @@ func bhxOrderNumber(poNumber string) string {
 // processBhxSegment turns one Bách Hóa Xanh order page into one order,
 // porting the BHX branch of xulydonhang.py's process_file and
 // write_to_dondathang_bhx: "1 page = 1 order", customer code looked up
-// by "BHX" + supplier branch code, prices and promotions reconciled against the
+// by "BHX" + store code, prices and promotions reconciled against the
 // BHX tab by the order date.
 //
 // The unit price reconciled is line total ÷ quantity, as in Python. BHX
@@ -64,11 +64,12 @@ func (p *RealProcessor) processBhxSegment(filePath string, realPageNum int, text
 		return OrderRow{}, fmt.Errorf("không đọc được dòng Tổng của đơn (đơn nhiều trang chưa được hỗ trợ)")
 	}
 
-	// Looked up by the supplier branch code, not the receiving store
-	// (project owner's rule, 2026-11-11).
-	customerCode := p.Store.GetCustomerCodeByStoreKey(bhxSystem, bhxSystem+info.BranchCode)
+	// Looked up by the receiving store ("BHX7300"), as in Python. The
+	// supplier-branch lookup ("BHX36560") was tried and reverted by the
+	// project owner on 2026-11-11.
+	customerCode := p.Store.GetCustomerCodeByStoreKey(bhxSystem, bhxSystem+info.StoreCode)
 	if customerCode == "" {
-		return OrderRow{}, fmt.Errorf("chưa có mã khách hàng cho chi nhánh BHX%s trong sheet MAKH", info.BranchCode)
+		return OrderRow{}, fmt.Errorf("chưa có mã khách hàng cho cửa hàng BHX%s (%s) trong sheet MAKH", info.StoreCode, info.StoreName)
 	}
 
 	// Rows are found by shape, not by position (see the bhx package
@@ -116,7 +117,11 @@ func (p *RealProcessor) processBhxSegment(filePath string, realPageNum int, text
 	region, statCode, warehouseCode := bhxRegionInfo(customerCode, p.Warehouses)
 	orderNum := bhxOrderNumber(info.PONumber)
 	description := fmt.Sprintf("BHX PO%s", info.PONumber)
-	entryDate, cancelDate, deliveryAddress := info.EntryDate, info.CancelDate, info.StoreName
+	entryDate, cancelDate, deliveryAddress := info.EntryDate, info.CancelDate, info.DeliveryAddress
+	if deliveryAddress == "" {
+		// An order with no warehouse address still names its store.
+		deliveryAddress = info.StoreName
+	}
 
 	var rows []excelwriter.Row
 	rows = append(rows, excelwriter.Row{

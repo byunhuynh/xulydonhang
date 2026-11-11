@@ -27,8 +27,9 @@ import (
 )
 
 var (
-	datePattern      = regexp.MustCompile(`\b(\d{1,2}/\d{1,2}/\d{4})\b`)
-	dateRangePattern = regexp.MustCompile(`(\d{1,2}/\d{1,2}/\d{4})\s*-\s*(\d{1,2}/\d{1,2}/\d{4})`)
+	whitespacePattern = regexp.MustCompile(`\s+`)
+	datePattern       = regexp.MustCompile(`\b(\d{1,2}/\d{1,2}/\d{4})\b`)
+	dateRangePattern  = regexp.MustCompile(`(\d{1,2}/\d{1,2}/\d{4})\s*-\s*(\d{1,2}/\d{1,2}/\d{4})`)
 	// poPattern is BHX's order number: store code, "PO", then digits
 	// ("07300PO2611606019"). Python additionally turns any "." into "/".
 	poPattern = regexp.MustCompile(`^[0-9A-Za-z./-]*PO[0-9A-Za-z./-]+$`)
@@ -52,16 +53,20 @@ type OrderInfo struct {
 	PONumber string
 	// BranchCode is the numeric code of "Tên chi nhánh NCC" — the
 	// supplier branch BHX orders from ("36560 - BHX <> CÔNG TY CP HÀ
-	// THÀNH LONG AN 1"). The customer code is looked up by it ("BHX36560"),
-	// as decided by the project owner on 2026-11-11, rather than by the
-	// receiving store as in Python.
+	// THÀNH LONG AN 1"). Informational only; "" when not printed.
 	BranchCode string
 	// StoreCode is the store's numeric code from "Kho NCC giao hàng",
-	// e.g. "7300".
+	// e.g. "7300" — the key of its MaKH row is "BHX" + StoreCode.
 	StoreCode string
-	// StoreName is the whole "Kho NCC giao hàng" value, which is what
-	// Python writes as the delivery address (column E).
+	// StoreName is the whole "Kho NCC giao hàng" value
+	// ("7300 - BHX_HCM_Q12 - 31 Vườn Lài").
 	StoreName string
+	// DeliveryAddress is the "Địa chỉ kho NCC giao" value, its wrapped
+	// lines joined by a space ("29-31 Vườn Lài, Phường An Phú Đông,
+	// Thành phố Hồ Chí Minh, Việt Nam"). This, not StoreName as in
+	// Python, is the delivery address written to column E (project
+	// owner's rule, 2026-11-11). "" when not printed.
+	DeliveryAddress string
 	// EntryDate is the order date (DD/MM/YYYY), without its time.
 	EntryDate string
 	// CancelDate is the END of the "Ngày NCC giao hàng" window — the last
@@ -164,6 +169,7 @@ func ParseOrderInfo(text string) (OrderInfo, bool) {
 	if m := storeLinePattern.FindStringSubmatch(info.StoreName); m != nil {
 		info.StoreCode = m[1]
 	}
+	info.DeliveryAddress = parseDeliveryAddress(lines)
 	// The label wraps too ("Tên chi nhánh" / "NCC:").
 	info.BranchCode = valueAfter(lines, "Tên chi nhánh", 3, func(s string) string {
 		s = strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(strings.TrimPrefix(s, "NCC")), ":"))
@@ -173,8 +179,31 @@ func ParseOrderInfo(text string) (OrderInfo, bool) {
 		return ""
 	})
 
-	ok := info.PONumber != "" && info.EntryDate != "" && info.CancelDate != "" && info.StoreCode != "" && info.BranchCode != ""
+	ok := info.PONumber != "" && info.EntryDate != "" && info.CancelDate != "" && info.StoreCode != ""
 	return info, ok
+}
+
+// parseDeliveryAddress reads the lines between "Địa chỉ kho NCC giao:"
+// and the next label ("Mã số thuế:" on the real order), joined by a space
+// since the address wraps on the page ("..., Việt" / "Nam").
+func parseDeliveryAddress(lines []string) string {
+	const label = "Địa chỉ kho NCC giao"
+	idx := indexOf(lines, label)
+	if idx < 0 {
+		return ""
+	}
+	var parts []string
+	rest := strings.TrimSpace(lines[idx][strings.Index(lines[idx], label)+len(label):])
+	if rest = strings.TrimSpace(strings.TrimPrefix(rest, ":")); rest != "" {
+		parts = append(parts, rest)
+	}
+	for i := idx + 1; i < len(lines) && i <= idx+4; i++ {
+		if strings.HasSuffix(lines[i], ":") || strings.Contains(lines[i], "Mã số thuế") || strings.Contains(lines[i], "Ngày NCC giao") {
+			break
+		}
+		parts = append(parts, lines[i])
+	}
+	return whitespacePattern.ReplaceAllString(strings.Join(parts, " "), " ")
 }
 
 // normalizeDate zero-pads D/M/YYYY to DD/MM/YYYY.
